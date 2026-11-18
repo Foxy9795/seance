@@ -1,0 +1,219 @@
+﻿"""Manage the set of legacy programs: discover, add your own, scaffold, delete."""
+
+from __future__ import annotations
+
+import keyword
+import re
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+
+from .codegen import generate_records_module
+from .model import ModelError, load_model
+from .recorder import ROOT, LegacyRuntimeError, compile_legacy, record_fixtures
+from .spec import write_spec
+
+NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,23}$")
+COPYBOOK_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+MAX_SOURCE_BYTES = 200_000
+USER_MARKER = ".user"
+
+# A fixed-format program with DD-style file names and an FD that holds the records, the way most real programs look.
+TEMPLATE = {
+    "name": "discount",
+    "cobol": """       IDENTIFICATION DIVISION.
+       PROGRAM-ID. DISCOUNT.
+      * Order pricing: a percentage off the amount, rounded to cents.
+      * A negative adjustment (a refund) keeps its sign.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT ORDERS-IN  ASSIGN TO ORDERIN.
+           SELECT ORDERS-OUT ASSIGN TO ORDEROUT.
+       DATA DIVISION.
+       FILE SECTION.
+       FD  ORDERS-IN RECORDING MODE F.
+       01  IN-REC.
+           05  IN-ORDER-ID  PIC X(6).
+           05  IN-AMOUNT    PIC S9(5)V99.
+           05  IN-PCT       PIC 9(3)V99.
+           05  FILLER       PIC X(4).
+       FD  ORDERS-OUT RECORDING MODE F.
+       01  OUT-REC.
+           05  OUT-ORDER-ID  PIC X(6).
+           05  OUT-DISCOUNT  PIC S9(5)V99.
+           05  OUT-TOTAL     PIC S9(6)V99.
+           05  OUT-SHOWN     PIC $$,$$$,$$9.99-.
+       WORKING-STORAGE SECTION.
+       01  WS-FLAGS.
+           05  WS-EOF        PIC X VALUE 'N'.
+               88  AT-EOF    VALUE 'Y'.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           OPEN INPUT ORDERS-IN OUTPUT ORDERS-OUT
+           PERFORM UNTIL AT-EOF
+               READ ORDERS-IN
+                   AT END MOVE 'Y' TO WS-EOF
+                   NOT AT END PERFORM PRICE-ORDER
+               END-READ
+           END-PERFORM
+           CLOSE ORDERS-IN ORDERS-OUT
+           STOP RUN.
+       PRICE-ORDER.
+           MOVE IN-ORDER-ID TO OUT-ORDER-ID
+           COMPUTE OUT-DISCOUNT ROUNDED = IN-AMOUNT * IN-PCT / 100
+           COMPUTE OUT-TOTAL = IN-AMOUNT - OUT-DISCOUNT
+           MOVE OUT-TOTAL TO OUT-SHOWN
+           WRITE OUT-REC.
+""",
+    "copybooks": [],
+}
+
+
+class ProgramError(ValueError):
+    """A problem the user can fix (bad name, unsupported COBOL, COBOL does not compile)."""
+
+
+@dataclass
+class Implementation:
+    module: str
+    label: str
+
+
+def program_names(root: Path = ROOT) -> list[str]:
+    base = root / "legacy"
+    if not base.exists():
+        return []
+    return sorted(p.name for p in base.iterdir() if NAME_RE.fullmatch(p.name) and (p / f"{p.name}.cbl").exists())
+
+
+def is_user_program(name: str, root: Path = ROOT) -> bool:
+    return (root / "legacy" / name / USER_MARKER).exists()
+
+
+def implementations(name: str, root: Path = ROOT) -> list[Implementation]:
+    found = []
+    if (root / "migrated" / f"{name}.py").exists():
+        who = "Your Python" if is_user_program(name, root) else "Correct Python"
+        found.append(Implementation(f"migrated.{name}", f"{who} (migrated/{name}.py)"))
+    if (root / "examples" / "naive" / f"{name}_naive.py").exists():
+        found.append(Implementation(f"examples.naive.{name}_naive", "Naive Python using floats (expected to fail)"))
+    return found
+
+
+def validate_name(name: str) -> None:
+    if not NAME_RE.fullmatch(name) or keyword.iskeyword(name):
+        raise ProgramError("Name must be 2-24 characters: lowercase letters, digits, underscores, starting with a letter, and not a Python keyword.")
+
+
+def _stub(name: str, in_fields: list[str], out_fields: list[str]) -> str:
+    return f'''"""Migration of legacy/{name}/{name}.cbl. Read docs/specs/{name}.md first."""
+
+from decimal import Decimal
+
+from generated.{name}_records import InRecord, OutRecord
+from seance.cobol_num import size_error, store  # mirror COBOL PIC storage and ON SIZE ERROR
+
+
+def transform(rec: InRecord) -> OutRecord:
+    """Turn one input record into one output record, exactly as the COBOL does.
+
+    Input fields:  {", ".join(in_fields)}
+    Output fields: {", ".join(out_fields)}
+
+    Use store(value, digits, scale, signed, rounded) wherever the COBOL stores into a PIC field.
+    """
+    raise NotImplementedError("Write the migration here, then run the verifier.")
+'''
+
+
+def scaffold(name: str, root: Path = ROOT, overwrite: bool = False) -> Path:
+    target = root / "migrated" / f"{name}.py"
+    if target.exists() and not overwrite:
+        return target
+    model = load_model(name, root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    (target.parent / "__init__.py").touch()
+    target.write_text(_stub(name, [f.py_name for f in model.in_layout.fields], [f.py_name for f in model.out_layout.fields]), encoding="utf-8")
+    return target
+
+
+def _rm(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    elif path.exists():
+        path.unlink()
+
+
+def delete_program(name: str, root: Path = ROOT) -> None:
+    validate_name(name)
+    if not is_user_program(name, root):
+        raise ProgramError("Only programs you added can be deleted.")
+    for p in (
+        root / "legacy" / name,
+        root / "generated" / f"{name}_records.py",
+        root / "fixtures" / name,
+        root / "build" / name,
+        root / "migrated" / f"{name}.py",
+        root / "docs" / "specs" / f"{name}.md",
+    ):
+        _rm(p)
+
+
+def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = None, root: Path = ROOT) -> dict:
+    """Add a program, then analyze, compile, generate, record and scaffold. Cleans up on failure."""
+    copybooks = copybooks or {}
+    validate_name(name)
+    if not cobol.strip():
+        raise ProgramError("The COBOL source is empty.")
+    total = len(cobol.encode("utf-8")) + sum(len(t.encode("utf-8")) for t in copybooks.values())
+    if total > MAX_SOURCE_BYTES:
+        raise ProgramError(f"The source is larger than {MAX_SOURCE_BYTES // 1000} KB.")
+    for cb_name in copybooks:
+        if not COPYBOOK_RE.fullmatch(cb_name):
+            raise ProgramError(f"Copybook name {cb_name!r} must be letters, digits, '-' or '_'.")
+    if name in program_names(root) or (root / "legacy" / name).exists():
+        raise ProgramError(f"A program named '{name}' already exists. Pick another name or delete it first.")
+    if (root / "migrated" / f"{name}.py").exists():
+        raise ProgramError(f"migrated/{name}.py already exists. Pick another name.")
+
+    src = root / "legacy" / name
+    created = [src, root / "generated" / f"{name}_records.py", root / "fixtures" / name, root / "build" / name, root / "migrated" / f"{name}.py", root / "docs" / "specs" / f"{name}.md"]
+    try:
+        src.mkdir(parents=True)
+        (src / f"{name}.cbl").write_text(cobol, encoding="utf-8")
+        for cb_name, cb_text in copybooks.items():
+            (src / f"{cb_name}.cpy").write_text(cb_text, encoding="utf-8")
+        (src / USER_MARKER).write_text("added through the UI\n", encoding="utf-8")
+        try:
+            model = load_model(name, root)
+        except ModelError as exc:
+            raise ProgramError(f"Séance cannot use this program yet:\n{exc}") from exc
+        try:
+            compile_legacy(name, root)
+        except LegacyRuntimeError as exc:
+            raise ProgramError(f"The COBOL did not compile:\n{exc}") from exc
+        generate_records_module(name, root)
+        try:
+            counts = record_fixtures(name, root)
+        except LegacyRuntimeError as exc:
+            raise ProgramError(f"The COBOL compiled but could not be run on generated inputs:\n{exc}") from exc
+        try:
+            spec_path = write_spec(name, root)
+        except Exception:  # the description is a convenience; do not lose the program over it
+            spec_path = None
+        stub = scaffold(name, root)
+    except Exception:
+        for p in created:
+            _rm(p)
+        raise
+    return {
+        "name": name,
+        "format": "fixed" if model.fixed else "free",
+        "input_width": model.in_layout.width,
+        "output_width": model.out_layout.width,
+        "fixtures": counts,
+        "notes": model.notes,
+        "spec": spec_path.relative_to(root).as_posix() if spec_path else None,
+        "migration_stub": stub.relative_to(root).as_posix(),
+    }

@@ -1,0 +1,14 @@
+﻿{
+  "enabled": true,
+  "name": "Verify migration on save",
+  "description": "When a migrated Python module changes, run Seance against the real COBOL program and report mismatches.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["migrated/*.py"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A migrated module was saved. Run `python -m seance verify <program> --examples 30` for that program (the file name is the program name). If the verdict is 'Spirit restless', read the smallest failing input, explain which COBOL rule the Python code misses, and fix the Python. Never edit fixtures or the legacy COBOL to make a mismatch disappear."
+  }
+}

@@ -1,0 +1,6 @@
+*> Pay slip record.
+01 OUT-REC.
+   05 OUT-EMP-ID  PIC X(6).
+   05 OUT-GROSS   PIC 9(6)V99.
+   05 OUT-TAX     PIC 9(6)V99.
+   05 OUT-NET     PIC S9(6)V99 SIGN LEADING SEPARATE.

@@ -1,0 +1,6 @@
+*> Loan quote, one per application.
+01 OUT-REC.
+   05 OUT-LOAN-ID   PIC X(8).
+   05 OUT-PAYMENT   PIC 9(7)V99.
+   05 OUT-INTEREST  PIC S9(8)V99 SIGN LEADING SEPARATE.
+   05 OUT-STATUS    PIC X.

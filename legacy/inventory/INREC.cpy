@@ -1,0 +1,7 @@
+*> Daily stock movement per SKU.
+01 IN-REC.
+   05 IN-SKU       PIC X(8).
+   05 IN-ON-HAND   PIC S9(5) SIGN LEADING SEPARATE.
+   05 IN-RECEIVED  PIC 9(5).
+   05 IN-SHIPPED   PIC 9(5).
+   05 IN-REORDER   PIC 9(5).

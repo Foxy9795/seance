@@ -1,0 +1,6 @@
+*> Interest posting record, one per account.
+01 OUT-REC.
+   05 OUT-ACCT-ID   PIC X(8).
+   05 OUT-INTEREST  PIC S9(9)V99 SIGN LEADING SEPARATE.
+   05 OUT-NEW-BAL   PIC S9(9)V99 SIGN LEADING SEPARATE.
+   05 OUT-STATUS    PIC X.
