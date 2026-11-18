@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from seance import mcp_server
 from seance.recorder import cobc_available
@@ -8,7 +8,7 @@ needs_cobol = pytest.mark.skipif(not cobc_available(), reason="GnuCOBOL not inst
 
 
 def test_spec_covers_every_statement():
-    for program in ("payroll", "interest", "inventory", "loan"):
+    for program in ("payroll", "interest", "inventory", "loan", "accounts"):
         spec = generate_spec(program)
         assert spec.review == [], spec.review
         assert "Where values can silently change" in spec.markdown
@@ -42,4 +42,5 @@ def test_tools_are_registered():
 
     names = {t.name for t in asyncio.run(mcp_server.mcp.list_tools())}
     assert {"describe_program", "run_legacy_program", "verify_migration"} <= names
+
 

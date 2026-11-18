@@ -1,4 +1,4 @@
-﻿"""Migrated from legacy/interest/interest.cbl."""
+"""Migrated from legacy/interest/interest.cbl."""
 
 from decimal import Decimal
 

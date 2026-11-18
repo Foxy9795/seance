@@ -1,4 +1,4 @@
-﻿"""The COBOL features Séance reads: fixed format, groups, FILLER, level-88, sign storage, edited fields, clear errors."""
+"""The COBOL features Séance reads: fixed format, groups, FILLER, level-88, sign storage, edited fields, clear errors."""
 
 import pytest
 

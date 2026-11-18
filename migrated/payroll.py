@@ -1,4 +1,4 @@
-﻿"""Migrated from legacy/payroll/payroll.cbl. Each COBOL PIC store is mirrored by store()."""
+"""Migrated from legacy/payroll/payroll.cbl. Each COBOL PIC store is mirrored by store()."""
 
 from decimal import Decimal
 

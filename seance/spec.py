@@ -1,4 +1,4 @@
-﻿"""Turn a COBOL program into a plain-English spec, linked to source line numbers.
+"""Turn a COBOL program into a plain-English spec, linked to source line numbers.
 
 This is a rule-based reader, not a language model. It narrates only the statements it
 recognizes with confidence and lists the rest under "Needs human review", so a wrong
@@ -77,8 +77,20 @@ def _narrate(text: str, table: dict[str, Capacity]) -> str | None:
         return "Ends the program."
     if u in ("CONTINUE", "EXIT", "EXIT PROGRAM"):
         return "Does nothing here." if u == "CONTINUE" else "Leaves this paragraph."
+    if m := re.fullmatch(r"(INPUT|OUTPUT|I-O|EXTEND) ([A-Z0-9- ]+)", u):
+        return f"(continued) opens {m[2]} for {'reading' if m[1] == 'INPUT' else 'writing'}."
     if m := re.fullmatch(r"PERFORM UNTIL (.+)", u):
         return f"Repeats the steps below until {m[1]}."
+    if m := re.fullmatch(r"PERFORM ([A-Z0-9-]+) UNTIL (.+)", u):
+        return f"Runs paragraph {m[1]} again and again until {m[2]}."
+    if m := re.fullmatch(r"PERFORM ([A-Z0-9-]+) (\S+) TIMES", u):
+        return f"Runs paragraph {m[1]} {m[2]} times."
+    if m := re.fullmatch(r"PERFORM VARYING ([A-Z0-9-]+) FROM (\S+) BY (\S+) UNTIL (.+)", u):
+        return f"Repeats the steps below with {m[1]} counting from {m[2]} in steps of {m[3]}, until {m[4]}."
+    if m := re.fullmatch(r"INITIALIZE (.+)", u):
+        return f"Resets {m[1]}: numbers to zero, text to spaces."
+    if m := re.fullmatch(r"SET ([A-Z0-9-]+) TO TRUE", u):
+        return f"Makes condition {m[1]} true."
     if m := re.fullmatch(r"PERFORM ([A-Z0-9-]+)", u):
         return f"Runs paragraph {m[1]}."
     if m := re.fullmatch(r"READ ([A-Z0-9-]+)", u):

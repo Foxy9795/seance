@@ -1,4 +1,4 @@
-﻿"""Turn COBOL data descriptions (copybooks or an FD) into fixed-width record layouts."""
+"""Turn COBOL data descriptions (copybooks or an FD) into fixed-width record layouts."""
 
 from __future__ import annotations
 

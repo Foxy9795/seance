@@ -1,4 +1,4 @@
-﻿{
+{
   "enabled": true,
   "name": "Verify migration on save",
   "description": "When a migrated Python module changes, run Seance against the real COBOL program and report mismatches.",

@@ -1,4 +1,4 @@
-﻿fastapi>=0.115
+fastapi>=0.115
 uvicorn>=0.30
 hypothesis>=6.100
 pytest>=8

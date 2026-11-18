@@ -1,4 +1,4 @@
-﻿from decimal import Decimal as D
+from decimal import Decimal as D
 
 from hypothesis import given, strategies as st
 

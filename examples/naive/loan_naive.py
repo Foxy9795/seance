@@ -1,4 +1,4 @@
-﻿"""A plausible first-draft migration of loan.cbl: floats, no SIZE ERROR handling."""
+"""A plausible first-draft migration of loan.cbl: floats, no SIZE ERROR handling."""
 
 from decimal import Decimal
 

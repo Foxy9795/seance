@@ -1,1 +1,1 @@
-﻿"""Séance: migrate legacy COBOL and prove the migration matches."""
+"""Séance: migrate legacy COBOL and prove the migration matches."""

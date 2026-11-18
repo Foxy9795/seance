@@ -1,4 +1,4 @@
-﻿"""Compile and run the original COBOL program to record what it really does."""
+"""Compile and run the original COBOL program to record what it really does."""
 
 from __future__ import annotations
 
@@ -108,7 +108,13 @@ def run_legacy(exe: Path, input_lines: list[str], model: ProgramModel | None = N
         else:
             payload = "".join(l.ljust(in_w)[:in_w] for l in input_lines)
         in_path.write_bytes(payload.encode("latin-1", errors="replace"))
-        proc = subprocess.run([str(exe)], cwd=work, capture_output=True, text=True, env=env, timeout=timeout)
+        try:
+            proc = subprocess.run([str(exe)], cwd=work, capture_output=True, text=True, env=env, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise LegacyRuntimeError(
+                f"The COBOL program did not finish within {timeout} seconds on {len(input_lines)} records. "
+                "A loop probably never ends, for example a PIC 99 counter that wraps from 99 to 00."
+            ) from None
         if proc.returncode != 0:
             raise LegacyRuntimeError(f"legacy program exited {proc.returncode}: {(proc.stderr or proc.stdout).strip()[:400]}")
         if not out_path.exists():
@@ -159,7 +165,7 @@ def numeric_edges(f: Field) -> list[Decimal]:
     return sorted(set(values)) + ([Decimal("-0").scaleb(-scale)] if signed else [])  # negative zero: its own edge case
 
 
-def edge_inputs(layout: Layout) -> list[str]:
+def edge_inputs(layout: Layout, hints: dict[str, list] | None = None) -> list[str]:
     """Boundary records: vary one field at a time over its edge values.
 
     Two bases are used: all zeros, and the smallest non-zero value for every
@@ -186,6 +192,12 @@ def edge_inputs(layout: Layout) -> list[str]:
                 rec[f.py_name] = v
                 records.append(rec)
     records.append({f.py_name: ("Z" * f.width if f.kind == "alpha" else numeric_edges(f)[-1]) for f in layout.fields})
+    # values the program itself tests for (level-88 values, compared literals and their neighbours)
+    for f in layout.fields:
+        for v in (hints or {}).get(f.name, []):
+            rec = base(True)
+            rec[f.py_name] = v
+            records.append(rec)
     return _dedupe([_format_record(layout, r) for r in records])
 
 
@@ -198,13 +210,16 @@ def _dedupe(lines: list[str]) -> list[str]:
     return out
 
 
-def random_inputs(layout: Layout, count: int = 300, seed: int = 1031) -> list[str]:
+def random_inputs(layout: Layout, count: int = 300, seed: int = 1031, hints: dict[str, list] | None = None) -> list[str]:
     rng = random.Random(seed)
+    hints = hints or {}
     lines = []
     for i in range(count):
         values: dict[str, object] = {}
         for f in layout.fields:
-            if f.kind == "alpha":
+            if hints.get(f.name) and rng.random() < 0.5:
+                values[f.py_name] = rng.choice(hints[f.name])
+            elif f.kind == "alpha":
                 values[f.py_name] = f"{rng.choice('ABCDEFGHJK')}{i:04d}"[: f.width]
             else:
                 digits, scale, signed = _numeric_view(f)
@@ -219,13 +234,18 @@ def random_inputs(layout: Layout, count: int = 300, seed: int = 1031) -> list[st
 
 
 def record_fixtures(program: str, root: Path = ROOT) -> dict[str, int]:
+    from .config import RANDOM_RECORDS
+
     """Generate inputs, run the legacy program, store (input, output) fixtures."""
     model = get_model(program, root)
     exe = compile_legacy(program, root)
     fx_dir = root / "fixtures" / program
     fx_dir.mkdir(parents=True, exist_ok=True)
     counts = {}
-    for name, lines in (("edges", edge_inputs(model.in_layout)), ("random", random_inputs(model.in_layout))):
+    from .hints import value_hints
+
+    hints = value_hints(model)
+    for name, lines in (("edges", edge_inputs(model.in_layout, hints)), ("random", random_inputs(model.in_layout, RANDOM_RECORDS, hints=hints))):
         out = run_legacy(exe, lines, model)
         if len(out) != len(lines):
             raise LegacyRuntimeError(

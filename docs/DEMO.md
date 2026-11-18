@@ -1,4 +1,4 @@
-﻿# Demo script (under 3 minutes)
+# Demo script (under 3 minutes)
 
 Goal: show a real migration failing, being caught, and being fixed, with the original COBOL as the judge.
 

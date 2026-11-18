@@ -1,4 +1,4 @@
-﻿"""Differential tests: our number formatting must equal what real GnuCOBOL writes."""
+"""Differential tests: our number formatting must equal what real GnuCOBOL writes."""
 
 import re
 import subprocess

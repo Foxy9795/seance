@@ -1,4 +1,4 @@
-﻿"""Migrated from legacy/loan/loan.cbl."""
+"""Migrated from legacy/loan/loan.cbl."""
 
 from decimal import Decimal
 

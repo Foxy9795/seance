@@ -1,4 +1,4 @@
-﻿"""Command line entry point: python -m seance <command> <program>."""
+"""Command line entry point: python -m seance <command> <program>."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from .recorder import ROOT, compile_legacy, get_model, record_fixtures, run_lega
 from .report import to_dict, to_markdown, write_reports
 from .spec import write_spec
 
-COMMANDS = ["analyze", "spec", "generate", "record", "verify", "compare", "all"]
+COMMANDS = ["analyze", "spec", "generate", "record", "translate", "verify", "mutate", "compare", "export", "all"]
 
 
 def _emit(payload: dict) -> None:
@@ -65,6 +65,45 @@ def main(argv=None) -> int:
                 print(f"  {f.name:<18} {f.kind:<8} digits={f.digits} scale={f.scale} sign={f.sign} cols={f.offset}-{f.offset + f.width}")
         for note in model.notes:
             print("note:", note)
+        return 0
+
+    if a.command == "translate":
+        from .programs import draft_python
+
+        result = draft_python(a.program, ROOT, overwrite=True)
+        if a.json:
+            _emit(result)
+        else:
+            print(f"wrote migrated/{a.program}.py: {result.get('statements')} statements, {len(result.get('gaps', []))} gaps" if result["translated"] else f"could not translate: {result.get('reason')}")
+            for g in result.get("gaps", []):
+                print(f"  line {g['line']}: {g['text']}  ({g['why']})")
+        return 0
+
+    if a.command == "mutate":
+        from .mutate import run_mutants
+
+        try:
+            result = run_mutants(a.program, implementation)
+        except Exception as exc:
+            result = {"error": f"{type(exc).__name__}: {exc}"}
+        if a.json:
+            _emit(result)
+        elif "error" in result:
+            print(result["error"])
+        else:
+            print(f"caught {result['caught']} of {result['total']} planted bugs using {result['records']} saved records")
+            for m in result["mutants"]:
+                print(f"  {'caught  ' if m['caught'] else 'SURVIVED'} line {m['cobol_line'] or m['line']}: {m['change']}")
+        return 0 if "error" not in result else 2
+
+    if a.command == "export":
+        from .export import bundle
+
+        name, data = bundle(a.program, implementation)
+        out = ROOT / "build" / name
+        out.parent.mkdir(exist_ok=True)
+        out.write_bytes(data)
+        print(f"wrote {out}")
         return 0
 
     if a.command == "compare":

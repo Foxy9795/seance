@@ -1,4 +1,4 @@
-﻿"""Verify a Python migration against the recorded behavior of the legacy program."""
+"""Verify a Python migration against the recorded behavior of the legacy program."""
 
 from __future__ import annotations
 
@@ -57,6 +57,13 @@ def _modules(program: str, implementation: str):
 
 
 def run_python(records, impl, lines: list[str]) -> list[str]:
+    """Run the migration on one input file. Translated code keeps WORKING-STORAGE between records, so reset first."""
+    reset = getattr(impl, "reset", None)
+    if callable(reset):
+        try:
+            reset()
+        except Exception as exc:  # start-up code failed: every record fails with the same reason
+            return [f"<{type(exc).__name__}: {exc}>" for _ in lines]
     out = []
     for line in lines:
         try:
@@ -87,6 +94,9 @@ def compare(source: str, layout: Layout, inputs, expected, actual) -> list[Misma
 
 
 def replay_fixtures(program: str, records, impl, out_layout: Layout, root: Path = ROOT):
+    from .testdata import labels
+
+    names = labels(program, root)
     results, all_mismatches = {}, []
     for in_file in sorted((root / "fixtures" / program).glob("*.in")):
         name = in_file.stem
@@ -94,17 +104,21 @@ def replay_fixtures(program: str, records, impl, out_layout: Layout, root: Path 
         expected = (in_file.with_suffix(".out")).read_text(encoding="ascii").splitlines()
         actual = run_python(records, impl, inputs)
         found = compare(name, out_layout, inputs, expected, actual)
-        results[name] = {"records": len(inputs), "mismatches": len(found)}
+        results[name] = {"records": len(inputs), "mismatches": len(found), "label": names.get(name, name)}
         all_mismatches += found
     return results, all_mismatches
 
 
-def record_strategy(layout: Layout):
+def record_strategy(layout: Layout, hints: dict[str, list] | None = None):
     """Hypothesis strategy producing one valid input line for `layout`."""
+    hints = hints or {}
     parts = []
     for f in layout.fields:
         if f.kind == "alpha":
-            parts.append(st.text(alphabet=string.printable[:-5], min_size=0, max_size=f.width).map(lambda s, w=f.width: format_alpha(s, w)))
+            text = st.text(alphabet=string.printable[:-5], min_size=0, max_size=f.width)
+            if hints.get(f.name):
+                text = st.one_of(st.sampled_from([str(h) for h in hints[f.name]]), text)
+            parts.append(text.map(lambda s, w=f.width: format_alpha(s, w)))
             continue
         if f.kind == "edited":
             ints, decs = edited_digits(f.pic)
@@ -116,6 +130,7 @@ def record_strategy(layout: Layout):
         top = 10**digits - 1
         low = -top if signed else 0
         interesting = [0, 1, top, top - 1] + ([-1, -top] if signed else [])
+        interesting += [int(h.scaleb(scale)) for h in hints.get(f.name, []) if isinstance(h, Decimal)]
         small = min(top, 10**3)
         parts.append(
             st.one_of(
@@ -127,26 +142,86 @@ def record_strategy(layout: Layout):
     return st.tuples(*parts).map("".join).map(str.rstrip)
 
 
+SHRINK_BUDGET = 80  # COBOL runs spent making a failing input simpler
+
+
+def _simpler_values(f) -> list[str]:
+    """Simpler texts for one input field, simplest first."""
+    if f.kind == "alpha":
+        return [" " * f.width, "A".ljust(f.width)]
+    if f.kind == "edited":
+        return [format_edited(Decimal(0), f.pic).ljust(f.width)[: f.width]]
+    return [format_numeric(Decimal(0), f.digits, f.scale, f.signed, f.sign), format_numeric(Decimal(1).scaleb(-f.scale), f.digits, f.scale, f.signed, f.sign)]
+
+
+def shrink(exe, model, records, impl, out_layout, lines: list[str], index: int, budget: int = SHRINK_BUDGET):
+    """Make a failing batch smaller and simpler, with a fixed budget of COBOL runs. Returns (lines, mismatch)."""
+    runs = 0
+
+    def failing(batch: list[str]):
+        nonlocal runs
+        runs += 1
+        found = compare("property", out_layout, batch, run_legacy(exe, batch, model), run_python(records, impl, batch))
+        return found[0] if found else None
+
+    best_lines = lines[: index + 1]
+    best = failing(best_lines)
+    if best is None:
+        return None
+    single = failing([best_lines[-1]])
+    if single is not None:
+        best_lines, best = [best_lines[-1]], single
+    in_layout = model.in_layout
+    changed = True
+    while changed and runs < budget:
+        changed = False
+        target = best_lines[-1].ljust(in_layout.width)
+        for f, lo, hi in in_layout.slices():
+            for simple in _simpler_values(f):
+                if runs >= budget:
+                    break
+                if target[lo:hi] == simple:
+                    break
+                candidate = (target[:lo] + simple + target[hi:]).rstrip()
+                result = failing(best_lines[:-1] + [candidate])
+                if result is not None:
+                    best_lines, best, target, changed = best_lines[:-1] + [candidate], result, candidate.ljust(in_layout.width), True
+                    break
+    if len(best_lines) > 1:
+        best.index = len(best_lines) - 1
+    return best
+
+
 def property_check(program: str, records, impl, in_layout, out_layout, examples: int = 100):
+    from hypothesis import Phase
+
+    from .hints import value_hints
+
     exe = compile_legacy(program)
     model = get_model(program)
-    state = {"runs": 0, "failure": None}
+    hints = value_hints(model)
+    state = {"runs": 0, "failure": None, "lines": None}
 
-    @settings(max_examples=examples, deadline=None, database=None, suppress_health_check=list(HealthCheck))
-    @given(st.lists(record_strategy(in_layout), min_size=1, max_size=25))
+    # Hypothesis only generates here. Its own shrinker would call the COBOL program thousands of times,
+    # so a bounded shrinker below simplifies the first failure instead.
+    @settings(max_examples=examples, deadline=None, database=None, suppress_health_check=list(HealthCheck),
+              phases=[Phase.explicit, Phase.generate])
+    @given(st.lists(record_strategy(in_layout, hints), min_size=1, max_size=25))
     def check(lines):
+        if state["failure"] is not None:
+            return
         state["runs"] += 1
         expected = run_legacy(exe, lines, model)
         actual = run_python(records, impl, lines)
         found = compare("property", out_layout, lines, expected, actual)
         if found:
-            state["failure"] = found[0]
-            raise AssertionError("migration differs from legacy")
+            state["failure"], state["lines"] = found[0], lines
 
-    try:
-        check()
-    except AssertionError:
-        pass
+    check()
+    if state["failure"] is not None:
+        first = state["failure"]
+        shrunk = shrink(exe, model, records, impl, out_layout, state["lines"], max(first.index, 0))
+        state["failure"] = shrunk or first
     return state["runs"], state["failure"]
 
 

@@ -1,4 +1,4 @@
-﻿"""COBOL numeric semantics for DISPLAY fields, on top of decimal.Decimal.
+"""COBOL numeric semantics for DISPLAY fields, on top of decimal.Decimal.
 
 COBOL stores a value into a PIC field by truncating extra decimals (or rounding
 half away from zero when ROUNDED is given) and then dropping high-order digits
@@ -63,8 +63,7 @@ def size_error(
     d = Decimal(value)
     mode = ROUND_HALF_UP if rounded else ROUND_DOWN
     q = d.quantize(Decimal(1).scaleb(-scale), rounding=mode)
-    if not signed and q < 0:
-        return True
+    # A negative value stored into an unsigned field is not a size error: COBOL stores its absolute value.
     return abs(q) >= Decimal(10) ** (digits - scale)
 
 

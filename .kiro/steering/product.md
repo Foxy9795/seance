@@ -1,4 +1,4 @@
-﻿# Séance: product steering
+# Séance: product steering
 
 Séance migrates legacy COBOL programs to Python and proves the migration is correct.
 The proof is the product. Code generation alone is not.

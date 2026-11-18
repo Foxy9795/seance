@@ -1,4 +1,4 @@
-﻿"""Manage the set of legacy programs: discover, add your own, scaffold, delete."""
+"""Manage the set of legacy programs: discover, add your own, scaffold, delete."""
 
 from __future__ import annotations
 
@@ -78,6 +78,8 @@ class ProgramError(ValueError):
 class Implementation:
     module: str
     label: str
+    role: str  # "yours", "reference" or "naive"
+    editable: bool
 
 
 def program_names(root: Path = ROOT) -> list[str]:
@@ -94,11 +96,50 @@ def is_user_program(name: str, root: Path = ROOT) -> bool:
 def implementations(name: str, root: Path = ROOT) -> list[Implementation]:
     found = []
     if (root / "migrated" / f"{name}.py").exists():
-        who = "Your Python" if is_user_program(name, root) else "Correct Python"
-        found.append(Implementation(f"migrated.{name}", f"{who} (migrated/{name}.py)"))
+        mine = is_user_program(name, root)
+        found.append(Implementation(f"migrated.{name}", "Your Python" if mine else "Reference Python", "yours" if mine else "reference", mine))
     if (root / "examples" / "naive" / f"{name}_naive.py").exists():
-        found.append(Implementation(f"examples.naive.{name}_naive", "Naive Python using floats (expected to fail)"))
+        found.append(Implementation(f"examples.naive.{name}_naive", "Naive Draft (Floats)", "naive", False))
     return found
+
+
+def program_info(name: str, root: Path = ROOT) -> dict:
+    """Everything the UI shows about a program, read from the program itself."""
+    from .translate import Unsupported  # noqa: F401  (import keeps the translator loaded for the API)
+
+    info = {"name": name, "user_added": is_user_program(name, root), "implementations": [i.__dict__ for i in implementations(name, root)]}
+    try:
+        model = load_model(name, root)
+        info.update({
+            "title": model.program_id.replace("-", " ").title(),
+            "program_id": model.program_id,
+            "format": "fixed" if model.fixed else "free",
+            "input": {"file": model.input.assign, "lines": model.input.organization == "line", "width": model.in_layout.width},
+            "output": {"file": model.output.assign, "lines": model.output.organization == "line", "width": model.out_layout.width},
+            "error": None,
+        })
+    except ModelError as exc:
+        info.update({"title": name.replace("_", " ").title(), "error": str(exc)})
+    draft = root / "migrated" / f"{name}.py"
+    info["draft"] = None
+    if draft.exists():
+        text = draft.read_text(encoding="utf-8-sig")
+        if "Written by the Séance translator" in text:
+            gaps = len(re.findall(r"S\.unsupported\(", text))
+            info["draft"] = {"translated": True, "gaps": gaps}
+        else:
+            info["draft"] = {"translated": False, "gaps": 0, "stub": "NotImplementedError(\"Write the migration here" in text}
+    return info
+
+
+def suggest_name(cobol: str) -> str:
+    """A program name from PROGRAM-ID: PAYROLL01 -> payroll01, ACCT-UPDATE -> acct_update."""
+    m = re.search(r"PROGRAM-ID\.?\s+['\"]?([A-Za-z0-9-]+)", cobol, re.I)
+    base = (m.group(1) if m else "program").lower().replace("-", "_")
+    base = re.sub(r"[^a-z0-9_]", "", base)
+    if not base or not base[0].isalpha():
+        base = "p_" + base
+    return base[:24]
 
 
 def validate_name(name: str) -> None:
@@ -155,14 +196,18 @@ def delete_program(name: str, root: Path = ROOT) -> None:
         root / "fixtures" / name,
         root / "build" / name,
         root / "migrated" / f"{name}.py",
+        root / "migrated" / f"{name}.py.bak",
         root / "docs" / "specs" / f"{name}.md",
     ):
         _rm(p)
 
 
 def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = None, root: Path = ROOT) -> dict:
-    """Add a program, then analyze, compile, generate, record and scaffold. Cleans up on failure."""
+    """Add a program, then analyze, compile, record, describe and draft the Python. Cleans up on failure."""
     copybooks = copybooks or {}
+    name = (name or "").strip() or suggest_name(cobol)
+    if not (name or "").strip():
+        name = suggest_name(cobol)
     validate_name(name)
     if not cobol.strip():
         raise ProgramError("The COBOL source is empty.")
@@ -202,7 +247,8 @@ def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = Non
             spec_path = write_spec(name, root)
         except Exception:  # the description is a convenience; do not lose the program over it
             spec_path = None
-        stub = scaffold(name, root)
+        draft = draft_python(name, root, overwrite=True)
+        stub = root / "migrated" / f"{name}.py"
     except Exception:
         for p in created:
             _rm(p)
@@ -216,4 +262,21 @@ def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = Non
         "notes": model.notes,
         "spec": spec_path.relative_to(root).as_posix() if spec_path else None,
         "migration_stub": stub.relative_to(root).as_posix(),
+        "draft": draft,
     }
+
+
+def draft_python(name: str, root: Path = ROOT, overwrite: bool = False) -> dict:
+    """Write migrated/<name>.py with the translator; fall back to an empty starter if it cannot translate."""
+    from .translate import Unsupported, write_draft
+
+    target = root / "migrated" / f"{name}.py"
+    if target.exists() and overwrite:
+        backup = target.with_suffix(".py.bak")
+        backup.write_text(target.read_text(encoding="utf-8-sig"), encoding="utf-8")
+    try:
+        _, tr = write_draft(name, root, overwrite=True)
+        return {"translated": True, "statements": tr.statements, "gaps": tr.unsupported, "record_logic": tr.record_paragraph}
+    except (Unsupported, ModelError) as exc:
+        scaffold(name, root, overwrite=True)
+        return {"translated": False, "statements": 0, "gaps": [], "reason": str(exc)}

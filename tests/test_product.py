@@ -1,4 +1,4 @@
-﻿"""The user-facing flow: add your own COBOL, get a stub, edit it, verify it, delete it."""
+"""The user-facing flow: add your own COBOL, get a stub, edit it, verify it, delete it."""
 
 from pathlib import Path
 
@@ -84,22 +84,63 @@ def test_full_user_flow(cleanup):
     assert info["format"] == "fixed"
     assert (ROOT / "docs" / "specs" / f"{NAME}.md").exists()
 
+    # adding a program drafts the Python automatically, and the draft matches the real COBOL
+    assert info["draft"]["translated"] and info["draft"]["gaps"] == []
     stub = ROOT / "migrated" / f"{NAME}.py"
-    assert "NotImplementedError" in stub.read_text()
-    assert not verify(NAME, examples=5).matched  # an unwritten migration must not pass
+    drafted = stub.read_text(encoding="utf-8")
+    assert "Written by the Séance translator" in drafted
+    assert verify(NAME, examples=10).matched
 
     api = authed()
     assert api.put("/api/source", json={"program": NAME, "code": "def broken(:"}).status_code == 400  # syntax errors are refused, file untouched
-    assert "NotImplementedError" in stub.read_text()
-    assert api.put("/api/source", json={"program": NAME, "code": GOOD_MIGRATION}).status_code == 200
-    assert verify(NAME, examples=20).matched  # fresh import picks up the edit
+    assert stub.read_text(encoding="utf-8") == drafted
 
-    api.put("/api/source", json={"program": NAME, "code": GOOD_MIGRATION.replace("rounded=True", "rounded=False")})
-    assert not verify(NAME, examples=20).matched  # and a second edit is picked up too
+    broken = drafted.replace('"OUT-DISCOUNT", lambda: S.n("IN-AMOUNT") * S.n("IN-PCT") / D("100"), True', '"OUT-DISCOUNT", lambda: S.n("IN-AMOUNT") * S.n("IN-PCT") / D("100"), False')
+    assert broken != drafted
+    assert api.put("/api/source", json={"program": NAME, "code": broken}).status_code == 200
+    assert not verify(NAME, examples=10).matched  # a dropped ROUNDED is caught, and the edit is picked up
+
+    assert api.post(f"/api/programs/{NAME}/draft", json={}).json()["translated"]  # redraft restores it, keeping a .bak
+    assert (ROOT / "migrated" / f"{NAME}.py.bak").read_text(encoding="utf-8") == broken
+    assert verify(NAME, examples=10).matched
+
+    # your own test data: run through the COBOL once, then replayed by every check
+    data = "ORD9A1" + "1234567" + "01250" + "\n" + "ORD9A2" + "999999y" + "10000"
+    up = api.post(f"/api/data/{NAME}", json={"filename": "Prod Sample.dat", "text": data})
+    assert up.status_code == 200, up.text
+    assert up.json()["records"] == 2 and up.json()["label"] == "Your data: Prod Sample.dat"
+    report = verify(NAME, examples=5)
+    assert report.fixtures[up.json()["set"]]["records"] == 2 and report.matched
+    assert api.post(f"/api/data/{NAME}", json={"filename": "x", "text": "X" * 200}).status_code == 400  # longer than the record
+    assert api.delete(f"/api/data/{NAME}/{up.json()['set']}").status_code == 200
 
     delete_program(NAME)
-    for p in (ROOT / "legacy" / NAME, ROOT / "generated" / f"{NAME}_records.py", ROOT / "fixtures" / NAME, stub):
+    for p in (ROOT / "legacy" / NAME, ROOT / "generated" / f"{NAME}_records.py", ROOT / "fixtures" / NAME, stub, stub.with_suffix(".py.bak")):
         assert not Path(p).exists()
+
+
+def test_program_name_defaults_to_the_program_id():
+    from seance.programs import suggest_name
+
+    assert suggest_name("       PROGRAM-ID. ACCT-UPDATE.") == "acct_update"
+    assert suggest_name("PROGRAM-ID. 'PAY01'.") == "pay01"
+    assert suggest_name("no id here") == "program"
+
+
+@needs_cobol
+def test_api_metadata_and_downloads():
+    client = authed()
+    data = client.get("/api/programs").json()
+    acc = next(p for p in data["programs"] if p["name"] == "accounts")
+    assert acc["title"] == "Accounts" and acc["format"] == "fixed" and acc["input"]["file"] == "ACCTIN" and not acc["input"]["lines"]
+    assert data["demo"] in {p["name"] for p in data["programs"] if any(i["role"] == "naive" for i in p["implementations"])}
+    about = client.get("/api/about").json()
+    assert about["supported"] and about["not_yet"] and about["defaults"]["rounds"] > 0
+    z = client.get("/api/download/accounts", params={"what": "bundle", "implementation": "migrated.accounts"})
+    assert z.status_code == 200 and z.headers["content-type"] == "application/zip"
+    assert client.get("/api/download/accounts", params={"what": "nope", "implementation": "migrated.accounts"}).status_code == 400
+    sets = client.get("/api/data", params={"program": "accounts"}).json()["sets"]
+    assert {s["set"] for s in sets} >= {"edges", "random"} and all(s["label"] for s in sets)
 
 
 @needs_cobol

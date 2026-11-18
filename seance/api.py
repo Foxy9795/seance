@@ -1,37 +1,37 @@
-﻿"""FastAPI app: serves the UI and runs verifications.
+"""FastAPI app: serves the UI and runs checks.
 
-Start with: python -m uvicorn seance.api:app   (binds to 127.0.0.1 only, keep it that way:
-the editor lets you save Python that the verifier then runs).
+Start with scripts/run.ps1 (or: python -m uvicorn seance.api:app). It binds to 127.0.0.1 only. Keep it that
+way: the editor saves Python that the checker then runs.
 """
 
 from __future__ import annotations
 
 import hmac
 import json
-import os
 import secrets
 import subprocess
 import sys
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from . import config
 from .programs import (
     MAX_SOURCE_BYTES,
     TEMPLATE,
     ProgramError,
     create_program,
     delete_program,
+    draft_python,
     implementations,
     is_user_program,
+    program_info,
     program_names,
-    scaffold,
 )
 from .recorder import ROOT, cobc_available, cobol_env
-from .report import to_markdown  # noqa: F401  (kept for API symmetry)
 
 sys.path.insert(0, str(ROOT))
 
@@ -56,10 +56,6 @@ async def require_token(request: Request, call_next):
     return await call_next(request)
 
 
-VERIFY_TIMEOUT = int(os.environ.get("SEANCE_VERIFY_TIMEOUT", "600"))
-COMPARE_TIMEOUT = 120
-
-
 def _require(program: str, implementation: str | None = None) -> None:
     if program not in program_names():
         raise HTTPException(404, f"unknown program {program!r}")
@@ -75,17 +71,33 @@ def _run_cli(args: list[str], timeout: int) -> dict:
     try:
         proc = subprocess.run([sys.executable, "-m", "seance", *args], cwd=ROOT, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
-        raise HTTPException(504, f"Timed out after {timeout} seconds. Does the migration loop forever?")
+        raise HTTPException(504, f"Timed out after {timeout} seconds. Does the Python loop forever?")
     try:
-        return json.loads(proc.stdout)
+        body = json.loads(proc.stdout)
     except json.JSONDecodeError:
         raise HTTPException(500, (proc.stderr or proc.stdout or "no output").strip()[-1500:])
+    if isinstance(body, dict) and "error" in body:
+        raise HTTPException(422, body["error"])
+    return body
+
+
+# ---------------------------------------------------------------- request bodies
+
+class Copybook(BaseModel):
+    name: str
+    text: str
+
+
+class NewProgram(BaseModel):
+    name: str = ""
+    cobol: str
+    copybooks: list[Copybook] = Field(default_factory=list, max_length=20)
 
 
 class VerifyRequest(BaseModel):
     program: str
     implementation: str
-    examples: int = Field(default=40, ge=5, le=200)
+    examples: int = Field(default=config.DEFAULT_ROUNDS, ge=5, le=config.MAX_ROUNDS)
 
 
 class CompareRequest(BaseModel):
@@ -102,15 +114,9 @@ class CompareRequest(BaseModel):
         return lines
 
 
-class Copybook(BaseModel):
-    name: str
-    text: str
-
-
-class NewProgram(BaseModel):
-    name: str
-    cobol: str
-    copybooks: list[Copybook] = Field(default_factory=list, max_length=10)
+class MutateRequest(BaseModel):
+    program: str
+    implementation: str
 
 
 class SaveSource(BaseModel):
@@ -118,19 +124,28 @@ class SaveSource(BaseModel):
     code: str
 
 
-@app.get("/api/programs")
-def programs():
+class TestData(BaseModel):
+    filename: str = "data.txt"
+    text: str = Field(max_length=5_000_000)
+
+
+# ---------------------------------------------------------------- endpoints
+
+@app.get("/api/about")
+def about():
     return {
         "legacy_runtime": cobc_available(),
-        "programs": [
-            {
-                "name": n,
-                "user_added": is_user_program(n),
-                "implementations": [{"module": i.module, "label": i.label} for i in implementations(n)],
-            }
-            for n in program_names()
-        ],
+        "defaults": {"rounds": config.DEFAULT_ROUNDS, "max_rounds": config.MAX_ROUNDS, "max_data_records": config.MAX_DATA_RECORDS},
+        "supported": config.SUPPORTED,
+        "not_yet": config.NOT_YET,
     }
+
+
+@app.get("/api/programs")
+def programs():
+    infos = [program_info(n) for n in program_names()]
+    demo = next((p["name"] for p in infos if any(i["role"] == "naive" for i in p["implementations"])), None)
+    return {"legacy_runtime": cobc_available(), "programs": infos, "demo": demo}
 
 
 @app.get("/api/template")
@@ -155,14 +170,23 @@ def remove_program(name: str):
     return {"deleted": name}
 
 
+@app.post("/api/programs/{name}/draft")
+async def redraft(name: str):
+    _require(name)
+    if not is_user_program(name):
+        raise HTTPException(403, "The shipped examples keep their reference Python. Add your own program to draft one.")
+    result = await run_in_threadpool(draft_python, name, ROOT, True)
+    return result
+
+
 @app.get("/api/source")
 def source(program: str, implementation: str):
     _require(program, implementation)
     impl_path = ROOT / (implementation.replace(".", "/") + ".py")
     spec_path = ROOT / "docs" / "specs" / f"{program}.md"
     return {
-        "legacy": (ROOT / "legacy" / program / f"{program}.cbl").read_text(encoding="utf-8"),
-        "migrated": impl_path.read_text(encoding="utf-8"),
+        "legacy": (ROOT / "legacy" / program / f"{program}.cbl").read_text(encoding="utf-8-sig", errors="replace"),
+        "migrated": impl_path.read_text(encoding="utf-8-sig"),
         "spec": spec_path.read_text(encoding="utf-8") if spec_path.exists() else "",
         # The shipped examples are reference solutions: read-only. Only programs you added can be edited here.
         "editable": implementation == f"migrated.{program}" and is_user_program(program),
@@ -184,13 +208,6 @@ def save_source(req: SaveSource):
     target.parent.mkdir(exist_ok=True)
     target.write_text(req.code, encoding="utf-8")
     return {"saved": target.relative_to(ROOT).as_posix()}
-
-
-@app.post("/api/scaffold/{program}")
-def make_stub(program: str):
-    _require(program)
-    path = scaffold(program)
-    return {"path": path.relative_to(ROOT).as_posix()}
 
 
 @app.get("/api/layout")
@@ -227,16 +244,52 @@ def sample(program: str):
     return {"line": random_inputs(get_model(program).in_layout, 1, seed=7)[0]}
 
 
+@app.get("/api/data")
+def list_data(program: str):
+    _require(program)
+    from .testdata import describe_sets
+
+    return {"sets": describe_sets(program)}
+
+
+@app.post("/api/data/{program}")
+async def upload_data(program: str, body: TestData):
+    _require(program)
+    if not cobc_available():
+        raise HTTPException(503, "GnuCOBOL runtime not found")
+    from .testdata import add_set
+
+    try:
+        return await run_in_threadpool(add_set, program, body.filename, body.text)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.delete("/api/data/{program}/{name}")
+def delete_data(program: str, name: str):
+    _require(program)
+    from .testdata import remove_set
+
+    try:
+        remove_set(program, name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"deleted": name}
+
+
 @app.post("/api/verify")
 async def run_verify(req: VerifyRequest):
     _require(req.program, req.implementation)
     if not cobc_available():
         raise HTTPException(503, "GnuCOBOL runtime not found")
     args = ["verify", req.program, "--impl", req.implementation, "--examples", str(req.examples), "--json"]
-    body = await run_in_threadpool(_run_cli, args, VERIFY_TIMEOUT)
-    if "error" in body:
-        raise HTTPException(422, body["error"])
-    return body
+    return await run_in_threadpool(_run_cli, args, config.VERIFY_TIMEOUT)
+
+
+@app.post("/api/mutate")
+async def run_mutate(req: MutateRequest):
+    _require(req.program, req.implementation)
+    return await run_in_threadpool(_run_cli, ["mutate", req.program, "--impl", req.implementation, "--json"], config.VERIFY_TIMEOUT)
 
 
 @app.post("/api/compare")
@@ -247,14 +300,29 @@ async def compare(req: CompareRequest):
     args = ["compare", req.program, "--impl", req.implementation]
     for line in req.lines:
         args.append(f"--line={line.rstrip()}")  # '=' form: a record may start with '-'
-    body = await run_in_threadpool(_run_cli, args, COMPARE_TIMEOUT)
-    if "error" in body:
-        raise HTTPException(422, body["error"])
-    return body
+    return await run_in_threadpool(_run_cli, args, config.COMPARE_TIMEOUT)
+
+
+@app.get("/api/download/{program}")
+def download(program: str, what: str, implementation: str):
+    _require(program, implementation)
+    from .export import bundle, report_markdown, safe_filename
+
+    if what == "bundle":
+        name, data = bundle(program, implementation)
+        return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{safe_filename(name)}"'})
+    if what == "python":
+        text = (ROOT / (implementation.replace(".", "/") + ".py")).read_text(encoding="utf-8-sig")
+        return Response(text, media_type="text/x-python", headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}.py"'})
+    if what == "report":
+        text = report_markdown(program, implementation)
+        if text is None:
+            raise HTTPException(404, "No check has been run for this Python yet.")
+        return Response(text, media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}-report.md"'})
+    raise HTTPException(400, "what must be bundle, python or report")
 
 
 @app.get("/", response_class=HTMLResponse)
 def index():
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8").replace("__SESSION_TOKEN__", app.state.token)
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
-

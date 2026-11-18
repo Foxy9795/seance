@@ -101,6 +101,42 @@ def record_legacy_fixtures(program: str) -> str:
 
 
 @mcp.tool()
+def draft_python(program: str) -> str:
+    """Translate the COBOL into a first-draft Python migration at migrated/<program>.py (the old file is kept as .bak).
+    Every line is tagged with its COBOL line. Statements it cannot translate raise NotImplementedError naming the
+    line, and are listed in the result: replace those by hand, then call verify_migration."""
+    _check(program)
+    from .programs import draft_python as _draft, is_user_program
+
+    if not is_user_program(program):
+        raise ValueError("The shipped examples keep their reference Python. Add your own program to draft one.")
+    result = _draft(program, ROOT, overwrite=True)
+    if not result["translated"]:
+        return f"Could not translate: {result.get('reason')}. An empty starter was written instead."
+    lines = [f"Wrote migrated/{program}.py: {result['statements']} statements, {len(result['gaps'])} need a person."]
+    lines += [f"  line {g['line']}: {g['text']} ({g['why']})" for g in result["gaps"]]
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def measure_test_strength(program: str, implementation: str = "") -> str:
+    """Plant small bugs in the Python one at a time (> to >=, ROUNDED dropped, a constant changed) and replay the
+    saved records. Reports how many were caught and the COBOL line of each survivor: a survivor is a spot the
+    tests never exercise, so add a record that reaches it."""
+    _check(program)
+    from .mutate import run_mutants
+
+    r = run_mutants(program, implementation or None)
+    if "error" in r:
+        raise ValueError(r["error"])
+    out = [f"Caught {r['caught']} of {r['total']} planted bugs with {r['records']} saved records."]
+    for m in r["mutants"]:
+        where = f"COBOL line {m['cobol_line']}" if m["cobol_line"] else f"Python line {m['line']}"
+        out.append(f"  {'caught  ' if m['caught'] else 'SURVIVED'} {where}: {m['change']}")
+    return "\n".join(out)
+
+
+@mcp.tool()
 def verify_migration(program: str, implementation: str = "", examples: int = 30) -> str:
     """Check a Python migration against the real COBOL program (recorded fixtures plus property-based tests).
     `implementation` is a module path such as migrated.payroll (default: migrated.<program>).

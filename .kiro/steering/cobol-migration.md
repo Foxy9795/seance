@@ -1,4 +1,4 @@
-﻿# COBOL to Python migration rules
+# COBOL to Python migration rules
 
 Apply when editing files under `migrated/`.
 

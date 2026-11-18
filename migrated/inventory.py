@@ -1,4 +1,4 @@
-﻿"""Migrated from legacy/inventory/inventory.cbl."""
+"""Migrated from legacy/inventory/inventory.cbl."""
 
 from decimal import Decimal
 

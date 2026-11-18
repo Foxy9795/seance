@@ -1,17 +1,16 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath d=%27M12 2.5c-4.1 0-7 3-7 7v10.2c0 .7.8 1 1.3.5l1.6-1.6 1.6 1.6c.4.4 1 .4 1.4 0L12 18.9l1.1 1.3c.4.4 1 .4 1.4 0l1.6-1.6 1.6 1.6c.5.5 1.3.2 1.3-.5V9.5c0-4-2.9-7-7-7Z%27 fill=%27%23f1ead9%27 stroke=%27%23e0a63a%27 stroke-width=%271.4%27/%3E%3C/svg%3E">
-<title>Séance: does your rewrite match the original COBOL?</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 80 90%27%3E%3Cpath d=%27M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z%27 fill=%27%23f1ead9%27/%3E%3Ccircle cx=%2730%27 cy=%2738%27 r=%275%27 fill=%27%232a2118%27/%3E%3Ccircle cx=%2750%27 cy=%2738%27 r=%275%27 fill=%27%232a2118%27/%3E%3C/svg%3E">
+<title>Séance: Rewrite COBOL in Python and Prove It</title>
 <style>
   :root {
     color-scheme: dark;
-    --bg: #130f14; --surface: #1c1720; --raised: #261f2b; --line: #3a3141; --control: #86788f;
-    --text: #efe8dc; --muted: #b3a8b8; --amber: #f0b44c; --amber-ink: #231706;
-    --good: #7be0bd; --bad: #ff8f7e; --paper: #f1ead9;
+    --bg: #120e13; --surface: #1b161e; --raised: #251e29; --sunk: #0d0a0f; --line: #382f3e; --control: #857793;
+    --text: #f0e9dd; --muted: #b5aabb; --amber: #f1b44c; --amber-ink: #231706; --good: #7be0bd; --bad: #ff8f7e; --paper: #f1ead9;
     --mono: "Cascadia Mono", Consolas, "Courier New", monospace;
     --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
     --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -19,108 +18,127 @@
     --h: 40px; --r: 14px;
   }
   * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #574a60 transparent; }
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #574a60; border-radius: 8px; border: 2px solid var(--bg); }
-  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; } ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #574a60; border-radius: 8px; border: 2px solid var(--bg); } ::-webkit-scrollbar-corner { background: transparent; }
   html { background: var(--bg); }
   body { margin: 0; color: var(--text); font: 15px/1.6 var(--sans); min-height: 100vh;
-    background:
-      radial-gradient(520px 520px at 96% -140px, rgba(241,234,217,.14), transparent 70%),
-      radial-gradient(760px 420px at 6% -6%, rgba(240,180,76,.13), transparent 70%),
-      radial-gradient(900px 520px at 100% 100%, rgba(112,76,160,.16), transparent 70%), var(--bg); }
+    background: radial-gradient(520px 520px at 96% -160px, rgba(241,234,217,.13), transparent 70%),
+                radial-gradient(760px 420px at 6% -6%, rgba(241,180,76,.12), transparent 70%),
+                radial-gradient(900px 520px at 100% 100%, rgba(112,76,160,.15), transparent 70%), var(--bg); }
   :focus-visible { outline: 2px solid var(--good); outline-offset: 2px; border-radius: 6px; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  [hidden] { display: none !important; }
 
   /* ---------- top bar ---------- */
   .top { display: flex; align-items: center; gap: 12px; padding: 12px 24px; }
-  .brand { font: 600 1.35rem/1 var(--serif); letter-spacing: .03em; }
+  .top button.home { all: unset; display: flex; align-items: center; gap: 10px; cursor: pointer; border-radius: 8px; padding: 2px 4px; }
+  .top button.home:focus-visible { outline: 2px solid var(--good); }
+  .brand { font: 600 1.4rem/1 var(--serif); letter-spacing: .03em; }
   .tag { color: var(--muted); }
   @media (max-width: 760px) { .tag { display: none; } }
-  #banner { margin: 0 24px; padding: 10px 16px; background: #3a1d24; color: #ffd0c8; border: 1px solid #7a3a40; border-radius: var(--r); }
+  #banner { margin: 0 24px 8px; padding: 10px 16px; background: #3a1d24; color: #ffd0c8; border: 1px solid #7a3a40; border-radius: var(--r); }
 
   /* ---------- layout ---------- */
   .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 8px; padding: 0 12px; }
   .side { padding: 8px 8px 24px; }
-  .side h2 { margin: 0 6px 10px; font: 600 .95rem/1 var(--hand); color: var(--muted); }
-  .side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .side h2 { margin: 0 6px 18px; font: 600 1rem/1 var(--hand); color: var(--muted); }
+  .side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
   .stone { all: unset; box-sizing: border-box; display: grid; justify-items: center; text-align: center; width: 100%; cursor: pointer; position: relative;
-    padding: 22px 12px 12px; border-radius: 80px 80px 14px 14px; background: linear-gradient(#2c2531, #221c27); border: 1px solid var(--line);
+    padding: 20px 10px 10px; border-radius: 80px 80px 14px 14px; background: linear-gradient(#2c2531, #211b26); border: 1px solid var(--line);
     box-shadow: 0 6px 18px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04); transition: transform .15s, box-shadow .15s; }
   .stone:hover { transform: translateY(-2px); }
-  .stone[aria-current=page] { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), 0 8px 26px rgba(240,180,76,.18); }
+  .stone[aria-current=page] { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), 0 8px 26px rgba(241,180,76,.18); }
   .stone:focus-visible { outline: 2px solid var(--good); outline-offset: 3px; }
   .stone:disabled { opacity: .55; cursor: wait; transform: none; }
-  .stone svg { position: absolute; top: -12px; }
-  .stone b { margin-top: 6px; font-weight: 600; font-size: 1.02rem; }
-  .stone small { color: var(--muted); }
-  .side .btn { margin-top: 16px; width: 100%; }
+  .stone svg { position: absolute; top: -13px; }
+  .stone b { margin-top: 4px; font-weight: 600; font-size: 1.02rem; }
+  .stone small { color: var(--muted); font-size: .82rem; }
+  .side .btn { margin-top: 18px; width: 100%; }
   @media (max-width: 900px) {
     .shell { grid-template-columns: minmax(0, 1fr); padding: 0 8px; }
-    .side { padding: 14px 4px 4px; display: flex; gap: 10px; align-items: center; overflow-x: auto; }
+    .side { padding: 16px 4px 4px; display: flex; gap: 10px; align-items: center; overflow-x: auto; }
     .side h2 { display: none; } .side ul { display: flex; gap: 10px; }
     .stone { width: auto; white-space: nowrap; padding: 16px 16px 8px; border-radius: 50px 50px 12px 12px; }
     .side .btn { margin: 0; width: auto; white-space: nowrap; }
   }
-  main { padding: 8px 20px 64px; max-width: 1100px; width: 100%; min-width: 0; }
+  main { padding: 8px 20px 72px; max-width: 1120px; width: 100%; min-width: 0; }
   @media (max-width: 600px) { main { padding: 8px 10px 48px; } }
 
-  /* ---------- controls: one look for all ---------- */
+  /* ---------- controls ---------- */
   button, input, textarea { font: inherit; color: var(--text); }
-  .btn { height: var(--h); background: var(--raised); border: 1px solid var(--control); border-radius: 999px; padding: 0 18px; cursor: pointer; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--h); background: var(--raised); border: 1px solid var(--control);
+    border-radius: 999px; padding: 0 18px; cursor: pointer; text-decoration: none; color: var(--text); white-space: nowrap; }
   .btn.small { height: 32px; padding: 0 14px; font-size: .9rem; }
-  .btn:hover:not(:disabled) { border-color: var(--text); }
+  .btn:hover:not(:disabled):not([aria-disabled=true]) { border-color: var(--text); }
   .btn.primary { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 600; }
   .btn.primary:hover:not(:disabled) { filter: brightness(1.1); }
   .btn.danger { color: var(--bad); border-color: #8a4a52; background: transparent; }
-  .btn:disabled { opacity: .5; cursor: not-allowed; }
-  input[type=text], input[type=number], textarea { background: #0f0b12; border: 1px solid var(--control); border-radius: 10px; padding: 8px 12px; width: 100%; }
+  .btn:disabled, .btn[aria-disabled=true] { opacity: .5; cursor: not-allowed; pointer-events: none; }
+  input[type=text], input[type=number], textarea { background: var(--sunk); border: 1px solid var(--control); border-radius: 10px; padding: 8px 12px; width: 100%; }
   input[type=text], input[type=number] { height: var(--h); padding-block: 0; }
   input[type=number] { width: 96px; text-align: center; -moz-appearance: textfield; appearance: textfield; }
   input[type=checkbox] { accent-color: var(--amber); width: 16px; height: 16px; }
   textarea { min-width: 0; font: 13px/1.5 var(--mono); resize: none; tab-size: 4; white-space: pre; overflow: auto; }
   textarea[readonly] { color: var(--muted); }
-  label.field { display: grid; gap: 4px; font-weight: 600; font-size: .92rem; width: fit-content; max-width: 320px; }
-  .cols label.field { width: 100%; max-width: none; }
+  label.field { display: grid; gap: 4px; font-weight: 600; font-size: .92rem; }
   label.field small { font-weight: 400; color: var(--muted); font-size: .85rem; }
   label.check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; font-size: .92rem; }
 
-  /* ---------- Wisp, the ghost guide ---------- */
+  /* ---------- Wisp ---------- */
   .wisp { flex: none; animation: bob 4.5s ease-in-out infinite; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4)); }
   .wisp [class^=m-] { display: none; }
   .wisp[data-mood=calm] .m-calm, .wisp[data-mood=happy] .m-happy, .wisp[data-mood=worried] .m-worried, .wisp[data-mood=work] .m-work { display: block; }
   @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-  .say { position: relative; font: 1rem/1.5 var(--hand); background: var(--paper); color: #2a2118; border-radius: 18px; padding: 12px 16px; max-width: 64ch; }
+  .say { position: relative; font: 1rem/1.5 var(--hand); background: var(--paper); color: #2a2118; border-radius: 18px; padding: 12px 16px; max-width: 66ch; }
   .say::before { content: ""; position: absolute; left: -9px; top: 22px; border: 9px solid transparent; border-right-color: var(--paper); border-left: 0; }
-  .say b { font-weight: 700; }
-  .say a, .say button.link { color: #7a4a00; }
-  .guide { display: flex; gap: 14px; align-items: flex-start; }
+  .guide { display: flex; gap: 16px; align-items: flex-start; }
+  @media (max-width: 760px) { .guide { flex-direction: column; } .say::before { display: none; } }
 
-  /* ---------- intro ---------- */
-  .intro { margin: 8px 0 26px; padding: 20px; background: linear-gradient(180deg, rgba(38,31,43,.9), rgba(28,23,32,.9)); border: 1px solid var(--line); border-radius: 22px; }
-  .intro h2 { margin: 0 0 4px; font: 600 1.55rem/1.25 var(--serif); }
-  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0 14px; padding: 0; list-style: none; counter-reset: s; }
-  .steps li { counter-increment: s; background: rgba(15,11,18,.6); border: 1px dashed var(--line); border-radius: var(--r); padding: 10px 14px 10px 44px; position: relative; }
-  .steps li::before { content: counter(s); position: absolute; left: 12px; top: 10px; width: 24px; height: 24px; border-radius: 50%; background: var(--amber); color: var(--amber-ink); font-weight: 700; display: grid; place-items: center; font-size: .85rem; }
-  .steps b { display: block; } .steps span { color: var(--muted); font-size: .92rem; }
-  @media (max-width: 760px) { .steps { grid-template-columns: 1fr; } .guide { flex-direction: column; } .say::before { display: none; } }
+  /* ---------- home ---------- */
+  .hero { padding: 26px; background: linear-gradient(180deg, rgba(37,30,41,.92), rgba(27,22,30,.92)); border: 1px solid var(--line); border-radius: 24px; }
+  .hero h1 { margin: 0 0 8px; font: 600 2rem/1.2 var(--serif); }
+  .steps4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 22px 0; padding: 0; list-style: none; counter-reset: s; }
+  @media (max-width: 900px) { .steps4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .steps4 { grid-template-columns: 1fr; } }
+  .steps4 li { counter-increment: s; background: rgba(13,10,15,.6); border: 1px dashed var(--line); border-radius: var(--r); padding: 14px 16px 14px 50px; position: relative; }
+  .steps4 li::before { content: counter(s); position: absolute; left: 14px; top: 14px; width: 26px; height: 26px; border-radius: 50%; background: var(--amber); color: var(--amber-ink); font-weight: 700; display: grid; place-items: center; }
+  .steps4 b { display: block; margin-bottom: 2px; } .steps4 span { color: var(--muted); font-size: .92rem; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 
   /* ---------- program header ---------- */
-  .ph h1 { margin: 0; font: 600 1.8rem/1.2 var(--serif); }
-  .ph p { margin: 4px 0 16px; color: var(--muted); max-width: 75ch; }
-  .which { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+  .ph { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+  .ph h1 { margin: 0; font: 600 1.9rem/1.2 var(--serif); }
+  .ph p { margin: 4px 0 10px; color: var(--muted); max-width: 75ch; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 14px; }
+  .chip { font-size: .82rem; padding: 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); color: var(--muted); }
+  .chip b { color: var(--text); font-weight: 600; }
+  .which { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 4px; }
   .which > span.lbl { color: var(--muted); }
   .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control); border-radius: 999px; overflow: hidden; }
   .seg label { cursor: pointer; display: flex; align-items: center; height: calc(var(--h) - 2px); padding: 0 16px; background: var(--raised); border-right: 1px solid var(--control); }
   .seg label:last-child { border-right: 0; }
   .seg input { position: absolute; opacity: 0; pointer-events: none; }
-  .seg label:has(input:checked) { background: #0f0b12; box-shadow: inset 0 0 0 1px var(--text); font-weight: 600; }
+  .seg label:has(input:checked) { background: var(--sunk); box-shadow: inset 0 0 0 1px var(--text); font-weight: 600; }
   .seg label:has(input:focus-visible) { outline: 2px solid var(--good); outline-offset: -2px; }
-  .one { font-weight: 600; }
-  .which-help { color: var(--muted); font-size: .92rem; margin: 8px 0 0; }
-  #status { margin: 14px 0 0; min-height: 1.6em; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+  .seg label:has(input:disabled) { cursor: wait; opacity: .6; }
+  .note { color: var(--muted); font-size: .9rem; margin: 6px 0 10px; }
+
+  /* ---------- workflow strip ---------- */
+  .flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0 6px; padding: 0; list-style: none; }
+  @media (max-width: 860px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .flow button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: 30px 1fr; column-gap: 10px; align-items: center;
+    padding: 10px 12px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); }
+  .flow button:hover { border-color: var(--control); }
+  .flow button:focus-visible { outline: 2px solid var(--good); }
+  .flow .dot { grid-row: span 2; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: .85rem; border: 2px solid var(--control); color: var(--muted); }
+  .flow [data-state=done] .dot { background: var(--good); border-color: var(--good); color: #0d2a20; }
+  .flow [data-state=bad] .dot { background: var(--bad); border-color: var(--bad); color: #2a0f0b; }
+  .flow [data-state=warn] .dot { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
+  .flow b { font-size: .95rem; } .flow small { color: var(--muted); font-size: .84rem; line-height: 1.3; }
+
+  #status { margin: 12px 0 0; min-height: 1.6em; color: var(--muted); display: flex; align-items: center; gap: 10px; }
   #status:empty { display: none; }
-  #status.error { color: var(--bad); }
+  #status.error { color: var(--bad); } #status.ok { color: var(--good); }
   .flame { animation: flick 1.1s ease-in-out infinite; }
   @keyframes flick { 0%,100% { transform: scale(1) rotate(-2deg); opacity: 1; } 50% { transform: scale(1.1, .92) rotate(3deg); opacity: .8; } }
   @media (prefers-reduced-motion: reduce) { .flame, .wisp, .stamp { animation: none !important; } * { transition: none !important; } }
@@ -130,27 +148,29 @@
   [role=tab] { background: transparent; border: 1px solid transparent; color: var(--muted); padding: 7px 16px; cursor: pointer; white-space: nowrap; border-radius: 999px; }
   [role=tab]:hover { color: var(--text); background: var(--raised); }
   [role=tab][aria-selected=true] { color: var(--text); background: var(--raised); border-color: var(--control); font-weight: 600; }
-  .lead { color: var(--muted); max-width: 75ch; margin: 0 0 16px; }
-  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 18px; }
+  @media (max-width: 600px) { [role=tablist] { mask-image: linear-gradient(90deg, #000 88%, transparent); } }
+  .lead { color: var(--muted); max-width: 78ch; margin: 0 0 16px; }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
   @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
-  h3 { margin: 0 0 8px; font: 600 1rem/1.3 var(--sans); color: var(--text); }
-  pre, textarea#migrated { height: 440px; }
-  pre { margin: 0; padding: 12px 14px; background: #0f0b12; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: 460px; font: 13px/1.5 var(--mono); white-space: pre; }
-  pre.wrap { white-space: pre-wrap; height: auto; }
+  h2.sec { margin: 0 0 8px; font: 600 1.15rem/1.3 var(--serif); }
+  h3 { margin: 0 0 8px; font: 600 1rem/1.3 var(--sans); }
+  pre, textarea#migrated { height: 460px; }
+  pre { margin: 0; padding: 12px 14px; background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; overflow: auto; font: 13px/1.5 var(--mono); white-space: pre; }
+  pre.wrap { white-space: pre-wrap; height: auto; max-height: 520px; }
   pre, textarea { scrollbar-gutter: stable; }
-  textarea#lines { height: 150px; } textarea#newCobol { height: 340px; } .cbtext { height: 110px; }
-  code { font-family: var(--mono); font-size: .88em; background: #0f0b12; border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; }
-  details { margin-top: 18px; }
-  summary { cursor: pointer; color: var(--text); list-style: none; }
+  textarea#lines { height: 150px; } textarea#pasteCobol { height: 300px; } .cbtext { height: 110px; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--sunk); border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; }
+  details { margin-top: 16px; } summary { cursor: pointer; list-style: none; font-weight: 600; }
   summary::-webkit-details-marker { display: none; }
   summary::before { content: "\25B8"; display: inline-block; width: 1.1em; transition: transform .15s; color: var(--amber); }
   details[open] > summary::before { transform: rotate(90deg); }
 
-  /* ---------- results ---------- */
+  /* ---------- panels and results ---------- */
+  .card { border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; background: var(--surface); }
   .empty { border: 1px dashed var(--control); border-radius: 18px; padding: 16px 18px; }
   .empty ul { margin: 10px 0 0 4px; padding-left: 20px; color: var(--muted); }
   .notice { border: 1px solid #7a6330; background: #2c2512; border-radius: var(--r); padding: 12px 16px; margin: 0 0 16px; }
+  .notice.good { border-color: #2f6b55; background: #12271f; }
   .verdict { display: flex; gap: 20px; align-items: center; border: 1px solid var(--line); border-radius: 22px; padding: 18px 22px; background: var(--surface); margin: 6px 0 20px; }
   .verdict.ok { box-shadow: 0 0 0 1px rgba(123,224,189,.3), 0 0 60px rgba(123,224,189,.16); }
   .verdict.bad { box-shadow: 0 0 0 1px rgba(255,143,126,.34), 0 0 60px rgba(255,143,126,.18); }
@@ -159,7 +179,7 @@
   .verdict.bad .stamp { animation: shake .5s .1s 1; }
   @keyframes shake { 0%,100% { transform: rotate(-7deg); } 25% { transform: rotate(-11deg); } 60% { transform: rotate(-3deg); } }
   .verdict.ok .stamp { color: var(--good); } .verdict.bad .stamp { color: var(--bad); }
-  .verdict h2 { margin: 0; font: 600 1.1rem/1.4 var(--sans); } .verdict h2:focus { outline: none; }
+  .verdict h2 { margin: 0; font: 600 1.12rem/1.4 var(--sans); } .verdict h2:focus { outline: none; }
   .verdict p { margin: 4px 0 0; color: var(--muted); }
   @media (max-width: 700px) { .verdict { flex-direction: column; align-items: flex-start; } }
   table { border-collapse: collapse; width: 100%; table-layout: fixed; }
@@ -171,35 +191,49 @@
   .scroll { overflow-x: auto; }
   mark { background: rgba(255,143,126,.4); color: #fff3f0; font-weight: 700; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255,143,126,.7), 0 0 10px rgba(255,143,126,.5); }
   mark.cob { background: rgba(123,224,189,.32); color: #effff9; box-shadow: 0 0 0 1px rgba(123,224,189,.7), 0 0 10px rgba(123,224,189,.4); }
-  .evidence { margin-top: 24px; }
-  .evidence h3 { font-size: 1.02rem; margin-bottom: 4px; }
-  .note { color: var(--muted); font-size: .9rem; margin: 4px 0 10px; }
+  .evidence { margin-top: 24px; } .evidence h3 { font-size: 1.02rem; margin-bottom: 4px; }
   .case { margin: 0 0 24px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
   .case .in { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: var(--raised); border-bottom: 1px solid var(--line); }
-  .case .in span { color: var(--muted); font-family: var(--sans); }
-  .case .in .rec { flex: 1; min-width: 0; overflow-x: auto; white-space: pre; }
+  .case .in span { color: var(--muted); } .case .in .rec { flex: 1; min-width: 0; overflow-x: auto; white-space: pre; color: var(--text); }
   .case table th, .case table td { padding: 6px 12px; }
   .case tr.diff td:first-child { box-shadow: inset 3px 0 var(--bad); }
-  .notcovered { margin-top: 18px; }
-  .notcovered ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
+  .badge { display: inline-block; font-size: .8rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; letter-spacing: .02em; }
+  .badge.ok { background: rgba(123,224,189,.16); color: var(--good); border: 1px solid rgba(123,224,189,.45); }
+  .badge.bad { background: rgba(255,143,126,.14); color: var(--bad); border: 1px solid rgba(255,143,126,.45); }
+  .meter { height: 12px; border-radius: 999px; background: var(--sunk); border: 1px solid var(--line); overflow: hidden; margin: 10px 0 6px; }
+  .meter span { display: block; height: 100%; background: linear-gradient(90deg, var(--amber), var(--good)); }
   .error { color: var(--bad); white-space: pre-wrap; font-family: var(--mono); font-size: 13px; }
-  ol.reqs { margin: 0 0 16px; padding-left: 20px; color: var(--muted); } ol.reqs li { margin: 3px 0; }
-  .spec h4 { margin: 18px 0 6px; font: 600 1rem/1.3 var(--sans); } .spec h5 { margin: 14px 0 4px; font: 600 .95rem/1.3 var(--mono); color: var(--amber); }
+  .spec h4 { margin: 18px 0 6px; font: 600 1.05rem/1.3 var(--serif); } .spec h5 { margin: 14px 0 4px; font: 600 .95rem/1.3 var(--mono); color: var(--amber); }
   .spec ul { margin: 2px 0 6px; padding-left: 20px; } .spec li { margin: 2px 0; } .spec p { margin: 6px 0; }
-  .support { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 18px; }
+
+  /* ---------- drop zones ---------- */
+  .drop { border: 2px dashed var(--control); border-radius: 20px; padding: 28px; text-align: center; background: rgba(13,10,15,.5); transition: border-color .15s, background .15s; }
+  .drop.over { border-color: var(--amber); background: rgba(241,180,76,.08); }
+  .drop h3 { font: 600 1.15rem/1.3 var(--serif); margin: 8px 0 4px; }
+  .drop p { color: var(--muted); margin: 0 0 14px; }
+  .files { display: grid; gap: 8px; margin: 14px 0; padding: 0; list-style: none; }
+  .files li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .files li .role { font-size: .8rem; color: var(--muted); margin-left: auto; }
+  .downloads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 900px) { .downloads { grid-template-columns: 1fr; } }
+  .downloads .card { display: flex; flex-direction: column; gap: 8px; }
+  .downloads .card p { margin: 0; color: var(--muted); font-size: .92rem; flex: 1; }
+  .support { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
   @media (max-width: 800px) { .support { grid-template-columns: 1fr; } }
-  .support > div { border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; background: rgba(15,11,18,.5); }
-  .support h3 { margin-bottom: 6px; } .support ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: .92rem; } .support li { margin: 2px 0; }
+  .support > div { border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; background: rgba(13,10,15,.5); }
+  .support ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: .92rem; } .support li { margin: 2px 0; }
   .support .yes h3 { color: var(--good); } .support .no h3 { color: var(--amber); }
-  .cbrow { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 10px; margin-bottom: 10px; align-items: start; }
+  .cbrow { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 10px; margin-bottom: 10px; align-items: start; }
   @media (max-width: 700px) { .cbrow { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <header class="top">
-  <svg width="30" height="30" viewBox="0 0 80 90" aria-hidden="true"><path d="M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z" fill="#f1ead9" stroke="#e0a63a" stroke-width="4"/><circle cx="30" cy="38" r="5" fill="#2a2118"/><circle cx="50" cy="38" r="5" fill="#2a2118"/></svg>
-  <span class="brand">Séance</span>
-  <span class="tag">Does your Python rewrite give the same answers as the old COBOL?</span>
+  <button class="home" id="goHome" title="Home">
+    <svg width="30" height="34" viewBox="0 0 80 90" aria-hidden="true"><path d="M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z" fill="#f1ead9" stroke="#e0a63a" stroke-width="4"/><circle cx="30" cy="38" r="5" fill="#2a2118"/><circle cx="50" cy="38" r="5" fill="#2a2118"/></svg>
+    <span class="brand">Séance</span>
+  </button>
+  <span class="tag">Rewrite COBOL in Python, and Prove It Gives the Same Answers</span>
 </header>
 <p id="banner" role="alert" hidden></p>
 
@@ -207,139 +241,175 @@
   <nav class="side" aria-label="Programs">
     <h2>Programs</h2>
     <ul id="progList"></ul>
-    <button class="btn" id="goAdd">+ Add your COBOL</button>
+    <button class="btn" id="goAdd">+ Add COBOL Program</button>
   </nav>
 
   <main>
-    <section class="intro" id="intro" aria-labelledby="introTitle">
-      <div class="guide">
-        <svg class="wisp" data-mood="calm" width="84" height="94" viewBox="0 0 80 90" aria-hidden="true">
-          <path d="M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z" fill="#f1ead9" stroke="#cdbf9f" stroke-width="2"/>
-          <g class="m-calm"><circle cx="30" cy="38" r="4.5" fill="#2a2118"/><circle cx="50" cy="38" r="4.5" fill="#2a2118"/><path d="M33 52q7 7 14 0" stroke="#2a2118" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="22" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".6"/><ellipse cx="58" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".6"/></g>
-        </svg>
-        <div>
-          <h2 id="introTitle">Rewrite COBOL in Python without guessing</h2>
-          <div class="say"><b>Hi, I'm Wisp.</b> Give me an old COBOL program and your Python rewrite. I run both on the same inputs and show you every place they disagree.</div>
+    <!-- =============================================================== HOME -->
+    <section id="v-home" aria-labelledby="homeTitle">
+      <div class="hero">
+        <div class="guide">
+          <div id="homeWisp"></div>
+          <div>
+            <h1 id="homeTitle">Bring Old COBOL Back to Life in Python</h1>
+            <div class="say"><b>Hi, I'm Wisp.</b> Drop in a COBOL program. I'll write the Python for you, run both side by side on the same records, and show you every place they disagree, field by field.</div>
+          </div>
         </div>
+        <ol class="steps4">
+          <li><b>Add Your COBOL</b><span>Drop the program and its copybooks. I compile it and record what it really does.</span></li>
+          <li><b>Get a Python Draft</b><span>Translated statement by statement, each line tagged with its COBOL line.</span></li>
+          <li><b>Check and Measure</b><span>Compare every output with the COBOL, then plant bugs to see how strong the tests are.</span></li>
+          <li><b>Download It</b><span>A standalone Python program that runs without COBOL, Séance or anything else.</span></li>
+        </ol>
+        <div class="row"><button class="btn primary" id="homeAdd">Add My COBOL</button><button class="btn" id="demo" hidden>Watch a Wrong Rewrite Get Caught</button></div>
       </div>
-      <ol class="steps">
-        <li><b>I run the original</b><span>The COBOL gets edge cases and random records. What it prints is the right answer.</span></li>
-        <li><b>I run your Python</b><span>Same records in, your answers out.</span></li>
-        <li><b>I compare every character</b><span>Differences show up field by field, with the smallest input that causes them.</span></li>
-      </ol>
-      <div class="row" style="margin:0"><button class="btn primary" id="demo">Show me a wrong rewrite getting caught</button><button class="btn" id="hideIntro">Got it, hide this</button></div>
+      <details id="supportBox"><summary>What COBOL Works Today</summary><div class="support" id="supportLists"></div></details>
     </section>
 
-    <div id="noProg" class="empty" hidden><b>No programs yet.</b> Add one with the button on the left.</div>
+    <!-- =============================================================== ADD -->
+    <section id="v-add" aria-labelledby="addTitle" hidden>
+      <h1 id="addTitle" style="font:600 1.9rem/1.2 var(--serif);margin:0 0 6px">Add a COBOL Program</h1>
+      <p class="lead">Drop your program and any copybooks it uses. I'll compile it, run it on generated records, explain what it does, and draft the Python. This usually takes 5 to 20 seconds.</p>
+      <div class="drop" id="dropCobol">
+        <div id="dropWisp"></div>
+        <h3>Drop .cbl, .cob and .cpy Files Here</h3>
+        <p>The file with the PROCEDURE DIVISION is the program; the others are copybooks.</p>
+        <div class="row" style="justify-content:center">
+          <button class="btn primary" id="browse">Browse Files</button>
+          <button class="btn" id="loadTpl">Use the Example</button>
+          <button class="btn" id="pasteToggle" aria-expanded="false">Paste Code Instead</button>
+        </div>
+        <input type="file" id="filePick" multiple accept=".cbl,.cob,.cobol,.cpy,.copy,.txt,.CBL,.COB,.CPY" hidden>
+      </div>
+      <ul class="files" id="fileList"></ul>
+      <div id="pasteArea" hidden>
+        <label class="field" style="margin:14px 0 10px">COBOL Program<textarea id="pasteCobol" spellcheck="false"></textarea></label>
+        <div id="cbList"></div>
+        <button class="btn small" id="addCb" type="button">+ Add a Copybook</button>
+      </div>
+      <div class="row" style="margin-top:16px;align-items:flex-end">
+        <label class="field" for="newName" style="width:260px">Program Name <small>Optional. Leave blank to use the PROGRAM-ID.</small><input type="text" id="newName" maxlength="24" placeholder="For example: discount"></label>
+        <button class="btn primary" id="addProg">Add Program</button>
+      </div>
+      <p id="addStatus" class="note" role="status"></p>
+      <p class="error" id="addError" role="alert"></p>
+      <details><summary>What COBOL Works Today</summary><div class="support" id="supportLists2"></div></details>
+    </section>
 
-    <div id="work" hidden>
+    <!-- =============================================================== PROGRAM -->
+    <section id="v-prog" hidden>
       <div class="ph">
-        <h1 id="pName"></h1>
-        <p id="pPurpose"></p>
+        <div>
+          <h1 id="pName"></h1>
+          <p id="pPurpose"></p>
+          <div class="chips" id="pChips"></div>
+        </div>
+        <button class="btn danger small" id="del" hidden>Delete Program</button>
       </div>
       <div class="which">
-        <span class="lbl" id="implLbl">Test this Python:</span>
+        <span class="lbl" id="implLbl">Python Being Tested:</span>
         <div id="implSeg" aria-labelledby="implLbl"></div>
-        <button class="btn" id="copyPrompt" title="Copies an instruction for Kiro chat that asks it to write this Python for you">Copy an AI prompt to write the Python</button>
-        <button class="btn danger" id="del" hidden>Delete program</button>
+        <button class="btn small" id="copyPrompt" title="Copies an instruction for Kiro chat that asks it to improve this Python">Copy an AI Prompt</button>
       </div>
-      <p class="which-help" id="whichHelp" hidden>The correct version should pass. The naive version, written the way a first draft often is, should fail. Flip between them to see the difference.</p>
+      <p class="note" id="whichHelp" hidden></p>
+      <ol class="flow" id="flow" aria-label="Progress"></ol>
       <p id="status" role="status"></p>
 
       <div role="tablist" aria-label="Sections" id="tablist">
-        <button role="tab" id="t-verify" aria-selected="true" aria-controls="p-verify">Check</button>
-        <button role="tab" id="t-try" aria-selected="false" aria-controls="p-try" tabindex="-1">Try one record</button>
+        <button role="tab" id="t-check" aria-selected="true" aria-controls="p-check">Check</button>
+        <button role="tab" id="t-strength" aria-selected="false" aria-controls="p-strength" tabindex="-1">Test Strength</button>
+        <button role="tab" id="t-try" aria-selected="false" aria-controls="p-try" tabindex="-1">Try a Record</button>
         <button role="tab" id="t-code" aria-selected="false" aria-controls="p-code" tabindex="-1">Code</button>
-        <button role="tab" id="t-spec" aria-selected="false" aria-controls="p-spec" tabindex="-1">What the COBOL does</button>
-        <button role="tab" id="t-add" aria-selected="false" aria-controls="p-add" tabindex="-1">Add your COBOL</button>
+        <button role="tab" id="t-spec" aria-selected="false" aria-controls="p-spec" tabindex="-1">COBOL Explained</button>
+        <button role="tab" id="t-data" aria-selected="false" aria-controls="p-data" tabindex="-1">Test Data</button>
+        <button role="tab" id="t-export" aria-selected="false" aria-controls="p-export" tabindex="-1">Export</button>
       </div>
 
-      <div id="p-verify" role="tabpanel" aria-labelledby="t-verify">
-        <p class="lead">I run the COBOL and the Python on saved edge cases, saved random records and brand-new random records, then compare every output. If you edited the Python, I save it first.</p>
-        <div id="stubNote" class="notice" hidden><b>This Python file is still the empty starter.</b> Write it in the Code tab, or copy the AI prompt above and give it to Kiro. Checking it now will fail on every record.</div>
-        <div class="row">
-          <label class="field" for="examples" style="grid-auto-flow:column;align-items:center;width:auto;max-width:none">Random test rounds</label>
-          <input id="examples" type="number" min="5" max="200" value="40" aria-describedby="roundsHelp">
-          <button id="go" class="btn primary">Run check</button>
+      <!-- ---------------- CHECK -->
+      <div id="p-check" role="tabpanel" aria-labelledby="t-check">
+        <p class="lead">I run the real COBOL and the Python on every saved test set and on brand-new random records, then compare each output character by character. If you edited the Python, I save it first.</p>
+        <div id="stubNote" class="notice" hidden></div>
+        <div class="row" style="margin-bottom:6px">
+          <label class="field" for="examples" style="display:inline-flex;align-items:center;gap:10px">Random Test Rounds</label>
+          <input id="examples" type="number" min="5" aria-describedby="roundsHelp">
+          <button id="go" class="btn primary">Run Check</button>
         </div>
-        <p class="note" id="roundsHelp" style="margin-top:-8px">Each round tries up to 25 new random records. More rounds test more and take longer.</p>
-        <div id="verifyEmpty" class="empty">
-          <div class="guide">
-            <svg class="wisp" data-mood="calm" width="56" height="63" viewBox="0 0 80 90" aria-hidden="true"><path d="M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z" fill="#f1ead9" stroke="#cdbf9f" stroke-width="2"/><circle cx="30" cy="38" r="4.5" fill="#2a2118"/><circle cx="50" cy="38" r="4.5" fill="#2a2118"/><path d="M33 52q7 7 14 0" stroke="#2a2118" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
-            <div><b>Nothing checked yet.</b> Press <b>Run check</b> and you'll get:
-              <ul><li>A clear pass or fail.</li><li>How many inputs were compared.</li><li>If something differs: the smallest input that breaks it, with the COBOL answer and the Python answer split into fields and the wrong characters lit up.</li></ul></div>
-          </div>
-        </div>
+        <p class="note" id="roundsHelp">Each round tries up to 25 new random records. More rounds test more and take longer.</p>
+        <div id="checkEmpty" class="empty"></div>
         <div id="result" aria-live="polite" hidden></div>
       </div>
 
+      <!-- ---------------- TEST STRENGTH -->
+      <div id="p-strength" role="tabpanel" aria-labelledby="t-strength" hidden>
+        <p class="lead">A pass is only as good as the records behind it. I plant one small bug at a time in the Python, such as <code>&gt;</code> turned into <code>&gt;=</code>, a dropped ROUNDED or a changed constant, and replay the saved records. Strong tests catch every planted bug.</p>
+        <div class="row" style="margin-bottom:14px"><button id="mutateBtn" class="btn primary">Measure Test Strength</button></div>
+        <div id="strengthEmpty" class="empty"></div>
+        <div id="strength" aria-live="polite" hidden></div>
+      </div>
+
+      <!-- ---------------- TRY -->
       <div id="p-try" role="tabpanel" aria-labelledby="t-try" hidden>
-        <p class="lead">Type a record and I'll show what the real COBOL prints next to what your Python prints, split into fields. Good for poking at one suspicious case.</p>
+        <p class="lead">Type a record and see what the real COBOL prints next to what the Python prints, split into fields. Good for poking at one suspicious case.</p>
         <div class="cols">
           <div>
-            <h3>Input records, one per line</h3>
-            <textarea id="lines" rows="6" spellcheck="false" aria-label="Input records, one per line"></textarea>
-            <div class="row" style="margin-top:12px">
-              <button id="sample" class="btn">Fill in a sample</button>
-              <button id="tryit" class="btn primary">Run both</button>
-            </div>
+            <h3>Input Records, One per Line</h3>
+            <textarea id="lines" spellcheck="false" aria-label="Input records, one per line"></textarea>
+            <div class="row" style="margin-top:12px"><button id="sample" class="btn">Fill In a Sample</button><button id="tryit" class="btn primary">Run Both</button></div>
           </div>
-          <div><h3>How a record is laid out</h3><div id="layout"></div></div>
+          <div><h3>Record Layout</h3><div id="layout"></div></div>
         </div>
         <div id="tryout" aria-live="polite"></div>
       </div>
 
+      <!-- ---------------- CODE -->
       <div id="p-code" role="tabpanel" aria-labelledby="t-code" hidden>
-        <p class="lead">Left: the original COBOL, read only. Right: the Python you're testing. Ctrl+S saves.</p>
-        <label class="check" style="margin-bottom:12px"><input type="checkbox" id="wrap"> Wrap long lines</label>
+        <p class="lead" id="codeLead"></p>
+        <div class="row" style="margin-bottom:12px">
+          <label class="check"><input type="checkbox" id="wrap"> Wrap Long Lines</label>
+          <span style="flex:1"></span>
+          <button id="redraft" class="btn small" hidden>Redraft From COBOL</button>
+          <a id="dlPy" class="btn small" href="#">Download .py</a>
+        </div>
         <div class="cols">
           <div><h3>Original COBOL</h3><pre id="legacy" tabindex="0" role="region" aria-label="Original COBOL source"></pre></div>
           <div>
             <h3>Python</h3>
-            <textarea id="migrated" rows="20" spellcheck="false" aria-label="Python source" aria-describedby="editHint"></textarea>
-            <div class="row" style="margin:12px 0 6px">
-              <button id="save" class="btn">Save</button>
-              <button id="saveRun" class="btn primary">Save and run check</button>
-            </div>
+            <textarea id="migrated" spellcheck="false" aria-label="Python source" aria-describedby="editHint"></textarea>
+            <div class="row" style="margin:12px 0 6px"><button id="save" class="btn">Save</button><button id="saveRun" class="btn primary">Save and Check</button></div>
             <p class="note" id="editHint"></p>
           </div>
         </div>
       </div>
 
+      <!-- ---------------- SPEC -->
       <div id="p-spec" role="tabpanel" aria-labelledby="t-spec" hidden>
         <p class="lead">What the COBOL does, in plain English with line numbers, including every place a number is rounded or cut off. It comes from fixed rules, not an AI, so anything I couldn't read is listed at the bottom instead of being guessed.</p>
         <div id="spec" class="spec" tabindex="0" role="region" aria-label="Description of the COBOL"></div>
       </div>
 
-      <div id="p-add" role="tabpanel" aria-labelledby="t-add" hidden>
-        <p class="lead">Bring your own program. I'll compile it, run it on generated inputs, write up what it does, and make an empty Python file for you to fill in. It takes a few seconds.</p>
-        <div class="support">
-          <div class="yes"><h3>Works today</h3><ul>
-            <li>Fixed-format or free-format source</li>
-            <li>One input file and one output file, any file names (including mainframe-style names like ACCTREC)</li>
-            <li>Fixed-length records or text lines</li>
-            <li>Fields: text, numbers, decimals, every sign style, edited pictures like <code>$$,$$9.99-</code></li>
-            <li>Groups, FILLER, VALUE, level-88 names, <code>COPY</code> of copybooks you add below</li>
-            <li>COMP and COMP-3 inside WORKING-STORAGE</li></ul></div>
-          <div class="no"><h3>Not yet (I'll say so clearly)</h3><ul>
-            <li>COMP-3 or COMP fields inside the record files</li>
-            <li>OCCURS tables and REDEFINES</li>
-            <li>Indexed or relative files, or more than one input or output file</li>
-            <li>Programs that skip records or add header and total lines: I need one output record per input record</li>
-            <li>Floating-point edited overflow display</li></ul></div>
+      <!-- ---------------- TEST DATA -->
+      <div id="p-data" role="tabpanel" aria-labelledby="t-data" hidden>
+        <p class="lead">Every check replays these saved record sets. Add a real input file from production (or a file you know is tricky) and I'll run it through the COBOL once and keep the answers.</p>
+        <div id="sets"></div>
+        <div class="drop" id="dropData" style="margin-top:16px">
+          <h3>Drop an Input Data File Here</h3>
+          <p id="dataHint">Text lines or fixed-length records, the same file the COBOL program reads.</p>
+          <button class="btn primary" id="browseData">Choose a Data File</button>
+          <input type="file" id="dataPick" hidden>
         </div>
-        <div class="row">
-          <label class="field" for="newName" style="width:auto">Name <small>lowercase letters, digits, underscore</small></label>
-          <input type="text" id="newName" maxlength="24" placeholder="for example: discount" style="width:240px">
-          <button id="loadTpl" class="btn">Load a working example</button>
-          <button id="addProg" class="btn primary">Add program</button>
-        </div>
-        <label class="field" style="margin-bottom:12px">COBOL program <textarea id="newCobol" rows="16" spellcheck="false"></textarea></label>
-        <div id="cbList"></div>
-        <button class="btn small" id="addCb" type="button">+ I also have copybooks (COPY members)</button>
-        <p class="error" id="addError" role="alert" style="margin-top:14px"></p>
       </div>
-    </div>
+
+      <!-- ---------------- EXPORT -->
+      <div id="p-export" role="tabpanel" aria-labelledby="t-export" hidden>
+        <p class="lead">Take the Python with you. The standalone program reads and writes the same files the COBOL did and needs only Python 3.10 or newer.</p>
+        <div id="exportNote" class="notice" hidden></div>
+        <div class="downloads">
+          <div class="card"><h3>Standalone Program (.zip)</h3><p>The Python, its record layouts, the COBOL number rules it needs, a <code>run.py</code> that processes a whole file, a README and the last check report.</p><a class="btn primary" id="dlZip" href="#">Download .zip</a></div>
+          <div class="card"><h3>Python File (.py)</h3><p>Just the migrated business logic, to drop into your own project next to its record module.</p><a class="btn" id="dlPy2" href="#">Download .py</a></div>
+          <div class="card"><h3>Check Report (.md)</h3><p>The result of the last check: what was compared, what matched, and any differences. Attach it to a code review.</p><a class="btn" id="dlReport" href="#">Download Report</a></div>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -347,11 +417,13 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const TOKEN = '__SESSION_TOKEN__';
-let editable = false, catalog = [], current = null, curImpl = '', layoutCache = null, dirty = false, busy = false, runtimeOk = true, stateToken = 0;
-const results = JSON.parse(sessionStorage.getItem('seance-results') || '{}');   // 'program|module' -> 'ok' | 'bad'
-const stateOf = (name) => { const p = catalog.find((x) => x.name === name); const v = (p ? p.implementations : []).map((i) => results[name + '|' + i.module]).filter(Boolean); return v.includes('bad') ? 'bad' : v.includes('ok') ? 'ok' : ''; };
-const forgetResults = (name) => { Object.keys(results).filter((k) => k.startsWith(name + '|')).forEach((k) => delete results[k]); sessionStorage.setItem('seance-results', JSON.stringify(results)); };
+const st = { about: null, catalog: [], demo: null, current: null, impl: '', layout: null, editable: false, dirty: false, busy: false, token: 0, files: [] };
+const store = JSON.parse(sessionStorage.getItem('seance-state') || '{}');   // 'prog|module' -> { check: 'ok'|'bad', checkText, strength }
+const saveStore = () => sessionStorage.setItem('seance-state', JSON.stringify(store));
+const key = (p = st.current, m = st.impl) => p + '|' + m;
+const rec = (p, m) => (store[key(p, m)] = store[key(p, m)] || {});
 
+/* ---------- helpers ---------- */
 async function api(path, opts, ms = 15000) {
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), ms);
   try {
@@ -364,285 +436,446 @@ async function api(path, opts, ms = 15000) {
   finally { clearTimeout(timer); }
 }
 const send = (path, data, method = 'POST', ms) => api(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }, ms);
-const FLAME = '<svg class="flame" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-4 3-7 1 1 1 2 2 2 0-2 0-5 1-7Z" fill="#f0b44c"/></svg>';
+const FLAME = '<svg class="flame" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-4 3-7 1 1 1 2 2 2 0-2 0-5 1-7Z" fill="#f1b44c"/></svg>';
 function say(text = '', cls = '', flame = false) { const s = $('status'); s.className = cls; s.innerHTML = text ? (flame ? FLAME : '') + `<span>${esc(text)}</span>` : ''; }
 const fail = (prefix) => (e) => say(`${prefix}${e.message}`, 'error');
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+const title = (s) => String(s).replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 const WISP = (mood, size = 64) => `<svg class="wisp" data-mood="${mood}" width="${size}" height="${Math.round(size * 1.12)}" viewBox="0 0 80 90" aria-hidden="true">
   <path d="M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z" fill="#f1ead9" stroke="#cdbf9f" stroke-width="2"/>
-  <g class="m-calm"><circle cx="30" cy="38" r="4.5" fill="#2a2118"/><circle cx="50" cy="38" r="4.5" fill="#2a2118"/><path d="M33 52q7 7 14 0" stroke="#2a2118" stroke-width="3" fill="none" stroke-linecap="round"/></g>
+  <g class="m-calm"><circle cx="30" cy="38" r="4.5" fill="#2a2118"/><circle cx="50" cy="38" r="4.5" fill="#2a2118"/><path d="M33 52q7 7 14 0" stroke="#2a2118" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="22" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".6"/><ellipse cx="58" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".6"/></g>
   <g class="m-happy"><path d="M24 40q6-9 12 0M44 40q6-9 12 0" stroke="#2a2118" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M30 50q10 12 20 0" stroke="#2a2118" stroke-width="3" fill="#f3a6a0" stroke-linecap="round"/><ellipse cx="21" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".7"/><ellipse cx="59" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".7"/></g>
   <g class="m-worried"><circle cx="30" cy="40" r="4.5" fill="#2a2118"/><circle cx="50" cy="40" r="4.5" fill="#2a2118"/><path d="M23 30l12 4M57 30l-12 4" stroke="#2a2118" stroke-width="3" stroke-linecap="round"/><path d="M32 58q4-6 8 0t8 0" stroke="#2a2118" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M66 26q4 6 0 10-4-4 0-10Z" fill="#9fd8ff"/></g>
   <g class="m-work"><circle cx="30" cy="35" r="4.5" fill="#2a2118"/><circle cx="50" cy="35" r="4.5" fill="#2a2118"/><ellipse cx="40" cy="54" rx="4" ry="5" fill="#2a2118"/></g></svg>`;
 const candle = (state) => {
   const c = state === 'ok' ? '#7be0bd' : state === 'bad' ? '#ff8f7e' : '#8c8296';
-  const flame = state === 'bad' ? 'M12 3c.5 3 4.5 5 4.5 10a4.5 4.5 0 0 1-9 0c0-2.5 1.5-3.5 2.5-5.5.6.8.9 1.6 1.4 1.6.6-1.6.4-3.8.6-6.1Z' : 'M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-4 3-7 1 1 1 2 2 2 0-2 0-5 1-7Z';
-  return `<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="${flame}" fill="${state ? c : 'none'}" fill-opacity="${state === 'bad' ? .45 : .9}" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+  const f = state === 'bad' ? 'M12 3c.5 3 4.5 5 4.5 10a4.5 4.5 0 0 1-9 0c0-2.5 1.5-3.5 2.5-5.5.6.8.9 1.6 1.4 1.6.6-1.6.4-3.8.6-6.1Z' : 'M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-4 3-7 1 1 1 2 2 2 0-2 0-5 1-7Z';
+  return `<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="${f}" fill="${state ? c : 'none'}" fill-opacity="${state === 'bad' ? .45 : .9}" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 };
+$('homeWisp').innerHTML = WISP('calm', 92); $('dropWisp').innerHTML = WISP('work', 56);
 
-/* ---------- intro ---------- */
-if (localStorage.getItem('seance-intro') === 'hidden') $('intro').hidden = true;
-$('hideIntro').addEventListener('click', () => { $('intro').hidden = true; localStorage.setItem('seance-intro', 'hidden'); });
+/* ---------- views ---------- */
+function showView(v) { ['home', 'add', 'prog'].forEach((x) => ($('v-' + x).hidden = x !== v)); if (v !== 'prog') { st.current = null; renderList(); } }
+function confirmDiscard() { return !st.dirty || confirm('You have unsaved changes to the Python. Discard them?'); }
+$('goHome').addEventListener('click', () => { if (confirmDiscard()) { st.dirty = false; showView('home'); } });
+$('goAdd').addEventListener('click', () => { if (confirmDiscard()) { st.dirty = false; showView('add'); } });
+$('homeAdd').addEventListener('click', () => showView('add'));
 $('demo').addEventListener('click', async () => {
   try {
-    await selectProgram('payroll', false);
-    const naive = catalog.find((p) => p.name === 'payroll').implementations.find((i) => i.module.includes('naive'));
-    const radio = naive && document.querySelector('#implSeg input[value="' + naive.module + '"]');
-    if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
-    $('examples').value = 10; await go();
+    await selectProgram(st.demo, true);
+    const naive = progInfo().implementations.find((i) => i.role === 'naive');
+    if (naive) { const r = document.querySelector(`#implSeg input[value="${naive.module}"]`); if (r) { r.checked = true; r.dispatchEvent(new Event('change')); } }
+    $('examples').value = 10; showTab('check'); await go();
   } catch (e) { say('Could not start the demo: ' + e.message, 'error'); }
 });
 
-/* ---------- tabs (roving tabindex) ---------- */
-const tabs = ['verify', 'try', 'code', 'spec', 'add'];
+/* ---------- tabs ---------- */
+const tabs = ['check', 'strength', 'try', 'code', 'spec', 'data', 'export'];
 function showTab(name, focus) {
   tabs.forEach((t) => { const on = t === name; $('t-' + t).setAttribute('aria-selected', on); $('t-' + t).tabIndex = on ? 0 : -1; $('p-' + t).hidden = !on; });
   if (focus) $('t-' + name).focus();
+  if (name === 'data') loadSets().catch(fail('Could not load test data: '));
 }
 tabs.forEach((t) => $('t-' + t).addEventListener('click', () => showTab(t)));
 $('tablist').addEventListener('keydown', (e) => {
-  const i = tabs.findIndex((t) => $('t-' + t).getAttribute('aria-selected') === 'true');
+  const focused = tabs.indexOf((document.activeElement && document.activeElement.id || '').replace(/^t-/, ''));
+  const i = focused >= 0 ? focused : tabs.findIndex((t) => $('t-' + t).getAttribute('aria-selected') === 'true');
   const j = { ArrowRight: (i + 1) % tabs.length, ArrowLeft: (i + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1 }[e.key];
   if (j !== undefined) { e.preventDefault(); showTab(tabs[j], true); }
 });
 
-/* ---------- programs ---------- */
+/* ---------- catalog ---------- */
+const progInfo = (name = st.current) => st.catalog.find((p) => p.name === name);
+const stateOf = (name) => { const p = progInfo(name); const v = (p ? p.implementations : []).map((i) => (store[key(name, i.module)] || {}).check).filter(Boolean); return v.includes('bad') ? 'bad' : v.includes('ok') ? 'ok' : ''; };
 function renderList(refocus) {
-  const stateText = { ok: 'matched', bad: 'differs' };
-  $('progList').innerHTML = catalog.map((p) => `<li><button class="stone" data-name="${esc(p.name)}" ${current === p.name ? 'aria-current="page"' : ''} ${busy ? 'disabled' : ''}>${candle(stateOf(p.name))}<b>${esc(p.name)}</b><small>${p.user_added ? 'yours' : 'example'} &middot; ${stateText[stateOf(p.name)] || 'not checked yet'}</small></button></li>`).join('');
+  const words = { ok: 'Matched', bad: 'Differs' };
+  $('progList').innerHTML = st.catalog.map((p) => `<li><button class="stone" data-name="${esc(p.name)}" ${st.current === p.name ? 'aria-current="page"' : ''} ${st.busy ? 'disabled' : ''}>${candle(stateOf(p.name))}<b>${esc(p.title)}</b><small>${p.user_added ? 'Yours' : 'Example'} &middot; ${words[stateOf(p.name)] || 'Not Checked Yet'}</small></button></li>`).join('');
   $('progList').querySelectorAll('.stone').forEach((b) => b.addEventListener('click', () => selectProgram(b.dataset.name).catch(fail('Could not open the program: '))));
   if (refocus) { const b = $('progList').querySelector('[aria-current=page]'); if (b) b.focus(); }
 }
-function setBusy(v) {
-  busy = v; $('go').disabled = $('tryit').disabled = v || !runtimeOk;
-  $('saveRun').disabled = $('save').disabled = v || !runtimeOk || !editable;
-  ['del', 'goAdd', 'addProg', 'copyPrompt'].forEach((id) => ($(id).disabled = v));
-  document.querySelectorAll('.stone, #implSeg input').forEach((b) => (b.disabled = v));
+function supportHtml() {
+  const a = st.about; if (!a) return '';
+  return `<div class="yes"><h3>Works Today</h3><ul>${a.supported.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div><div class="no"><h3>Not Yet (I'll Say So Clearly)</h3><ul>${a.not_yet.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
 }
 async function loadCatalog(select) {
-  const data = await api('/api/programs');
-  catalog = data.programs; runtimeOk = data.legacy_runtime;
-  $('banner').hidden = runtimeOk;
-  if (!runtimeOk) $('banner').textContent = 'GnuCOBOL was not found, so nothing can be run. Start the app with scripts/run.ps1.';
-  $('noProg').hidden = catalog.length > 0; $('work').hidden = catalog.length === 0;
-  const target = select && catalog.some((p) => p.name === select) ? select : catalog.some((p) => p.name === current) ? current : (catalog[0] || {}).name;
-  current = null; renderList();
-  if (target) await selectProgram(target, true);
+  const [about, data] = await Promise.all([st.about ? Promise.resolve(st.about) : api('/api/about'), api('/api/programs')]);
+  st.about = about; st.catalog = data.programs; st.demo = data.demo;
+  $('banner').hidden = data.legacy_runtime;
+  if (!data.legacy_runtime) $('banner').textContent = 'GnuCOBOL was not found, so nothing can be run. Start the app with scripts/run.ps1.';
+  $('demo').hidden = !st.demo;
+  $('examples').max = about.defaults.max_rounds; if (!$('examples').value) $('examples').value = about.defaults.rounds;
+  $('supportLists').innerHTML = $('supportLists2').innerHTML = supportHtml();
+  renderList();
+  if (select) await selectProgram(select, true);
 }
-function confirmDiscard() { return !dirty || confirm('You have unsaved changes to the Python. Discard them?'); }
-async function selectProgram(name, force, scaffolded) {
-  if (!force && name === current) return;
+
+/* ---------- program ---------- */
+function setBusy(v) {
+  st.busy = v;
+  ['go', 'tryit', 'mutateBtn'].forEach((id) => ($(id).disabled = v));
+  $('saveRun').disabled = $('save').disabled = v || !st.editable;
+  ['del', 'goAdd', 'copyPrompt', 'redraft', 'browseData', 'homeAdd'].forEach((id) => ($(id).disabled = v));
+  document.querySelectorAll('.stone, #implSeg input').forEach((b) => (b.disabled = v));
+}
+async function selectProgram(name, force) {
+  if (!force && name === st.current) return;
   if (!force && !confirmDiscard()) return;
-  const token = ++stateToken;
-  current = name; dirty = false; renderList(!force);
-  const p = catalog.find((x) => x.name === name);
-  $('pName').textContent = name; $('del').hidden = !p.user_added;
-  if (!p.implementations.length) {
-    if (scaffolded) { say('Could not create a Python file for this program.', 'error'); return; }
-    await api('/api/scaffold/' + encodeURIComponent(name), { method: 'POST' });
-    return loadCatalog(name);
-  }
+  const token = ++st.token;
+  st.current = name; st.dirty = false; showView('prog'); st.current = name; renderList(!force);
+  const p = progInfo(name);
+  $('pName').textContent = p.title;
+  $('del').hidden = !p.user_added;
+  $('redraft').hidden = !p.user_added;
+  const chips = [];
+  if (p.format) chips.push(`<span class="chip"><b>${title(p.format)}</b> Format</span>`);
+  if (p.input) chips.push(`<span class="chip">Reads <b>${esc(p.input.file)}</b> &middot; ${p.input.lines ? 'Text Lines' : 'Fixed Records'} of ${p.input.width}</span>`);
+  if (p.output) chips.push(`<span class="chip">Writes <b>${esc(p.output.file)}</b> &middot; ${p.output.lines ? 'Text Lines' : 'Fixed Records'} of ${p.output.width}</span>`);
+  $('pChips').innerHTML = chips.join('');
   const impls = p.implementations;
-  curImpl = impls.some((i) => i.module === curImpl) ? curImpl : impls[0].module;
-  $('whichHelp').hidden = impls.length < 2;
-  if (impls.length === 1) $('implSeg').innerHTML = `<span class="one">${esc(impls[0].label)}</span>`;
+  st.impl = impls.some((i) => i.module === st.impl) ? st.impl : (impls.find((i) => i.role !== 'naive') || impls[0] || {}).module || '';
+  const roles = impls.map((i) => i.role);
+  $('whichHelp').hidden = !roles.includes('naive');
+  $('whichHelp').textContent = 'The reference version should pass. The naive draft, written the way a first attempt often is, should fail. Flip between them to see the difference.';
+  if (impls.length <= 1) $('implSeg').innerHTML = `<span style="font-weight:600">${esc(impls[0] ? impls[0].label : 'None Yet')}</span>`;
   else {
-    $('implSeg').innerHTML = `<div class="seg" role="radiogroup" aria-labelledby="implLbl">${impls.map((i) => `<label><input type="radio" name="impl" value="${esc(i.module)}" ${i.module === curImpl ? 'checked' : ''}>${esc(i.label)}</label>`).join('')}</div>`;
+    $('implSeg').innerHTML = `<div class="seg" role="radiogroup" aria-labelledby="implLbl">${impls.map((i) => `<label><input type="radio" name="impl" value="${esc(i.module)}" ${i.module === st.impl ? 'checked' : ''}>${esc(i.label)}</label>`).join('')}</div>`;
     $('implSeg').querySelectorAll('input').forEach((r) => r.addEventListener('change', () => {
-      if (r.value === curImpl) return;
-      if (!confirmDiscard()) { $('implSeg').querySelector(`input[value="${curImpl}"]`).checked = true; return; }
-      curImpl = r.value; dirty = false; stateToken++; loadSource().catch(fail('Could not load the code: '));
+      if (r.value === st.impl) return;
+      if (!confirmDiscard()) { document.querySelector(`#implSeg input[value="${st.impl}"]`).checked = true; return; }
+      st.impl = r.value; st.dirty = false; st.token++; loadSource().catch(fail('Could not load the code: '));
     }));
   }
+  if (p.error) { say(p.error, 'error'); return; }
   try { await Promise.all([loadSource(), loadLayout()]); }
-  catch (e) { if (token === stateToken) { $('migrated').value = ''; $('legacy').textContent = ''; editable = false; setBusy(busy); say('Could not open ' + name + ': ' + e.message, 'error'); } }
+  catch (e) { if (token === st.token) { $('migrated').value = ''; $('legacy').textContent = ''; st.editable = false; setBusy(st.busy); say('Could not open ' + p.title + ': ' + e.message, 'error'); } }
 }
-function resetResults() { $('result').hidden = true; $('result').innerHTML = ''; $('verifyEmpty').hidden = false; $('tryout').innerHTML = ''; }
+function resetResults() {
+  $('result').hidden = true; $('result').innerHTML = ''; $('checkEmpty').hidden = false; $('tryout').innerHTML = '';
+  $('strength').hidden = true; $('strength').innerHTML = ''; $('strengthEmpty').hidden = false;
+}
+function implInfo() { return (progInfo().implementations || []).find((i) => i.module === st.impl) || {}; }
 async function loadSource() {
-  const prog = current, token = stateToken;
-  const s = await api('/api/source?' + new URLSearchParams({ program: prog, implementation: curImpl }));
-  if (prog !== current || token !== stateToken) return;
+  const prog = st.current, token = st.token;
+  const s = await api('/api/source?' + new URLSearchParams({ program: prog, implementation: st.impl }));
+  if (prog !== st.current || token !== st.token) return;
   resetResults(); say();
   $('legacy').textContent = s.legacy;
-  $('migrated').value = s.migrated; $('migrated').readOnly = !s.editable; dirty = false;
-  editable = s.editable; $('save').disabled = $('saveRun').disabled = !editable || busy;
-  $('editHint').textContent = s.editable ? `Saved as migrated/${prog}.py on this computer. Tab inserts spaces. Press Esc, then Tab, to move on.` : 'This is a shipped example, so it is read-only. Use "Add your COBOL" to get a Python file you can edit.';
-  $('stubNote').hidden = !s.migrated.includes('NotImplementedError');
+  $('migrated').value = s.migrated; $('migrated').readOnly = !s.editable; st.dirty = false;
+  st.editable = s.editable; $('save').disabled = $('saveRun').disabled = !st.editable || st.busy;
+  const p = progInfo(), info = implInfo();
+  $('codeLead').textContent = s.editable ? 'Left: the original COBOL. Right: your Python, drafted from it. Every drafted line ends with # Lnn, the COBOL line it came from. Ctrl+S saves.'
+    : 'Left: the original COBOL. Right: a shipped example, so it is read-only. Add your own program to get Python you can edit.';
+  $('editHint').textContent = s.editable ? `Saved as migrated/${prog}.py on this computer. Tab inserts spaces; press Esc, then Tab, to move on.` : '';
+  const isStub = s.migrated.includes('Write the migration here');
+  const gaps = (s.migrated.match(/S\.unsupported\(/g) || []).length;
+  $('stubNote').hidden = !(isStub || gaps);
+  $('stubNote').innerHTML = isStub ? '<b>This Python file is still an empty starter.</b> I could not translate this program automatically. Write it in the Code tab, or copy the AI prompt above and give it to Kiro.'
+    : `<b>${plural(gaps, 'statement')} could not be translated automatically.</b> They raise an error naming the COBOL line, so the check will point straight at them. Fix them in the Code tab.`;
   $('spec').innerHTML = s.spec ? renderSpec(s.spec) : '<p>No description was generated for this program.</p>';
   const m = /^Purpose, from the source comment: (.*)$/m.exec(s.spec || '');
-  $('pPurpose').textContent = m ? m[1] : 'Open "What the COBOL does" for a description of this program.';
+  $('pPurpose').textContent = m ? m[1] : 'Open "COBOL Explained" for a description of this program.';
+  const q = new URLSearchParams({ implementation: st.impl });
+  $('dlPy').href = $('dlPy2').href = `/api/download/${encodeURIComponent(prog)}?what=python&${q}`;
+  $('dlZip').href = `/api/download/${encodeURIComponent(prog)}?what=bundle&${q}`;
+  $('dlReport').href = `/api/download/${encodeURIComponent(prog)}?what=report&${q}`;
+  renderEmpty(); renderFlow(); restoreResults();
 }
-const fieldType = (f) => f.kind === 'alpha' ? 'text'
-  : f.kind === 'edited' ? `number with editing, <code>${esc(f.pic)}</code>`
-  : `number, ${f.digits - f.scale} digit${f.digits - f.scale === 1 ? '' : 's'}${f.scale ? ' + ' + f.scale + ' decimal' + (f.scale === 1 ? '' : 's') : ''}${{ none: '', leading_sep: ', +/- first', trailing_sep: ', +/- last', leading_over: ', sign in first digit', trailing_over: ', sign in last digit' }[f.sign] || ''}`;
+function renderEmpty() {
+  $('checkEmpty').innerHTML = `<div class="guide">${WISP('calm', 56)}<div><b>Nothing Checked Yet.</b> Press <b>Run Check</b> and you'll get:<ul><li>A clear pass or fail.</li><li>How many records were compared, set by set.</li><li>If something differs: the smallest input that breaks it, with both answers split into fields and the wrong characters lit up.</li></ul></div></div>`;
+  $('strengthEmpty').innerHTML = `<div class="guide">${WISP('work', 56)}<div><b>Not Measured Yet.</b> This takes a few seconds and needs the check to pass first. You'll see how many planted bugs the saved records catch, and the COBOL line of every bug they miss, so you know which test to add.</div></div>`;
+}
+function renderFlow() {
+  const p = progInfo(), info = implInfo(), r = store[key()] || {};
+  const d = p.draft;
+  const draft = info.role === 'naive' ? ['warn', 'Naive Example', 'A deliberately wrong draft.']
+    : !d ? ['', 'No Python', 'Nothing to test yet.']
+    : d.translated ? (d.gaps ? ['warn', 'Draft Has Gaps', `${plural(d.gaps, 'statement')} to finish by hand.`] : ['done', 'Drafted', 'Every statement translated.'])
+    : d.stub ? ['warn', 'Empty Starter', 'Write it, or ask Kiro.'] : ['done', 'Hand-Written', 'Reference Python.'];
+  const check = !r.check ? ['', 'Not Run', 'Compare with the real COBOL.'] : r.check === 'ok' ? ['done', 'Matched', r.checkText] : ['bad', 'Differs', r.checkText];
+  const strength = !r.strength ? ['', 'Not Measured', 'Plant bugs, see what is caught.'] : [r.strength.caught === r.strength.total ? 'done' : 'warn', `${r.strength.caught} of ${r.strength.total} Caught`, r.strength.caught === r.strength.total ? 'Every planted bug was caught.' : 'Some spots are not tested.'];
+  const exp = r.check === 'ok' ? ['done', 'Ready', 'Download a standalone program.'] : ['', 'Available', 'Best after a passing check.'];
+  const steps = [['code', 'Python', ...draft], ['check', 'Check', ...check], ['strength', 'Test Strength', ...strength], ['export', 'Export', ...exp]];
+  $('flow').innerHTML = steps.map(([tab, name, state, head, sub], i) => `<li><button data-tab="${tab}" data-state="${state}"><span class="dot">${state === 'done' ? '&#10003;' : state === 'bad' ? '!' : i + 1}</span><b>${esc(name)}: ${esc(head)}</b><small>${esc(sub || '')}</small></button></li>`).join('');
+  $('flow').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab, true)));
+  $('exportNote').hidden = r.check === 'ok';
+  $('exportNote').innerHTML = r.check === 'bad' ? '<b>The last check found differences.</b> You can still download the Python, but it does not match the COBOL yet.' : '<b>No passing check yet in this session.</b> Run the check first so the report can go in the download.';
+}
+
+/* ---------- layout and samples ---------- */
+const fieldType = (f) => f.kind === 'alpha' ? 'Text' : f.kind === 'edited' ? `Edited Number <code>${esc(f.pic)}</code>`
+  : `Number, ${f.digits - f.scale} Digit${f.digits - f.scale === 1 ? '' : 's'}${f.scale ? ' + ' + f.scale + ' Decimal' + (f.scale === 1 ? '' : 's') : ''}${{ none: '', leading_sep: ', +/- First', trailing_sep: ', +/- Last', leading_over: ', Sign in First Digit', trailing_over: ', Sign in Last Digit' }[f.sign] || ''}`;
 async function loadLayout() {
-  const prog = current;
+  const prog = st.current;
   const l = await api('/api/layout?program=' + encodeURIComponent(prog));
-  if (prog !== current) return;
-  layoutCache = l;
+  if (prog !== st.current) return;
+  st.layout = l;
   const rows = l.input.fields.map((f) => `<tr><td class="mono">${esc(f.name)}</td><td>${f.start}&ndash;${f.end}</td><td>${fieldType(f)}</td></tr>`).join('');
-  const kind = l.input.organization === 'line' ? 'text lines' : 'fixed-length records with no line breaks';
-  $('layout').innerHTML = `<p class="note" style="margin-top:0">Reads <code>${esc(l.input.file)}</code> (${kind}), ${l.format}-format source, ${l.input.width} characters per record.</p><div class="scroll"><table><tr><th>Field</th><th>Columns</th><th>Contents</th></tr>${rows}</table></div><p class="note">Numbers have no decimal point: with two decimals, 12.50 is written <code>1250</code>, padded with zeros.</p>${l.notes.map((n) => `<p class="note">${esc(n)}</p>`).join('')}`;
+  $('layout').innerHTML = `<div class="scroll"><table><tr><th>Field</th><th style="width:90px">Columns</th><th>Contents</th></tr>${rows}</table></div><p class="note">${l.input.width} characters per record. Numbers have no decimal point: with two decimals, 12.50 is written <code>1250</code>, padded with zeros.</p>${l.notes.map((n) => `<p class="note">${esc(n)}</p>`).join('')}`;
+  $('dataHint').textContent = `${l.input.organization === 'line' ? 'Text lines' : `Fixed-length records of ${l.input.width} characters, with or without line breaks`}: the same ${l.input.file} file the COBOL reads. Up to ${st.about.defaults.max_data_records} records.`;
   await fillSample();
 }
-async function fillSample() { try { $('lines').value = (await api('/api/sample?program=' + encodeURIComponent(current))).line; } catch { $('lines').value = ''; } }
+async function fillSample() { try { $('lines').value = (await api('/api/sample?program=' + encodeURIComponent(st.current))).line; } catch { $('lines').value = ''; } }
 
 /* ---------- field-level diff ---------- */
 const splitFields = (text, fields) => fields.map((f) => text.slice(f.start - 1, f.end).padEnd(f.end - f.start + 1));
-function hl(a, b, cls = '') {
-  let out = '';
-  for (let i = 0; i < Math.max(a.length, b.length); i++) { const ch = a[i] ?? ''; out += ch !== (b[i] ?? '') ? `<mark class="${cls}">${esc(ch === ' ' ? '\u00a0' : ch) || '\u2205'}</mark>` : esc(ch); }
-  return out;
-}
+function hl(a, b, cls = '') { let out = ''; for (let i = 0; i < Math.max(a.length, b.length); i++) { const ch = a[i] ?? ''; out += ch !== (b[i] ?? '') ? `<mark class="${cls}">${esc(ch === ' ' ? '\u00a0' : ch) || '\u2205'}</mark>` : esc(ch); } return out; }
 function fieldTable(expected, actual) {
-  const fields = layoutCache.output.fields, crashed = actual.startsWith('<') && actual.endsWith('>');
-  if (crashed) return `<p class="note" style="padding:8px 12px 0">Your Python raised an error instead of producing a record:</p><pre style="margin:8px 12px 12px;height:auto" class="fail wrap">${esc(actual)}</pre><div class="scroll"><table><tr><th>COBOL printed</th></tr><tr><td class="mono">${esc(expected)}</td></tr></table></div>`;
+  const fields = st.layout.output.fields, crashed = actual.startsWith('<') && actual.endsWith('>');
+  if (crashed) return `<p class="note" style="padding:8px 12px 0">The Python raised an error instead of producing a record:</p><pre style="margin:8px 12px 12px" class="fail wrap">${esc(actual)}</pre><div class="scroll"><table><tr><th>COBOL Printed</th></tr><tr><td class="mono">${esc(expected)}</td></tr></table></div>`;
   const e = splitFields(expected, fields), a = splitFields(actual, fields);
   const rows = fields.map((f, i) => { const same = e[i] === a[i];
-    return `<tr class="${same ? '' : 'diff'}"><td>${esc(f.name)}</td><td class="mono">${same ? esc(e[i]) : hl(e[i], a[i], 'cob')}</td><td class="mono">${same ? esc(a[i]) : hl(a[i], e[i])}</td><td class="${same ? 'pass' : 'fail'}">${same ? 'same' : 'differs'}</td></tr>`; }).join('');
-  return `<div class="scroll"><table><tr><th>Field</th><th>COBOL printed</th><th>Python printed</th><th></th></tr>${rows}</table></div>`;
+    return `<tr class="${same ? '' : 'diff'}"><td>${esc(f.name)}</td><td class="mono">${same ? esc(e[i]) : hl(e[i], a[i], 'cob')}</td><td class="mono">${same ? esc(a[i]) : hl(a[i], e[i])}</td><td style="width:90px" class="${same ? 'pass' : 'fail'}">${same ? 'Same' : 'Differs'}</td></tr>`; }).join('');
+  return `<div class="scroll"><table><tr><th>Field</th><th>COBOL Printed</th><th>Python Printed</th><th style="width:90px"></th></tr>${rows}</table></div>`;
 }
-const caseBlock = (m, title, explain) => `<div class="evidence"><h3>${esc(title)}</h3><p class="note">${esc(explain)}</p>
-  <div class="case"><div class="in"><span>Input record</span><span class="rec mono">${esc(m.input)}</span><button class="btn small" data-try="${esc(m.input)}">Try this record</button></div>${fieldTable(m.expected, m.actual)}</div></div>`;
+const caseBlock = (m, head, explain) => `<div class="evidence"><h3>${esc(head)}</h3><p class="note">${esc(explain)}</p>
+  <div class="case"><div class="in"><span>Input Record</span><span class="rec mono">${esc(m.input)}</span><button class="btn small" data-try="${esc(m.input)}">Try This Record</button></div>${fieldTable(m.expected, m.actual)}</div></div>`;
 
-/* ---------- run check ---------- */
-const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
-function render(r, label) {
-  resetResults(); $('verifyEmpty').hidden = true; $('result').hidden = false;
-  const total = Object.values(r.fixtures).reduce((a, f) => a + f.records, 0);
-  const bad = Object.values(r.fixtures).reduce((a, f) => a + f.mismatches, 0);
-  const rows = Object.entries(r.fixtures).map(([n, f]) => `<tr><td>${n === 'edges' ? 'Saved edge cases (zero, smallest and largest values)' : 'Saved random records'}</td><td>${plural(f.records, 'record')}</td><td class="${f.mismatches ? 'fail' : 'pass'}">${f.mismatches ? `${plural(f.mismatches, 'record')} ${f.mismatches === 1 ? 'differs' : 'differ'}` : 'all identical'}</td></tr>`).join('')
-    + `<tr><td>New random tests</td><td>${r.property_mismatch ? 'stopped at the first failure' : plural(r.property_runs, 'round')}</td><td class="${r.property_mismatch ? 'fail' : 'pass'}">${r.property_mismatch ? 'a difference was found' : 'all identical'}</td></tr>`;
-  const when = new Date().toLocaleTimeString();
-  const headline = r.matched ? 'The Python gave exactly the same output as the COBOL on every input tried.'
+/* ---------- check ---------- */
+function renderCheck(r, label) {
+  $('checkEmpty').hidden = true; $('result').hidden = false;
+  const sets = Object.entries(r.fixtures);
+  const total = sets.reduce((a, [, f]) => a + f.records, 0), bad = sets.reduce((a, [, f]) => a + f.mismatches, 0);
+  const rows = sets.map(([, f]) => `<tr><td>${esc(f.label)}</td><td style="width:140px">${plural(f.records, 'Record')}</td><td style="width:170px" class="${f.mismatches ? 'fail' : 'pass'}">${f.mismatches ? `${plural(f.mismatches, 'Record')} ${f.mismatches === 1 ? 'Differs' : 'Differ'}` : 'All Identical'}</td></tr>`).join('')
+    + `<tr><td>New random records, generated for this check</td><td>${r.property_mismatch ? 'Stopped at First Failure' : plural(r.property_runs, 'Round')}</td><td class="${r.property_mismatch ? 'fail' : 'pass'}">${r.property_mismatch ? 'A Difference Was Found' : 'All Identical'}</td></tr>`;
+  const headline = r.matched ? 'The Python gave exactly the same output as the COBOL on every record tried.'
     : `The Python output differs from the COBOL${bad ? ` on ${bad} of ${plural(total, 'saved record')}` : ' on newly generated records'}.`;
-  const sub = r.matched ? `Checked ${esc(label)} at ${when}: ${plural(total, 'saved record')} and ${plural(r.property_runs, 'random round')}. That's strong evidence, not a proof for every possible input.`
-    : 'Below is an input where the two disagree. Fix the Python and run the check again. The "What the COBOL does" tab lists every place the COBOL rounds or cuts off a number.';
-  let h = `<div class="verdict ${r.matched ? 'ok' : 'bad'}">${WISP(r.matched ? 'happy' : 'worried', 72)}<div class="stamp" aria-hidden="true">${r.matched ? 'Spirit<br>matched' : 'Spirit<br>restless'}</div><div>
+  const sub = r.matched ? `Checked ${esc(label)} at ${new Date().toLocaleTimeString()}: ${plural(total, 'saved record')} and ${plural(r.property_runs, 'random round')}. That's strong evidence, not a proof for every possible input. Next: measure Test Strength.`
+    : 'Below is an input where the two disagree. Fix the Python and run the check again. "COBOL Explained" lists every place the COBOL rounds or cuts off a number.';
+  let h = `<div class="verdict ${r.matched ? 'ok' : 'bad'}">${WISP(r.matched ? 'happy' : 'worried', 72)}<div class="stamp" aria-hidden="true">${r.matched ? 'Spirit<br>Matched' : 'Spirit<br>Restless'}</div><div>
     <h2 id="verdictH" tabindex="-1"><span class="sr">${r.matched ? 'Spirit matched. ' : 'Spirit restless. '}</span>${headline}</h2><p>${sub}</p></div></div>
-    <div class="scroll"><table><tr><th>What was compared</th><th>How many</th><th>Result</th></tr>${rows}</table></div>`;
+    <div class="scroll"><table><tr><th>What Was Compared</th><th style="width:140px">How Many</th><th style="width:170px">Result</th></tr>${rows}</table></div>`;
   if (!r.matched) {
-    if (r.property_mismatch) h += caseBlock(r.property_mismatch, 'Smallest failing input', 'I generated lots of random records, found a failure, then shrank it to the simplest record that still fails.');
-    r.mismatches.slice(0, 2).forEach((m) => { h += caseBlock(m, `Failing saved record ${m.index + 1} of ${m.source}`, 'A saved record where the outputs differ. The lit-up characters are the ones that are not the same.'); });
-    if (r.mismatches.length > 2) h += `<p class="note">${r.mismatches.length - 2} more failing saved records are not shown.</p>`;
-  } else h += `<div class="notcovered"><h3>Not covered by this check</h3><ul><li>Input that does not follow the record layout, such as letters in a number field.</li><li>File errors, abends and other behavior outside the record transformation.</li><li>Inputs that were not generated. Add edge cases you know about with "Try one record".</li></ul></div>`;
-  h += `<details><summary>Plain-text report</summary><pre class="wrap">${esc(r.markdown)}</pre></details>`;
+    if (r.property_mismatch) h += caseBlock(r.property_mismatch, 'Smallest Failing Input', 'I generated random records, found a failure, then made it as simple as I could while it still fails.');
+    r.mismatches.slice(0, 2).forEach((m) => { h += caseBlock(m, `Failing Record ${m.index + 1} of "${(r.fixtures[m.source] || {}).label || m.source}"`, 'A saved record where the outputs differ. The lit-up characters are the ones that are not the same.'); });
+    if (r.mismatches.length > 2) h += `<p class="note">${plural(r.mismatches.length - 2, 'more failing saved record')} not shown.</p>`;
+  } else h += `<details><summary>Not Covered by This Check</summary><ul class="note"><li>Input that does not follow the record layout, such as letters in a number field.</li><li>File errors, abends and other behavior outside the record transformation.</li><li>Inputs nobody generated. Add real files in Test Data, and see which spots are untested in Test Strength.</li></ul></details>`;
+  h += `<details><summary>Plain-Text Report</summary><pre class="wrap">${esc(r.markdown)}</pre></details>`;
   $('result').innerHTML = h;
-  $('verdictH').focus({ preventScroll: false });
 }
-$('result').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-try]');
-  if (!b) return;
-  $('lines').value = b.dataset.try; showTab('try'); $('tryit').click();
-});
+function restoreResults() {
+  const r = store[key()] || {};
+  if (r.lastCheck) renderCheck(r.lastCheck, r.lastLabel || '');
+  if (r.lastStrength) renderStrength(r.lastStrength);
+}
+$('result').addEventListener('click', (e) => { const b = e.target.closest('[data-try]'); if (!b) return; $('lines').value = b.dataset.try; showTab('try'); $('tryit').click(); });
 async function save() {
   const snapshot = $('migrated').value;
-  await send('/api/source', { program: current, code: snapshot }, 'PUT');
-  forgetResults(current); renderList();
-  if ($('migrated').value === snapshot) dirty = false;
-  $('stubNote').hidden = !snapshot.includes('NotImplementedError');
+  await send('/api/source', { program: st.current, code: snapshot }, 'PUT');
+  delete store[key()]; saveStore(); renderList(); renderFlow();
+  if ($('migrated').value === snapshot) st.dirty = false;
 }
 async function go() {
-  if (busy) return;
-  const prog = current, token = stateToken, label = (catalog.find((p) => p.name === prog).implementations.find((i) => i.module === curImpl) || {}).label || curImpl;
-  setBusy(true); resetResults();
+  if (st.busy) return;
+  const prog = st.current, impl = st.impl, token = st.token, label = implInfo().label || impl;
+  setBusy(true); resetResults(); renderEmpty();
   say('Running the COBOL and the Python side by side. This can take up to a minute.', '', true);
   try {
-    if (!$('migrated').readOnly && dirty) { say('Saving your Python first.', '', true); await save(); }
-    const r = await send('/api/verify', { program: prog, implementation: curImpl, examples: Number($('examples').value) }, 'POST', 660000);
-    if (prog !== current || token !== stateToken) return;
-    results[prog + '|' + curImpl] = r.matched ? 'ok' : 'bad'; sessionStorage.setItem('seance-results', JSON.stringify(results));
-    showTab('verify'); render(r, label); say(); renderList();
+    if (!$('migrated').readOnly && st.dirty) { say('Saving your Python first.', '', true); await save(); }
+    const r = await send('/api/verify', { program: prog, implementation: impl, examples: Number($('examples').value) }, 'POST', 660000);
+    if (prog !== st.current || token !== st.token) return;
+    const total = Object.values(r.fixtures).reduce((a, f) => a + f.records, 0), bad = Object.values(r.fixtures).reduce((a, f) => a + f.mismatches, 0);
+    Object.assign(rec(prog, impl), { check: r.matched ? 'ok' : 'bad', checkText: r.matched ? `${total} saved records + ${r.property_runs} rounds identical.` : bad ? `${bad} of ${total} saved records differ.` : 'New random records differ.', lastCheck: r, lastLabel: label });
+    delete rec(prog, impl).strength; delete rec(prog, impl).lastStrength; saveStore();
+    showTab('check'); renderCheck(r, label); say(); renderList(); renderFlow(); $('verdictH').focus();
   } catch (e) { say('The check could not finish: ' + e.message, 'error'); }
   finally { setBusy(false); }
 }
 $('go').addEventListener('click', go);
-$('saveRun').addEventListener('click', async () => { try { await save(); showTab('verify'); await go(); } catch (e) { say('Not saved: ' + e.message, 'error'); } });
+$('saveRun').addEventListener('click', async () => { try { await save(); showTab('check'); await go(); } catch (e) { say('Not saved: ' + e.message, 'error'); } });
 
-/* ---------- try one record ---------- */
+/* ---------- test strength ---------- */
+function renderStrength(r) {
+  $('strengthEmpty').hidden = true; $('strength').hidden = false;
+  const pct = r.total ? Math.round(100 * r.caught / r.total) : 0;
+  const survivors = r.mutants.filter((m) => !m.caught);
+  const where = (m) => m.cobol_line ? `COBOL Line ${m.cobol_line}` : `Python Line ${m.line}`;
+  let h = `<div class="card"><div class="guide">${WISP(survivors.length ? 'worried' : 'happy', 56)}<div style="flex:1"><h2 class="sec">${r.caught} of ${r.total} Planted Bugs Caught</h2>
+    <div class="meter" role="img" aria-label="${pct} percent caught"><span style="width:${pct}%"></span></div>
+    <p class="note">Replayed ${plural(r.records, 'saved record')} against each planted bug. ${survivors.length ? `${plural(survivors.length, 'bug')} slipped through: no saved record tells the buggy version apart from the real one.` : 'Every planted bug changed at least one output, so the saved records exercise all of these spots.'}</p></div></div></div>`;
+  h += `<div class="scroll" style="margin-top:16px"><table><tr><th style="width:110px">Result</th><th style="width:150px">Where</th><th>Planted Bug</th><th style="width:160px">Records It Broke</th></tr>${r.mutants.map((m) =>
+    `<tr><td><span class="badge ${m.caught ? 'ok' : 'bad'}">${m.caught ? 'Caught' : 'Survived'}</span></td><td>${where(m)}</td><td>${esc(m.change.charAt(0).toUpperCase() + m.change.slice(1))}</td><td>${m.caught ? (m.failing ? plural(m.failing, 'Record') : 'Crashed or Hung') : 'None'}</td></tr>`).join('')}</table></div>`;
+  if (survivors.length) h += `<div class="notice" style="margin-top:16px"><b>What To Do With a Survivor.</b> Look at its line in the Code tab. If that line matters for the output, add a record that reaches it, for example a value right on a boundary, through Test Data or Try a Record. If the line can never change the output (a counter that is never written, a boundary where both branches give the same answer), the survivor is expected.</div>`;
+  $('strength').innerHTML = h;
+}
+$('mutateBtn').addEventListener('click', async () => {
+  if (st.busy) return;
+  const prog = st.current, impl = st.impl, token = st.token;
+  setBusy(true); say('Planting bugs one at a time and replaying the saved records.', '', true);
+  try {
+    if (!$('migrated').readOnly && st.dirty) await save();
+    const r = await send('/api/mutate', { program: prog, implementation: impl }, 'POST', 660000);
+    if (prog !== st.current || token !== st.token) return;
+    Object.assign(rec(prog, impl), { strength: { caught: r.caught, total: r.total }, lastStrength: r }); saveStore();
+    renderStrength(r); renderFlow(); say();
+  } catch (e) { say('Could not measure test strength: ' + e.message, 'error'); }
+  finally { setBusy(false); }
+});
+
+/* ---------- try a record ---------- */
 $('sample').addEventListener('click', fillSample);
 $('tryit').addEventListener('click', async () => {
   const lines = $('lines').value.split('\n').map((l) => l.replace(/\r$/, '')).filter((l) => l.trim());
   if (!lines.length) { say('Type at least one record first.', 'error'); return; }
-  const prog = current;
+  const prog = st.current;
   setBusy(true); say('Running both programs.', '', true);
   try {
-    if (!$('migrated').readOnly && dirty) await save();
-    const { rows } = await send('/api/compare', { program: prog, implementation: curImpl, lines }, 'POST', 130000);
-    if (prog !== current) return;
-    $('tryout').innerHTML = '<div class="evidence"><h3>Results</h3>' + rows.map((r, i) => `<div class="case"><div class="in"><span>Record ${i + 1}</span><span class="rec mono">${esc(r.input)}</span></div>${fieldTable(r.legacy, r.python)}</div>`).join('') + '</div>';
+    if (!$('migrated').readOnly && st.dirty) await save();
+    const { rows } = await send('/api/compare', { program: prog, implementation: st.impl, lines }, 'POST', 130000);
+    if (prog !== st.current) return;
+    $('tryout').innerHTML = '<div class="evidence"><h3>Results</h3>' + rows.map((r, i) => `<div class="case"><div class="in"><span>Record ${i + 1}</span><span class="rec mono">${esc(r.input)}</span><span class="badge ${r.match ? 'ok' : 'bad'}">${r.match ? 'Same' : 'Differs'}</span></div>${fieldTable(r.legacy, r.python)}</div>`).join('') + '</div>';
     say();
   } catch (e) { say('Could not run: ' + e.message, 'error'); }
   finally { setBusy(false); }
 });
 
 /* ---------- code editor ---------- */
-$('wrap').addEventListener('change', (e) => { $('legacy').classList.toggle('wrap', e.target.checked); $('migrated').style.whiteSpace = e.target.checked ? 'pre-wrap' : 'pre'; $('migrated').wrap = e.target.checked ? 'soft' : 'off'; });
-$('migrated').addEventListener('input', () => { dirty = true; resetResults(); });
+$('wrap').addEventListener('change', (e) => { $('legacy').classList.toggle('wrap', e.target.checked); $('migrated').style.whiteSpace = e.target.checked ? 'pre-wrap' : 'pre'; });
+$('migrated').addEventListener('input', () => { st.dirty = true; resetResults(); renderEmpty(); });
 let escapeArmed = false;
 $('migrated').addEventListener('keydown', (e) => {
   const t = e.target;
   if (e.key === 'Escape') { escapeArmed = true; return; }
-  if (e.key === 'Tab' && !t.readOnly && !escapeArmed && !e.shiftKey) { e.preventDefault(); t.setRangeText('    ', t.selectionStart, t.selectionEnd, 'end'); dirty = true; resetResults(); }
+  if (e.key === 'Tab' && !t.readOnly && !escapeArmed && !e.shiftKey) { e.preventDefault(); t.setRangeText('    ', t.selectionStart, t.selectionEnd, 'end'); st.dirty = true; resetResults(); renderEmpty(); }
   if (e.key !== 'Escape') escapeArmed = false;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (!t.readOnly) save().then(() => say('Saved.')).catch(fail('Not saved: ')); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (!t.readOnly) save().then(() => say('Saved.', 'ok')).catch(fail('Not saved: ')); }
 });
-$('save').addEventListener('click', () => save().then(() => say(`Saved migrated/${current}.py`)).catch(fail('Not saved: ')));
-window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+$('save').addEventListener('click', () => save().then(() => say(`Saved migrated/${st.current}.py`, 'ok')).catch(fail('Not saved: ')));
+$('redraft').addEventListener('click', async () => {
+  if (!confirm('Write a fresh Python draft from the COBOL? Your current file is kept next to it as a .bak copy.')) return;
+  setBusy(true); say('Translating the COBOL again.', '', true);
+  try {
+    const r = await send(`/api/programs/${encodeURIComponent(st.current)}/draft`, {}, 'POST', 120000);
+    delete store[key()]; saveStore();
+    await loadCatalog(st.current);
+    say(r.translated ? `Redrafted: ${plural(r.statements, 'statement')}, ${plural(r.gaps.length, 'gap')}. The old file is saved as migrated/${st.current}.py.bak.` : `Could not translate: ${r.reason}`, r.translated ? 'ok' : 'error');
+  } catch (e) { say('Could not redraft: ' + e.message, 'error'); }
+  finally { setBusy(false); }
+});
+window.addEventListener('beforeunload', (e) => { if (st.dirty) { e.preventDefault(); e.returnValue = ''; } });
+document.querySelectorAll('a.btn[download], #dlZip, #dlPy, #dlPy2').forEach((a) => a.setAttribute('download', ''));
+$('dlReport').addEventListener('click', async (e) => {
+  e.preventDefault();
+  try { const res = await fetch($('dlReport').href); if (!res.ok) throw new Error((await res.json()).detail); const blob = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${st.current}-report.md`; a.click(); URL.revokeObjectURL(a.href); }
+  catch (err) { say('No report yet: ' + err.message, 'error'); }
+});
 
 /* ---------- spec renderer (the spec is generated markdown) ---------- */
 function renderSpec(md) {
   const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
   const out = []; let table = [], list = false;
-  const flushTable = () => { if (!table.length) return; const [head, , ...body] = table;
-    const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+  const flush = () => { if (!table.length) return; const [head, , ...body] = table; const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
     out.push(`<div class="scroll"><table><tr>${cells(head).map((c) => `<th>${inline(c)}</th>`).join('')}</tr>${body.map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`); table = []; };
   for (const line of md.split('\n')) {
-    if (line.startsWith('|')) { table.push(line); continue; } flushTable();
+    if (line.startsWith('|')) { table.push(line); continue; } flush();
     const m = /^(\s*)- (.*)$/.exec(line);
     if (m) { if (!list) { out.push('<ul>'); list = true; } out.push(`<li style="margin-left:${m[1].length * 8}px">${inline(m[2])}</li>`); continue; }
     if (list) { out.push('</ul>'); list = false; }
     if (line.startsWith('### ')) out.push(`<h5>${inline(line.slice(4))}</h5>`);
-    else if (line.startsWith('## ')) out.push(`<h4>${inline(line.slice(3))}</h4>`);
+    else if (line.startsWith('## ')) out.push(`<h4>${inline(title(line.slice(3).toLowerCase()).replace(/\b(Of|By|The|A|An|And|Or|In|To|Per|Can)\b/g, (w) => w.toLowerCase()).replace(/^./, (c) => c.toUpperCase()))}</h4>`);
     else if (line.startsWith('# ')) out.push(`<h4>${inline(line.slice(2))}</h4>`);
     else if (line.trim()) out.push(`<p>${inline(line)}</p>`);
   }
-  if (list) out.push('</ul>'); flushTable();
+  if (list) out.push('</ul>'); flush();
   return out.join('');
 }
 
-/* ---------- add / delete ---------- */
+/* ---------- test data ---------- */
+async function loadSets() {
+  const prog = st.current;
+  const { sets } = await api('/api/data?program=' + encodeURIComponent(prog));
+  if (prog !== st.current) return;
+  $('sets').innerHTML = `<div class="scroll"><table><tr><th>Test Set</th><th style="width:140px">Records</th><th style="width:120px"></th></tr>${sets.map((s) =>
+    `<tr><td>${esc(s.label)}</td><td>${plural(s.records, 'Record')}</td><td>${s.removable ? `<button class="btn small danger" data-remove="${esc(s.set)}">Remove</button>` : ''}</td></tr>`).join('')}</table></div>`;
+  $('sets').querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Remove this test set?')) return;
+    try { await api(`/api/data/${encodeURIComponent(prog)}/${encodeURIComponent(b.dataset.remove)}`, { method: 'DELETE' }); delete store[key()]; saveStore(); renderFlow(); await loadSets(); say('Removed.', 'ok'); } catch (e) { say(e.message, 'error'); }
+  }));
+}
+const readText = (file, enc = 'utf-8') => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => bad(r.error); r.readAsText(file, enc); });
+async function uploadData(file) {
+  if (!file) return;
+  setBusy(true); say(`Running ${file.name} through the real COBOL.`, '', true);
+  try {
+    const text = await readText(file, 'ISO-8859-1');
+    const r = await send(`/api/data/${encodeURIComponent(st.current)}`, { filename: file.name, text }, 'POST', 300000);
+    delete store[key()]; saveStore(); renderFlow(); await loadSets();
+    say(`Added ${plural(r.records, 'record')} from ${file.name}. Every check now replays them.`, 'ok');
+  } catch (e) { say('Could not add the data: ' + e.message, 'error'); }
+  finally { setBusy(false); $('dataPick').value = ''; }
+}
+$('browseData').addEventListener('click', () => $('dataPick').click());
+$('dataPick').addEventListener('change', (e) => uploadData(e.target.files[0]));
+wireDrop($('dropData'), (files) => uploadData(files[0]));
+
+/* ---------- add program ---------- */
+function wireDrop(zone, onFiles) {
+  ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('over'); }));
+  zone.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) onFiles([...e.dataTransfer.files]); });
+}
+async function addFiles(list) {
+  for (const f of list) {
+    const text = await readText(f);
+    const isProgram = /PROCEDURE\s+DIVISION/i.test(text);
+    st.files = st.files.filter((x) => x.name !== f.name);
+    st.files.push({ name: f.name, text, isProgram, copyName: f.name.replace(/\.[^.]+$/, '').toUpperCase() });
+  }
+  renderFiles();
+}
+function renderFiles() {
+  $('fileList').innerHTML = st.files.map((f, i) => `<li><span class="mono">${esc(f.name)}</span><span class="role">${f.isProgram ? 'Program' : `Copybook ${esc(f.copyName)}`} &middot; ${plural(f.text.split('\n').length, 'Line')}</span><button class="btn small" data-rm="${i}" aria-label="Remove ${esc(f.name)}">Remove</button></li>`).join('');
+  $('fileList').querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { st.files.splice(Number(b.dataset.rm), 1); renderFiles(); }));
+}
+wireDrop($('dropCobol'), addFiles);
+$('browse').addEventListener('click', () => $('filePick').click());
+$('filePick').addEventListener('change', (e) => { addFiles([...e.target.files]).catch(fail('')); e.target.value = ''; });
+$('pasteToggle').addEventListener('click', () => { const open = $('pasteArea').hidden; $('pasteArea').hidden = !open; $('pasteToggle').setAttribute('aria-expanded', open); });
 function addCopybookRow(name = '', text = '') {
   const row = document.createElement('div'); row.className = 'cbrow';
-  row.innerHTML = `<label class="field">Copybook name <small>the name used in COPY</small><input type="text" class="cbname" maxlength="32" placeholder="CUSTREC"></label><label class="field">Copybook text<textarea class="cbtext" spellcheck="false"></textarea></label>`;
-  row.querySelector('.cbname').value = name; row.querySelector('.cbtext').value = text;
-  $('cbList').appendChild(row);
+  row.innerHTML = `<label class="field">Copybook Name <small>The name used in COPY</small><input type="text" class="cbname" maxlength="32" placeholder="ACCTREC"></label><label class="field">Copybook Text<textarea class="cbtext" spellcheck="false"></textarea></label>`;
+  row.querySelector('.cbname').value = name; row.querySelector('.cbtext').value = text; $('cbList').appendChild(row);
 }
 $('addCb').addEventListener('click', () => addCopybookRow());
-$('goAdd').addEventListener('click', () => { if (!confirmDiscard()) return; $('work').hidden = false; $('noProg').hidden = true; showTab('add', true); window.scrollTo({ top: 0 }); });
-$('loadTpl').addEventListener('click', () => api('/api/template').then((t) => { $('newName').value = t.name; $('newCobol').value = t.cobol; $('cbList').innerHTML = ''; (t.copybooks || []).forEach((c) => addCopybookRow(c.name, c.text)); }).catch(fail('Could not load the example: ')));
+$('loadTpl').addEventListener('click', () => api('/api/template').then((t) => {
+  st.files = []; renderFiles(); $('pasteArea').hidden = false; $('pasteToggle').setAttribute('aria-expanded', 'true');
+  $('newName').value = t.name; $('pasteCobol').value = t.cobol; $('cbList').innerHTML = ''; (t.copybooks || []).forEach((c) => addCopybookRow(c.name, c.text));
+}).catch((e) => ($('addError').textContent = e.message)));
 $('addProg').addEventListener('click', async () => {
-  $('addError').textContent = ''; $('addProg').disabled = true; say('Compiling your COBOL, running it on generated inputs, and writing up what it does.', '', true);
+  $('addError').textContent = '';
+  let cobol = '', copybooks = [];
+  const programs = st.files.filter((f) => f.isProgram);
+  if (programs.length > 1) { $('addError').textContent = 'More than one file has a PROCEDURE DIVISION. Add one program at a time.'; return; }
+  if (programs.length) { cobol = programs[0].text; copybooks = st.files.filter((f) => !f.isProgram).map((f) => ({ name: f.copyName, text: f.text })); }
+  else { cobol = $('pasteCobol').value; copybooks = [...document.querySelectorAll('.cbrow')].map((r) => ({ name: r.querySelector('.cbname').value.trim(), text: r.querySelector('.cbtext').value })).filter((c) => c.name || c.text.trim()); }
+  if (!cobol.trim()) { $('addError').textContent = 'Drop a COBOL program, use the example, or paste the code first.'; return; }
+  $('addProg').disabled = true; $('addStatus').innerHTML = FLAME + ' Compiling, recording the real COBOL, explaining it and drafting the Python.';
   try {
-    const copybooks = [...document.querySelectorAll('.cbrow')].map((r) => ({ name: r.querySelector('.cbname').value.trim(), text: r.querySelector('.cbtext').value })).filter((c) => c.name || c.text.trim());
-    const r = await send('/api/programs', { name: $('newName').value.trim(), cobol: $('newCobol').value, copybooks }, 'POST', 300000);
-    dirty = false; await loadCatalog(r.name); showTab('code');
-    say(`Added "${r.name}" (${r.format}-format) and recorded ${Object.values(r.fixtures).reduce((a, b) => a + b, 0)} records from the real COBOL. The Python file is an empty starter: write it here, or copy the AI prompt above.`);
-  } catch (e) { $('addError').textContent = e.message; say('I could not add that program. The reason is under the form.', 'error'); }
+    const r = await send('/api/programs', { name: $('newName').value.trim(), cobol, copybooks }, 'POST', 300000);
+    st.files = []; renderFiles(); $('newName').value = ''; $('pasteCobol').value = ''; $('cbList').innerHTML = ''; $('addStatus').textContent = '';
+    await loadCatalog(r.name);
+    const recorded = Object.values(r.fixtures).reduce((a, b) => a + b, 0), d = r.draft;
+    const draftText = d.translated ? (d.gaps.length ? `drafted Python for ${d.statements - d.gaps.length} of ${d.statements} statements; ${plural(d.gaps.length, 'one needs', 'need')} you` : `drafted Python for all ${d.statements} statements`) : 'could not translate it, so you get an empty starter';
+    say(`Added ${progInfo(r.name).title}: recorded ${recorded} records from the real COBOL and ${draftText}. Next: Run Check.`, 'ok');
+    showTab('check', true);
+  } catch (e) { $('addError').textContent = e.message; $('addStatus').textContent = ''; }
   finally { $('addProg').disabled = false; }
 });
 $('del').addEventListener('click', async () => {
-  if (!confirm(`Delete "${current}" and everything generated for it? This cannot be undone.`)) return;
-  try { await api('/api/programs/' + encodeURIComponent(current), { method: 'DELETE' }); dirty = false; forgetResults(current); current = null; await loadCatalog(); say('Deleted.'); } catch (e) { say(e.message, 'error'); }
+  const p = progInfo();
+  if (!confirm(`Delete ${p.title} and everything generated for it? This cannot be undone.`)) return;
+  try { await api('/api/programs/' + encodeURIComponent(st.current), { method: 'DELETE' }); Object.keys(store).filter((k) => k.startsWith(st.current + '|')).forEach((k) => delete store[k]); saveStore(); st.dirty = false; await loadCatalog(); showView('home'); } catch (e) { say(e.message, 'error'); }
 });
 
 /* ---------- AI prompt ---------- */
 $('copyPrompt').addEventListener('click', async () => {
-  const text = `Rewrite the COBOL program "${current}" in Python, in migrated/${current}.py. Use the seance MCP tools: call describe_program first and read the description, call run_legacy_program whenever you are unsure what the COBOL does for an input, and call verify_migration until the result says "Spirit matched". Follow .kiro/steering/cobol-migration.md. Do not edit the fixtures or the COBOL.`;
-  try { await navigator.clipboard.writeText(text); say('Copied. Paste it into Kiro chat.'); } catch { say('Could not copy automatically. Select this text: ' + text, 'error'); }
+  const p = progInfo();
+  const text = `Improve the Python migration of the COBOL program "${p.name}" in migrated/${p.name}.py. Use the seance MCP tools: call describe_program and read the description, call run_legacy_program whenever you are unsure what the COBOL does for an input, and call verify_migration until the result says "Spirit matched". Replace any S.unsupported(...) lines with working code. Follow .kiro/steering/cobol-migration.md. Do not edit the fixtures or the COBOL.`;
+  try { await navigator.clipboard.writeText(text); say('Copied. Paste it into Kiro chat.', 'ok'); } catch { say('Could not copy automatically. Select this text: ' + text, 'error'); }
 });
 
-loadCatalog().catch(fail('Could not load programs: '));
+loadCatalog().catch((e) => { $('banner').hidden = false; $('banner').textContent = 'Could not load programs: ' + e.message; });
 </script>
 </body>
 </html>
+

@@ -1,4 +1,4 @@
-﻿# Kiro write-up (draft for the Devpost form)
+# Kiro write-up (draft for the Devpost form)
 
 Fill in the bracketed parts from your real experience before submitting. Judges read for specifics.
 

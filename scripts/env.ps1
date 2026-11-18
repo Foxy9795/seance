@@ -1,4 +1,4 @@
-﻿# Source this from the repo root: . .\scripts\env.ps1
+# Source this from the repo root: . .\scripts\env.ps1
 $root = Split-Path -Parent $PSScriptRoot
 $b = Join-Path $root 'tools\gnucobol\gnucobol-3.1.2-windows-mingw-x64'
 $env:PATH = "$b\bin;$env:PATH"

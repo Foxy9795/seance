@@ -1,4 +1,4 @@
-﻿"""A plausible first-draft migration of payroll.cbl. Used to show what Séance catches."""
+"""A plausible first-draft migration of payroll.cbl. Used to show what Séance catches."""
 
 from decimal import Decimal
 

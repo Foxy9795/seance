@@ -34,6 +34,10 @@ class ProgramModel:
     input: IOFile
     output: IOFile
     notes: list[str] = field(default_factory=list)
+    ws_items: list[tuple[int, str]] = field(default_factory=list)  # WORKING-STORAGE data descriptions
+    proc_items: list[tuple[int, str]] = field(default_factory=list)  # PROCEDURE DIVISION sentences, original case
+    fd_items: dict[str, list[tuple[int, str]]] = field(default_factory=dict)  # FD name -> its data descriptions
+    program_id: str = ""
 
     @property
     def in_layout(self) -> Layout:
@@ -117,6 +121,8 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     section = ""
     current_fd = ""
     proc: list[str] = []
+    ws: list[tuple[int, str]] = []
+    proc_raw: list[tuple[int, str]] = []
     for line_no, s in items:
         up = s.upper().strip()
         if re.match(r"^(FILE|WORKING-STORAGE|LOCAL-STORAGE|LINKAGE)\s+SECTION$", up):
@@ -139,8 +145,11 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
             fd_items.setdefault(current_fd, [])
         elif section == "FILE" and current_fd and re.match(r"^\d{1,2}\s", up):
             fd_items[current_fd].append((line_no, s))
+        elif section == "WORKING-STORAGE" and re.match(r"^\d{1,2}\s", up):
+            ws.append((line_no, s))
         elif section == "PROCEDURE":
             proc.append(up)
+            proc_raw.append((line_no, s))
 
     if not files:
         raise ModelError("No SELECT ... ASSIGN found. Séance needs a program that reads one file and writes one file.")
@@ -165,4 +174,5 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
         f.layout = layouts[0]
         if len(layouts) > 1:
             notes.append(f"{f.name} has {len(layouts)} record descriptions. Séance uses the first, {layouts[0].record_name}.")
-    return ProgramModel(program, path, fixed, files[ins[0]], files[outs[0]], notes)
+    pid = next((re.sub(r"[.\s].*$", "", s.split(None, 1)[1]) for _, s in items if re.match(r"^PROGRAM-ID\b", s.strip(), re.I) and len(s.split()) > 1), program.upper())
+    return ProgramModel(program, path, fixed, files[ins[0]], files[outs[0]], notes, ws, proc_raw, fd_items, pid.strip("'\"").upper())

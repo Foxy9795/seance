@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from seance.copybook import CopybookError, parse_copybook
 
