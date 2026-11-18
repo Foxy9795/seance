@@ -8,9 +8,9 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from .codegen import generate_records_module
+from .cases import describe_sets, record_sets
 from .model import ModelError, load_model
-from .recorder import ROOT, LegacyRuntimeError, compile_legacy, record_fixtures
+from .recorder import ROOT, LegacyRuntimeError, compile_legacy
 from .spec import write_spec
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,23}$")
@@ -103,32 +103,86 @@ def implementations(name: str, root: Path = ROOT) -> list[Implementation]:
     return found
 
 
+def _purpose(model) -> str:
+    from .cobol_src import normalize
+
+    note = model.path.parent / "SOURCE.md"  # shipped examples describe themselves there
+    if note.exists():
+        paras = [p.strip() for p in note.read_text(encoding="utf-8").split("\n\n") if p.strip() and not p.startswith("#")]
+        if paras:
+            return paras[-1].replace("\n", " ")[:240]
+    block = []
+    for line in normalize(model.path.read_text(encoding="utf-8", errors="replace"), model.fixed):
+        if not line.comment and re.match(r"^\s*(ENVIRONMENT|DATA|PROCEDURE)\s+DIVISION", line.text, re.I):
+            break  # the purpose is in the header comments, not in commented-out code further down
+        if line.comment:
+            text = re.sub(r"^[-=*>\s]+|[-=*\s]+$", "", line.text)
+            if text and not text.upper().startswith(("COPYRIGHT", "SPDX", "AUTHOR")):
+                block.append(text)
+        elif block and not re.match(r"^\s*(IDENTIFICATION|ID|PROGRAM-ID|AUTHOR|DATE-|INSTALLATION|SECURITY|REMARKS)", line.text, re.I):
+            break
+    return " ".join(block)[:240]
+
+
+def last_check(implementation: str, root: Path = ROOT) -> dict | None:
+    """The saved result of the last check of this Python, and whether the files changed since."""
+    import hashlib
+    import json
+
+    p = root / "build" / "reports" / f"{implementation.replace('.', '_')}.json"
+    if not p.exists():
+        return None
+    try:
+        r = json.loads(p.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    rc = r.get("receipt") or {}
+    program = r.get("program", "")
+    impl_path = root / (implementation.replace(".", "/") + ".py")
+    cbl = root / "legacy" / program / f"{program}.cbl"
+
+    def sha(path: Path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()[:16] if path.exists() else None
+
+    current = rc.get("python_sha256") == sha(impl_path) and rc.get("cobol_sha256") == sha(cbl)
+    return {"verdict": r.get("verdict"), "matched": r.get("matched"), "checked_at": rc.get("checked_at"), "current": current}
+
+
 def program_info(name: str, root: Path = ROOT) -> dict:
     """Everything the UI shows about a program, read from the program itself."""
-    from .translate import Unsupported  # noqa: F401  (import keeps the translator loaded for the API)
-
-    info = {"name": name, "user_added": is_user_program(name, root), "implementations": [i.__dict__ for i in implementations(name, root)]}
+    impls = []
+    for i in implementations(name, root):
+        d = dict(i.__dict__)
+        d["last_check"] = last_check(i.module, root)
+        impls.append(d)
+    info = {"name": name, "user_added": is_user_program(name, root), "implementations": impls}
     try:
         model = load_model(name, root)
         info.update({
-            "title": model.program_id.replace("-", " ").title(),
+            "title": name.replace("_", " ").title(),
             "program_id": model.program_id,
             "format": "fixed" if model.fixed else "free",
-            "input": {"file": model.input.assign, "lines": model.input.organization == "line", "width": model.in_layout.width},
-            "output": {"file": model.output.assign, "lines": model.output.organization == "line", "width": model.out_layout.width},
+            "purpose": _purpose(model),
+            "files": [{"name": f.name, "assign": f.assign, "role": "input" if f.is_input and not f.is_output else ("output" if f.is_output and not f.is_input else "both"),
+                       "lines": f.organization == "line", "record": f.record.name if f.record else None, "size": f.size} for f in model.files],
+            "console_input": model.accepts,
+            "io": model.describe_io(),
+            "unsupported": model.unsupported,
+            "notes": model.notes,
             "error": None,
         })
     except ModelError as exc:
-        info.update({"title": name.replace("_", " ").title(), "error": str(exc)})
+        info.update({"title": name.replace("_", " ").title(), "error": str(exc), "files": [], "console_input": [], "unsupported": [], "notes": [], "purpose": ""})
+    try:
+        info["sets"] = describe_sets(name, root)
+    except Exception:
+        info["sets"] = []
     draft = root / "migrated" / f"{name}.py"
     info["draft"] = None
     if draft.exists():
         text = draft.read_text(encoding="utf-8-sig")
-        if "Written by the Séance translator" in text:
-            gaps = len(re.findall(r"S\.unsupported\(", text))
-            info["draft"] = {"translated": True, "gaps": gaps}
-        else:
-            info["draft"] = {"translated": False, "gaps": 0, "stub": "NotImplementedError(\"Write the migration here" in text}
+        translated = "Written by the Séance translator" in text
+        info["draft"] = {"translated": translated, "gaps": len(re.findall(r"S\.unsupported\(", text))}
     return info
 
 
@@ -147,24 +201,23 @@ def validate_name(name: str) -> None:
         raise ProgramError("Name must be 2-24 characters: lowercase letters, digits, underscores, starting with a letter, and not a Python keyword.")
 
 
-def _stub(name: str, in_fields: list[str], out_fields: list[str]) -> str:
-    return f'''"""Migration of legacy/{name}/{name}.cbl. Read docs/specs/{name}.md first."""
+def _stub(name: str, model) -> str:
+    files = "\n".join(f"    {f.assign}: {'reads' if f.is_input else 'writes'} {f.record.name if f.record else ''} ({f.size} bytes)" for f in model.files)
+    return f'''"""Migration of legacy/{name}/{name}.cbl. Read docs/specs/{name}.md first.
+
+Files:
+{files or "    (none)"}
+"""
 
 from decimal import Decimal
 
-from generated.{name}_records import InRecord, OutRecord
-from seance.cobol_num import size_error, store  # mirror COBOL PIC storage and ON SIZE ERROR
+from seance.cobol_num import store  # mirror COBOL PIC storage: store(value, digits, scale, signed, rounded)
+from seance.rt import IO
 
 
-def transform(rec: InRecord) -> OutRecord:
-    """Turn one input record into one output record, exactly as the COBOL does.
-
-    Input fields:  {", ".join(in_fields)}
-    Output fields: {", ".join(out_fields)}
-
-    Use store(value, digits, scale, signed, rounded) wherever the COBOL stores into a PIC field.
-    """
-    raise NotImplementedError("Write the migration here, then run the verifier.")
+def main(io: IO) -> IO:
+    """Do what the COBOL does: read io.lines(...) or io.records(...), write io.write_lines(...), io.print(...)."""
+    raise NotImplementedError("Write the migration here, then run the check.")
 '''
 
 
@@ -175,7 +228,7 @@ def scaffold(name: str, root: Path = ROOT, overwrite: bool = False) -> Path:
     model = load_model(name, root)
     target.parent.mkdir(parents=True, exist_ok=True)
     (target.parent / "__init__.py").touch()
-    target.write_text(_stub(name, [f.py_name for f in model.in_layout.fields], [f.py_name for f in model.out_layout.fields]), encoding="utf-8")
+    target.write_text(_stub(name, model), encoding="utf-8")
     return target
 
 
@@ -192,7 +245,6 @@ def delete_program(name: str, root: Path = ROOT) -> None:
         raise ProgramError("Only programs you added can be deleted.")
     for p in (
         root / "legacy" / name,
-        root / "generated" / f"{name}_records.py",
         root / "fixtures" / name,
         root / "build" / name,
         root / "migrated" / f"{name}.py",
@@ -223,7 +275,7 @@ def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = Non
         raise ProgramError(f"migrated/{name}.py already exists. Pick another name.")
 
     src = root / "legacy" / name
-    created = [src, root / "generated" / f"{name}_records.py", root / "fixtures" / name, root / "build" / name, root / "migrated" / f"{name}.py", root / "docs" / "specs" / f"{name}.md"]
+    created = [src, root / "fixtures" / name, root / "build" / name, root / "migrated" / f"{name}.py", root / "docs" / "specs" / f"{name}.md"]
     try:
         src.mkdir(parents=True)
         (src / f"{name}.cbl").write_text(cobol, encoding="utf-8")
@@ -237,10 +289,12 @@ def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = Non
         try:
             compile_legacy(name, root)
         except LegacyRuntimeError as exc:
+            if model.unsupported:
+                raise ProgramError(f"This program uses {', '.join(model.unsupported)}, which Séance cannot run yet.\n"
+                                   f"GnuCOBOL said: {exc}") from exc
             raise ProgramError(f"The COBOL did not compile:\n{exc}") from exc
-        generate_records_module(name, root)
         try:
-            counts = record_fixtures(name, root)
+            counts = record_sets(name, root)
         except LegacyRuntimeError as exc:
             raise ProgramError(f"The COBOL compiled but could not be run on generated inputs:\n{exc}") from exc
         try:
@@ -256,9 +310,9 @@ def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = Non
     return {
         "name": name,
         "format": "fixed" if model.fixed else "free",
-        "input_width": model.in_layout.width,
-        "output_width": model.out_layout.width,
-        "fixtures": counts,
+        "io": model.describe_io(),
+        "sets": counts,
+        "unsupported": model.unsupported,
         "notes": model.notes,
         "spec": spec_path.relative_to(root).as_posix() if spec_path else None,
         "migration_stub": stub.relative_to(root).as_posix(),
@@ -276,7 +330,7 @@ def draft_python(name: str, root: Path = ROOT, overwrite: bool = False) -> dict:
         backup.write_text(target.read_text(encoding="utf-8-sig"), encoding="utf-8")
     try:
         _, tr = write_draft(name, root, overwrite=True)
-        return {"translated": True, "statements": tr.statements, "gaps": tr.unsupported, "record_logic": tr.record_paragraph}
+        return {"translated": True, "statements": tr.statements, "gaps": tr.unsupported}
     except (Unsupported, ModelError) as exc:
         scaffold(name, root, overwrite=True)
         return {"translated": False, "statements": 0, "gaps": [], "reason": str(exc)}

@@ -1,4 +1,4 @@
-"""MCP server that lets Kiro run the legacy COBOL program and the Séance verifier.
+"""MCP server that lets Kiro run the legacy COBOL program and the Séance checker.
 
 Start (stdio): python -m seance.mcp_server
 """
@@ -9,8 +9,7 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
-from .codegen import generate_records_module
-from .recorder import ROOT, LegacyRuntimeError, cobc_available, compile_legacy, get_model, record_fixtures, run_legacy
+from .recorder import ROOT, LegacyRuntimeError, cobc_available, get_model
 from .report import to_markdown, write_reports
 from .spec import generate_spec
 from .verify import verify
@@ -24,7 +23,9 @@ MAX_LINES = 500
 
 
 def _programs() -> list[str]:
-    return sorted(p.name for p in (ROOT / "legacy").iterdir() if (p / f"{p.name}.cbl").exists())
+    from .programs import program_names
+
+    return program_names(ROOT)
 
 
 def _check(program: str) -> None:
@@ -32,11 +33,24 @@ def _check(program: str) -> None:
         raise ValueError(f"unknown program {program!r}. Available: {', '.join(_programs())}")
 
 
+def _model(program: str):
+    try:
+        return get_model(program)
+    except LegacyRuntimeError as exc:
+        raise ValueError(str(exc)) from exc
+
+
 @mcp.tool()
 def list_programs() -> str:
-    """List the legacy COBOL programs Séance knows about and whether the COBOL runtime is available."""
+    """List the legacy COBOL programs Séance knows about, what files each reads and writes, and whether the COBOL runtime is available."""
     runtime = "available" if cobc_available() else "MISSING (GnuCOBOL not found)"
-    return f"COBOL runtime: {runtime}\nPrograms: {', '.join(_programs())}"
+    lines = [f"COBOL runtime: {runtime}"]
+    for name in _programs():
+        try:
+            lines.append(f"- {name}: {get_model(name).describe_io()}")
+        except LegacyRuntimeError as exc:
+            lines.append(f"- {name}: cannot be read ({exc})")
+    return "\n".join(lines)
 
 
 @mcp.tool()
@@ -49,60 +63,83 @@ def describe_program(program: str) -> str:
 
 @mcp.tool()
 def describe_layout(program: str) -> str:
-    """Input and output record layouts (field, columns, type), the source format and the file names the program uses."""
+    """Every file the program uses with its record layout (field, bytes, type, storage), plus console input."""
     _check(program)
-    try:
-        model = get_model(program)
-    except LegacyRuntimeError as exc:
-        raise ValueError(str(exc)) from exc
-    out = [f"{'fixed' if model.fixed else 'free'}-format source; reads {model.input.assign}, writes {model.output.assign}"]
-    for label, layout in (("INPUT", model.in_layout), ("OUTPUT", model.out_layout)):
-        out.append(f"{label} {layout.record_name} ({layout.width} chars per record)")
-        for f in layout.fields:
-            kind = {"alpha": f"text({f.width})", "edited": f"edited picture {f.pic}"}.get(f.kind, f"number digits={f.digits} decimals={f.scale} sign={f.sign}")
-            out.append(f"  {f.name:<18} columns {f.offset + 1}-{f.offset + f.width}  {kind}")
+    from .layout import leaves
+
+    model = _model(program)
+    out = [f"{'fixed' if model.fixed else 'free'}-format source; {model.describe_io()}"]
+    for f in model.files:
+        out.append(f"{f.assign} ({'text lines' if f.organization == 'line' else 'fixed records'}, {', '.join(sorted(f.modes))}): "
+                   f"record {f.record.name if f.record else '?'}, {f.size} bytes")
+        for lf in leaves(f.record) if f.record else []:
+            it = lf.item
+            kind = {"alpha": f"text({it.size})", "edited": f"edited picture {it.pic}"}.get(
+                it.kind, f"number digits={it.digits} decimals={it.scale} signed={it.signed} storage={it.usage}")
+            out.append(f"  {lf.name:<22} bytes {lf.offset + 1}-{lf.offset + lf.width}  {kind}")
+    if model.accepts:
+        out.append("Console input (ACCEPT): " + ", ".join(model.accepts))
+    for item in model.unsupported:
+        out.append(f"Not runnable yet: {item}")
     return "\n".join(out)
 
 
 @mcp.tool()
-def run_legacy_program(program: str, input_lines: list[str]) -> str:
-    """Run the ORIGINAL compiled COBOL program on input records (one per line) and return its output records.
-    This is the ground truth for what the program does. Each line must fit the input record width."""
+def run_legacy_program(program: str, input_lines: list[str] | None = None, input_files: dict[str, list[str]] | None = None,
+                       console_input: list[str] | None = None) -> str:
+    """Run the ORIGINAL compiled COBOL program and return everything it produced: each output file, the console
+    output and the return code. This is the ground truth for what the program does.
+    input_lines: records for the program's only input file, one per line.
+    input_files: records per input file name (the ASSIGN name), for programs with several inputs.
+    console_input: lines typed at the console, for programs that ACCEPT."""
     _check(program)
-    if not input_lines or len(input_lines) > MAX_LINES:
-        raise ValueError(f"send between 1 and {MAX_LINES} lines")
+    from .cases import ENC, Case, _units, pack_file, run_cobol, show
+    from .recorder import compile_legacy
+
+    model = _model(program)
+    files = dict(input_files or {})
+    if input_lines is not None:
+        if len(model.inputs) != 1:
+            raise ValueError(f"{program} has {len(model.inputs)} input files; use input_files with names {[f.assign for f in model.inputs]}")
+        files[model.inputs[0].assign] = input_lines
+    case = Case(stdin=list(console_input or [])[:MAX_LINES])
+    for f in model.inputs:
+        lines = files.get(f.assign, [])
+        if len(lines) > MAX_LINES:
+            raise ValueError(f"send at most {MAX_LINES} lines per file")
+        recs = [line.encode(ENC, errors="replace") for line in lines]
+        case.records[f.assign] = recs
+        case.files[f.assign] = pack_file(f, recs)
     try:
-        model = get_model(program)
-        width = model.in_layout.width
-        for i, line in enumerate(input_lines):
-            if len(line.rstrip()) > width:
-                raise ValueError(f"line {i + 1} is {len(line.rstrip())} chars, record width is {width}")
-        output = run_legacy(compile_legacy(program), [l.rstrip() for l in input_lines], model)
+        result = run_cobol(compile_legacy(program), model, case)
     except LegacyRuntimeError as exc:
         raise ValueError(str(exc)) from exc
-    return "\n".join(output)
-
-
-@mcp.tool()
-def generate_records(program: str) -> str:
-    """Regenerate generated/<program>_records.py (parse/format classes) from the copybooks."""
-    _check(program)
-    return f"wrote {generate_records_module(program).relative_to(ROOT).as_posix()}"
+    out = []
+    for name, data in result.outputs.items():
+        f = next((x for x in model.files if x.assign == name), None)
+        out.append(f"== {name}")
+        out += [show(u) for u in _units(f, data)]
+    out.append("== console")
+    out.append(result.stdout.rstrip("\n"))
+    out.append(f"== return code {result.return_code}" + (f", runtime error: {result.error}" if result.error else ""))
+    return "\n".join(out)
 
 
 @mcp.tool()
 def record_legacy_fixtures(program: str) -> str:
-    """Run the original program on generated edge-case and random inputs and store the results as fixtures."""
+    """Run the original program on generated edge-case and random input and save the results as test sets."""
     _check(program)
+    from .cases import record_sets
+
     try:
-        return f"recorded fixtures: {record_fixtures(program)}"
+        return f"recorded test sets: {record_sets(program)}"
     except LegacyRuntimeError as exc:
         raise ValueError(str(exc)) from exc
 
 
 @mcp.tool()
 def draft_python(program: str) -> str:
-    """Translate the COBOL into a first-draft Python migration at migrated/<program>.py (the old file is kept as .bak).
+    """Translate the COBOL into a Python program at migrated/<program>.py (the old file is kept as .bak).
     Every line is tagged with its COBOL line. Statements it cannot translate raise NotImplementedError naming the
     line, and are listed in the result: replace those by hand, then call verify_migration."""
     _check(program)
@@ -121,8 +158,8 @@ def draft_python(program: str) -> str:
 @mcp.tool()
 def measure_test_strength(program: str, implementation: str = "") -> str:
     """Plant small bugs in the Python one at a time (> to >=, ROUNDED dropped, a constant changed) and replay the
-    saved records. Reports how many were caught and the COBOL line of each survivor: a survivor is a spot the
-    tests never exercise, so add a record that reaches it."""
+    saved test sets. Reports how many were caught and the COBOL line of each survivor: a survivor is a spot the
+    tests never exercise, so add data that reaches it."""
     _check(program)
     from .mutate import run_mutants
 
@@ -138,9 +175,9 @@ def measure_test_strength(program: str, implementation: str = "") -> str:
 
 @mcp.tool()
 def verify_migration(program: str, implementation: str = "", examples: int = 30) -> str:
-    """Check a Python migration against the real COBOL program (recorded fixtures plus property-based tests).
+    """Check a Python migration against the real COBOL program: saved test sets plus fresh random runs of both.
     `implementation` is a module path such as migrated.payroll (default: migrated.<program>).
-    Returns the Séance report. 'Spirit restless' means the Python is wrong, not the fixtures."""
+    Returns the Séance report. 'Spirit restless' means the Python is wrong, not the test data."""
     _check(program)
     if not 5 <= examples <= 200:
         raise ValueError("examples must be between 5 and 200")
@@ -149,7 +186,7 @@ def verify_migration(program: str, implementation: str = "", examples: int = 30)
     except (LegacyRuntimeError, ImportError) as exc:
         raise ValueError(str(exc)) from exc
     write_reports(report, ROOT)
-    return to_markdown(report)
+    return to_markdown(report, ROOT)
 
 
 if __name__ == "__main__":

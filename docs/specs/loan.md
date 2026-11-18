@@ -2,20 +2,20 @@
 
 Purpose, from the source comment: Monthly payment for a fixed-rate loan. A result that does not fit, or a division by zero, gives status E and zero amounts instead of a bad number.
 
-Reads `INPUT.DAT` (text lines) and writes `OUTPUT.DAT` (text lines). Source format: free.
+The program reads `INPUT.DAT` (text lines), writes `OUTPUT.DAT` (text lines). Source format: free.
 
-## Input record (25 characters per record)
+## Input file INPUT.DAT: IN-REC (25 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | IN-LOAN-ID | 1-8 | text, 8 characters |
 | IN-PRINCIPAL | 9-17 | number, 7 integer digit(s), 2 decimal(s), unsigned |
 | IN-RATE | 18-22 | number, 1 integer digit(s), 4 decimal(s), unsigned |
 | IN-TERM | 23-25 | number, 3 integer digit(s), 0 decimal(s), unsigned |
 
-## Output record (29 characters per record)
+## Output file OUTPUT.DAT: OUT-REC (29 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | OUT-LOAN-ID | 1-8 | text, 8 characters |
 | OUT-PAYMENT | 9-17 | number, 7 integer digit(s), 2 decimal(s), unsigned |

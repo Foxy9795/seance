@@ -19,7 +19,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .recorder import ROOT, cobol_env, get_model
-from .verify import _modules, replay_fixtures
+from .verify import load_implementation, replay_sets
 
 MUTANT_TIMEOUT = 10  # seconds per planted bug; a bug that makes the program hang is caught when this runs out
 
@@ -29,11 +29,10 @@ root, tmp, program, name = sys.argv[1:5]
 sys.path[:0] = [root, tmp]
 import importlib
 from seance.recorder import get_model
-from seance.verify import _modules, replay_fixtures
-records = importlib.import_module(f"generated.{program}_records")
+from seance.verify import replay_sets
 impl = importlib.import_module(name)
-_, mism = replay_fixtures(program, records, impl, get_model(program).out_layout)
-print(len(mism))
+sets, _ = replay_sets(program, impl, get_model(program))
+print(sum(s["differing"] for s in sets))
 """
 
 _SWAP = {ast.Gt: ast.GtE, ast.GtE: ast.Gt, ast.Lt: ast.LtE, ast.LtE: ast.Lt, ast.Eq: ast.NotEq, ast.NotEq: ast.Eq}
@@ -111,7 +110,7 @@ def _rounding_cannot_matter(lam: ast.Lambda, target: str, items: dict) -> bool:
     spec = items.get(target)
     if not spec:
         return False
-    scale = spec[2]
+    scale = spec[6]  # [record, offset, size, kind, usage, digits, scale, ...]
     for n in ast.walk(lam.body):
         if isinstance(n, ast.BinOp) and not isinstance(n.op, (ast.Add, ast.Sub)):
             return False
@@ -120,7 +119,7 @@ def _rounding_cannot_matter(lam: ast.Lambda, target: str, items: dict) -> bool:
             arg = n.args[0].value if n.args and isinstance(n.args[0], ast.Constant) else None
             if name == "n" and isinstance(arg, str):
                 other = items.get(arg)
-                if not other or other[2] > scale:
+                if not other or other[6] > scale:
                     return False
             elif name in ("D", "Decimal") and isinstance(arg, str):
                 if "." in arg and len(arg.split(".")[1]) > scale:
@@ -228,9 +227,9 @@ def run_mutants(program: str, implementation: str | None = None, limit: int = 12
     src_lines = source.splitlines()
     tree = ast.parse(source)
     model = get_model(program, root)
-    records, base = _modules(program, implementation)
-    baseline, base_mismatches = replay_fixtures(program, records, base, model.out_layout, root)
-    if base_mismatches:
+    base = load_implementation(implementation)
+    baseline, base_diffs = replay_sets(program, base, model, root)
+    if base_diffs or any(s["differing"] for s in baseline):
         return {"error": "The Python does not match the COBOL yet. Make the check pass first, then measure test strength."}
 
     sites = _spread(find_sites(tree), limit)
@@ -258,7 +257,7 @@ def run_mutants(program: str, implementation: str | None = None, limit: int = 12
     return {
         "program": program,
         "implementation": implementation,
-        "records": sum(v["records"] for v in baseline.values()),
+        "records": sum(v["records"] for v in baseline),
         "total": len(results),
         "caught": caught,
         "mutants": [m.__dict__ for m in results],

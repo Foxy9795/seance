@@ -1,14 +1,18 @@
-"""A plausible first-draft migration of loan.cbl: floats, no SIZE ERROR handling."""
+"""A plausible first-draft port of loan.cbl, written by hand: floats and no SIZE ERROR handling."""
 
-from decimal import Decimal
-
-from generated.loan_records import InRecord, OutRecord
+from seance.rt import IO
 
 
-def transform(rec: InRecord) -> OutRecord:
-    p, n = float(rec.principal), int(rec.term)
-    r = float(rec.rate) / 12
-    payment = p / n if r == 0 else p * r / (1 - (1 + r) ** -n)
-    payment = round(payment, 2)
-    interest = payment * n - p
-    return OutRecord(loan_id=rec.loan_id, payment=Decimal(str(payment)), interest=Decimal(str(round(interest, 2))), status="K")
+def main(io: IO) -> IO:
+    out = []
+    for line in io.lines("INPUT.DAT"):
+        line = line.ljust(25)
+        loan_id = line[0:8]
+        p, r, n = float(line[8:17] or 0) / 100, float(line[17:22] or 0) / 10000 / 12, int(line[22:25] or 0)
+        payment = p / n if r == 0 else p * r / (1 - (1 + r) ** -n)
+        payment = round(payment, 2)
+        interest = round(payment * n - p, 2)
+        sign = "-" if interest < 0 else "+"
+        out.append(f"{loan_id}{int(payment * 100):09d}{sign}{int(abs(interest) * 100):010d}K")
+    io.write_lines("OUTPUT.DAT", out)
+    return io

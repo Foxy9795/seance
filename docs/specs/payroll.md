@@ -2,19 +2,19 @@
 
 Purpose, from the source comment: Weekly payroll: overtime at 1.5x past 40 hours, three tax brackets, flat benefits fee. Each money step is rounded when stored.
 
-Reads `INPUT.DAT` (text lines) and writes `OUTPUT.DAT` (text lines). Source format: free.
+The program reads `INPUT.DAT` (text lines), writes `OUTPUT.DAT` (text lines). Source format: free.
 
-## Input record (15 characters per record)
+## Input file INPUT.DAT: IN-REC (15 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | IN-EMP-ID | 1-6 | text, 6 characters |
 | IN-HOURS | 7-10 | number, 3 integer digit(s), 1 decimal(s), unsigned |
 | IN-RATE | 11-15 | number, 3 integer digit(s), 2 decimal(s), unsigned |
 
-## Output record (31 characters per record)
+## Output file OUTPUT.DAT: OUT-REC (31 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | OUT-EMP-ID | 1-6 | text, 6 characters |
 | OUT-GROSS | 7-14 | number, 6 integer digit(s), 2 decimal(s), unsigned |

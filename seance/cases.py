@@ -1,0 +1,479 @@
+"""Test cases for whole-program runs: generating them, running the COBOL and the Python on them, comparing.
+
+A case is everything one run of the program consumes: the bytes of each input file and the lines typed at
+the console. A result is everything it produces: each output file, everything DISPLAYed, the return code.
+Cases are saved per test set under fixtures/<program>/<set>/ together with the COBOL's result.
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import re
+import shutil
+import subprocess
+import tempfile
+from dataclasses import dataclass, field
+from decimal import Decimal
+from pathlib import Path
+
+from .codec import ENC, decode, encode, store_into
+from .layout import Item, Leaf, leaves
+from .model import ROOT, FileDef, ProgramModel
+
+FIXED_CLOCK = "2026/10/31 23:59:58.00"  # COB_CURRENT_DATE: the COBOL and the Python see the same date and time
+CONSOLE = "console"
+
+
+@dataclass
+class Case:
+    files: dict[str, bytes] = field(default_factory=dict)  # input file (ASSIGN name) -> bytes
+    stdin: list[str] = field(default_factory=list)
+    records: dict[str, list[bytes]] = field(default_factory=dict)  # the same input, as records (for shrinking)
+
+
+@dataclass
+class Result:
+    outputs: dict[str, bytes] = field(default_factory=dict)
+    stdout: str = ""
+    return_code: int = 0
+    error: str | None = None
+
+
+@dataclass
+class Diff:
+    stream: str  # output file name, or "console"
+    index: int  # record or line number, 0-based; -1 for the run as a whole
+    expected: str
+    actual: str
+    fields: list[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {"stream": self.stream, "index": self.index, "expected": self.expected, "actual": self.actual, "fields": self.fields}
+
+
+def spec_of(it: Item) -> tuple:
+    return (it.kind, it.usage, it.digits, it.scale, it.signed, it.sign, it.pic, it.size, it.justified, it.blank_zero)
+
+
+# ---------------------------------------------------------------- running
+
+def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> Result:
+    from .recorder import LegacyRuntimeError, cobol_env
+
+    with tempfile.TemporaryDirectory(prefix="seance_") as tmp:
+        work = Path(tmp)
+        env = cobol_env()
+        env["COB_CURRENT_DATE"] = FIXED_CLOCK
+        env["TZ"] = "UTC0"
+        paths = {}
+        for f in model.files:
+            target = work / f.assign
+            paths[f.assign] = target
+            if not f.literal:
+                env[f"DD_{f.assign}"] = str(target)
+                env[f"dd_{f.assign}"] = str(target)
+            if f.is_input:
+                target.write_bytes(case.files.get(f.assign, b""))
+        stdin = "".join(line + "\n" for line in case.stdin).encode(ENC, errors="replace")
+        try:
+            proc = subprocess.run([str(exe)], cwd=work, input=stdin, capture_output=True, env=env, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise LegacyRuntimeError(
+                f"The COBOL program did not finish within {timeout} seconds. A loop probably never ends, or it waits for more console input."
+            ) from None
+        outputs = {f.assign: paths[f.assign].read_bytes() for f in model.files if f.is_output and paths[f.assign].exists()}
+        err = proc.stderr.decode(ENC, errors="replace")
+        error = None
+        m = re.search(r"libcob: (?:error|.*?error): (.*)", err)
+        if m and proc.returncode != 0:
+            error = m.group(1).strip()
+        return Result(outputs, proc.stdout.decode(ENC, errors="replace").replace("\r\n", "\n"), proc.returncode, error)
+
+
+def run_python(module, case: Case) -> Result:
+    from .rt import IO
+
+    io = IO(dict(case.files), list(case.stdin))
+    main = getattr(module, "main", None)
+    if main is None:
+        return Result(error="the Python module has no main(io) function")
+    try:
+        out = main(io)
+        io = out if out is not None else io
+        return Result(dict(io.outputs), io.stdout.replace("\r\n", "\n"), int(io.return_code or 0))
+    except Exception as exc:  # the program's own failure is a result, not a crash of the checker
+        return Result(dict(io.outputs), io.stdout.replace("\r\n", "\n"), int(getattr(io, "return_code", 0) or 0), f"{type(exc).__name__}: {exc}")
+
+
+# ---------------------------------------------------------------- comparing
+
+def _units(f: FileDef | None, data: bytes) -> list[bytes]:
+    """Split an output stream into records or lines."""
+    if f is not None and f.organization != "line" and (b"\n" in data or b"\f" in data):
+        return _record_units(f, data)
+    if f is None or f.organization == "line":
+        text = data.replace(b"\r\n", b"\n")
+        rows = re.split(rb"\n", text)
+        if rows and rows[-1] == b"":
+            rows.pop()
+        return rows
+    size = f.size or len(data) or 1
+    return [data[i:i + size] for i in range(0, len(data), size)]
+
+
+def _record_units(f: FileDef, data: bytes) -> list[bytes]:
+    """Records of a fixed-length file. WRITE ... ADVANCING puts line and page breaks between records in such a file
+    (GnuCOBOL writes a bare \\n or \\f), so split at those first, then into records."""
+    if b"\n" not in data and b"\f" not in data:
+        return _units(f, data)
+    size = f.size or 1
+    out = []
+    for piece in re.split(rb"[\n\f]", data):
+        out += [piece[i:i + size] for i in range(0, len(piece), size)] or [b""]
+    while out and out[-1] == b"":
+        out.pop()
+    return out
+
+
+def show(data: bytes) -> str:
+    return "".join(ch if 32 <= ord(ch) < 127 or 160 <= ord(ch) < 256 else "·" for ch in data.decode(ENC))
+
+
+def decode_fields(f: FileDef, unit: bytes) -> list[tuple[str, str]]:
+    rec = f.record
+    if rec is None:
+        return []
+    data = unit.ljust(rec.size, b" ")
+    out = []
+    for lf in leaves(rec):
+        raw = data[lf.offset:lf.offset + lf.width]
+        it = lf.item
+        if it.kind == "num":
+            v = decode(spec_of(it), raw)
+            out.append((lf.name, format(v, "f")))
+        else:
+            out.append((lf.name, show(raw)))
+    return out
+
+
+def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 50) -> tuple[list[Diff], int]:
+    """Differences between two results, and the number of output records/lines compared."""
+    diffs: list[Diff] = []
+    units = 0
+    if (expected.error is None) != (actual.error is None):
+        diffs.append(Diff("run", -1, expected.error or "finished normally", actual.error or "finished normally"))
+    elif expected.return_code != actual.return_code and expected.error is None:
+        diffs.append(Diff("run", -1, f"return code {expected.return_code}", f"return code {actual.return_code}"))
+    streams = sorted(set(expected.outputs) | set(actual.outputs))
+    for name in streams + [CONSOLE]:
+        f = next((x for x in model.files if x.assign == name), None)
+        if name == CONSOLE:
+            e_units, a_units = _units(None, expected.stdout.encode(ENC, errors="replace")), _units(None, actual.stdout.encode(ENC, errors="replace"))
+        else:
+            if name not in expected.outputs or name not in actual.outputs:
+                diffs.append(Diff(name, -1, "written" if name in expected.outputs else "not written", "written" if name in actual.outputs else "not written"))
+                continue
+            e_units, a_units = _units(f, expected.outputs[name]), _units(f, actual.outputs[name])
+        units += max(len(e_units), len(a_units))
+        for i in range(max(len(e_units), len(a_units))):
+            e = e_units[i] if i < len(e_units) else None
+            a = a_units[i] if i < len(a_units) else None
+            if e == a:
+                continue
+            d = Diff(name, i, show(e) if e is not None else "(no line)", show(a) if a is not None else "(no line)")
+            if f is not None and e is not None and a is not None and f.record is not None and f.organization != "line" or (
+                    f is not None and f.organization == "line" and e is not None and a is not None):
+                ef, af = decode_fields(f, e), decode_fields(f, a)
+                d.fields = [{"name": n, "expected": ev, "actual": av, "same": ev == av} for (n, ev), (_, av) in zip(ef, af)]
+            diffs.append(d)
+    return diffs, units
+
+
+def count_differing(diffs: list[Diff]) -> int:
+    return len(diffs)
+
+
+# ---------------------------------------------------------------- generating
+
+def _edge_values(it: Item) -> list:
+    if it.kind == "alpha":
+        return [" " * it.size, "A" * min(it.size, 4), "Z" * it.size]
+    if it.kind == "edited":
+        return [Decimal(0), Decimal(1)]
+    unit = Decimal(1).scaleb(-it.scale)
+    top = it.max_value
+    vals = [Decimal(0), unit, top, top - unit, Decimal(10) ** (it.digits - it.scale - 1) if it.digits > it.scale else unit]
+    if it.signed:
+        vals += [-unit, -top]
+    return sorted(set(vals))
+
+
+def _random_value(it: Item, rng: random.Random, n: int):
+    if it.kind == "alpha":
+        return (rng.choice("ABCDEFGHJKLMNPRSTW") + f"{n:04d}" + rng.choice(["", " X", "YZ"]))[: it.size]
+    digits = it.digits if it.kind == "num" else 5
+    scale = it.scale if it.kind == "num" else 2
+    use = min(rng.choice([2, 3, 4, digits]) if rng.random() < 0.8 else digits, digits)
+    raw = rng.randrange(0, 10**max(use, 1))
+    if it.kind == "num" and it.signed and rng.random() < 0.3:
+        raw = -raw
+    return Decimal(raw).scaleb(-scale)
+
+
+def encode_record(rec: Item, values: dict[int, object]) -> bytes:
+    """Bytes of one record. values: leaf position -> value; unset text is spaces, unset numbers zero."""
+    buf = bytearray(b" " * rec.size)
+    for i, lf in enumerate(leaves(rec)):
+        it = lf.item
+        if lf.name == "FILLER":
+            continue
+        v = values.get(i)
+        sp = spec_of(it)
+        if v is None:
+            v = Decimal(0) if it.kind in ("num", "edited") else ""
+        if it.kind == "num":
+            v = store_into(sp, Decimal(v), move=True)
+        buf[lf.offset:lf.offset + lf.width] = encode(sp, v)
+    return bytes(buf)
+
+
+def pack_file(f: FileDef, records: list[bytes]) -> bytes:
+    if f.organization == "line":
+        return b"".join(r.rstrip(b" ").replace(b"\n", b" ").replace(b"\r", b" ") + b"\n" for r in records)
+    size = f.size
+    return b"".join(r.ljust(size, b" ")[:size] for r in records)
+
+
+def file_records(f: FileDef, rows: list[dict[int, object]]) -> list[bytes]:
+    return [encode_record(f.record, r) for r in rows]
+
+
+def edge_rows(rec: Item, hints: dict[str, list]) -> list[dict[int, object]]:
+    lv = leaves(rec)
+    base0 = {}
+    base1 = {}
+    for i, lf in enumerate(lv):
+        it = lf.item
+        if it.kind == "alpha":
+            base0[i] = base1[i] = "A" * min(it.size, 4)
+        else:
+            base0[i] = Decimal(0)
+            base1[i] = Decimal(1).scaleb(-it.scale) if it.kind == "num" else Decimal(1)
+    rows = [dict(base0), dict(base1)]
+    for i, lf in enumerate(lv):
+        if lf.name == "FILLER":
+            continue
+        for v in _edge_values(lf.item):
+            for base in (base0, base1):
+                r = dict(base)
+                r[i] = v
+                rows.append(r)
+        for v in hints.get(lf.item.name, []):
+            r = dict(base1)
+            r[i] = v
+            rows.append(r)
+    top = {i: ("Z" * lf.item.size if lf.item.kind == "alpha" else (lf.item.max_value if lf.item.kind == "num" else Decimal(9))) for i, lf in enumerate(lv)}
+    rows.append(top)
+    out, seen = [], set()
+    for r in rows:
+        k = tuple(sorted((i, str(v)) for i, v in r.items()))
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+    return out
+
+
+def random_rows(rec: Item, count: int, rng: random.Random, hints: dict[str, list]) -> list[dict[int, object]]:
+    lv = leaves(rec)
+    rows = []
+    for n in range(count):
+        r = {}
+        for i, lf in enumerate(lv):
+            if lf.name == "FILLER":
+                continue
+            h = hints.get(lf.item.name)
+            r[i] = rng.choice(h) if h and rng.random() < 0.5 else _random_value(lf.item, rng, n)
+        rows.append(r)
+    return rows
+
+
+def console_lines(model: ProgramModel, hints: dict[str, list], rng: random.Random | None, rounds: int = 3) -> list[str]:
+    """Console input for programs that ACCEPT: values for each ACCEPT target, then the values the code tests for."""
+    if not model.accepts:
+        return []
+    from .translate import build_names
+
+    names, _ = build_names(model)
+
+    def text(v) -> str:
+        return format(v, "f") if isinstance(v, Decimal) else str(v)
+
+    lines = []
+    for k in range(rounds):
+        for name in model.accepts:
+            it = names.by_name.get(name, [None])[0]
+            if it is None or it.kind != "num":
+                lines.append(("A" if rng is None else rng.choice("ABCXYZ")) * min(it.size if it else 4, 5))
+            else:
+                v = Decimal(k + 1) if rng is None else Decimal(rng.randrange(0, 10 ** min(it.digits - it.scale, 4)))
+                lines.append(text(v))
+    # Then rounds that use the values the code tests for (such as 'NO' or 9 to quit), so input loops can end.
+    most = max((len(hints.get(n, [])) for n in model.accepts), default=0)
+    for j in range(most):
+        for name in model.accepts:
+            h = hints.get(name, [])
+            lines.append(text(h[j % len(h)]) if h else lines[model.accepts.index(name)] if lines else "")
+    return lines
+
+
+def build_case(model: ProgramModel, rows_by_file: dict[str, list[dict[int, object]]], stdin: list[str]) -> Case:
+    case = Case(stdin=list(stdin))
+    for f in model.inputs:
+        if f.record is None:
+            continue
+        recs = file_records(f, rows_by_file.get(f.name, []))
+        case.records[f.assign] = recs
+        case.files[f.assign] = pack_file(f, recs)
+    return case
+
+
+def generated_cases(model: ProgramModel, random_count: int = 300, seed: int = 1031) -> dict[str, Case]:
+    from .hints import value_hints
+
+    hints = value_hints(model)
+    rng = random.Random(seed)
+    edges = {f.name: edge_rows(f.record, hints) for f in model.inputs if f.record is not None}
+    rand = {f.name: random_rows(f.record, random_count, rng, hints) for f in model.inputs if f.record is not None}
+    sets = {"edges": build_case(model, edges, console_lines(model, hints, None))}
+    if model.inputs or model.accepts:
+        sets["random"] = build_case(model, rand, console_lines(model, hints, rng))
+    return sets
+
+
+# ---------------------------------------------------------------- saving
+
+def set_dir(program: str, name: str, root: Path = ROOT) -> Path:
+    return root / "fixtures" / program / name
+
+
+def save_set(program: str, name: str, case: Case, result: Result, label: str, root: Path = ROOT) -> None:
+    d = set_dir(program, name, root)
+    if d.exists():
+        shutil.rmtree(d)
+    d.mkdir(parents=True)
+    meta = {"label": label, "stdin": case.stdin, "inputs": {}, "outputs": {}, "return_code": result.return_code, "error": result.error,
+            "records": sum(len(v) for v in case.records.values()) if case.records else 0, "console_lines": len(case.stdin)}
+    for i, (assign, data) in enumerate(sorted(case.files.items())):
+        fn = f"in{i}.dat"
+        (d / fn).write_bytes(data)
+        meta["inputs"][assign] = fn
+    for i, (assign, data) in enumerate(sorted(result.outputs.items())):
+        fn = f"out{i}.dat"
+        (d / fn).write_bytes(data)
+        meta["outputs"][assign] = fn
+    (d / "console.txt").write_text(result.stdout, encoding="utf-8")
+    (d / "set.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
+def load_set(program: str, name: str, root: Path = ROOT) -> tuple[Case, Result, dict]:
+    d = set_dir(program, name, root)
+    meta = json.loads((d / "set.json").read_text(encoding="utf-8"))
+    case = Case({a: (d / fn).read_bytes() for a, fn in meta["inputs"].items()}, meta["stdin"])
+    result = Result({a: (d / fn).read_bytes() for a, fn in meta["outputs"].items()}, (d / "console.txt").read_text(encoding="utf-8"),
+                    meta["return_code"], meta.get("error"))
+    return case, result, meta
+
+
+def set_names(program: str, root: Path = ROOT) -> list[str]:
+    base = root / "fixtures" / program
+    if not base.exists():
+        return []
+    order = {"edges": 0, "random": 1}
+    names = [p.name for p in base.iterdir() if (p / "set.json").exists()]
+    return sorted(names, key=lambda n: (order.get(n, 2), n))
+
+
+DEFAULT_LABELS = {
+    "edges": "Edge Cases (zero, smallest and largest values, plus values the code tests for)",
+    "random": "Random Records",
+}
+
+
+def record_sets(program: str, root: Path = ROOT) -> dict[str, int]:
+    """Generate the standard test sets, run the real COBOL on each, and save case + result."""
+    from .config import RANDOM_RECORDS, RUN_TIMEOUT
+    from .recorder import compile_legacy, get_model
+
+    model = get_model(program, root)
+    exe = compile_legacy(program, root)
+    base = root / "fixtures" / program
+    if base.exists():
+        for p in base.iterdir():  # keep uploaded data; regenerate the rest
+            if p.is_dir() and not p.name.startswith("yours-"):
+                shutil.rmtree(p)
+            elif p.is_file():
+                p.unlink()
+    counts = {}
+    for name, case in generated_cases(model, RANDOM_RECORDS).items():
+        result = run_cobol(exe, model, case, RUN_TIMEOUT)
+        save_set(program, name, case, result, DEFAULT_LABELS.get(name, name), root)
+        counts[name] = sum(len(v) for v in case.records.values()) or 1
+    for name in set_names(program, root):  # uploaded data: refresh the COBOL's answers too
+        if name.startswith("yours-"):
+            case, _, meta = load_set(program, name, root)
+            save_set(program, name, case, run_cobol(exe, model, case), meta["label"], root)
+    return counts
+
+
+def add_uploaded(program: str, filename: str, data: bytes, target_file: str | None, stdin: list[str] | None = None, root: Path = ROOT) -> dict:
+    """Save uploaded input data as a test set, with the real COBOL's answers for it."""
+    from .config import MAX_DATA_RECORDS
+    from .recorder import compile_legacy, get_model
+
+    model = get_model(program, root)
+    inputs = model.inputs
+    if not inputs and not model.accepts:
+        raise ValueError("This program reads no input files and no console input, so there is nothing to upload.")
+    if inputs:
+        f = next((x for x in inputs if x.assign == target_file or x.name == target_file), inputs[0] if len(inputs) == 1 or target_file is None else None)
+        if f is None:
+            raise ValueError(f"Unknown input file {target_file}.")
+        n = len(_units(f if f.organization != "line" else None, data)) if data else 0
+        if f.organization == "sequential" and data and len(data) % max(f.size, 1):
+            raise ValueError(f"The file is {len(data)} bytes, which is not a whole number of {f.size}-byte records for {f.assign}.")
+        if n > MAX_DATA_RECORDS:
+            raise ValueError(f"The file has {n} records. The limit is {MAX_DATA_RECORDS}; split it into smaller files.")
+        case = Case({f.assign: data}, list(stdin or []))
+        case.records = {f.assign: _units(f if f.organization != "line" else None, data)}
+    else:
+        case = Case({}, list(stdin) if stdin is not None else data.decode(ENC).splitlines())
+        n = len(case.stdin)
+    from .config import RUN_TIMEOUT
+
+    result = run_cobol(compile_legacy(program, root), model, case, RUN_TIMEOUT)
+    stem = re.sub(r"[^a-z0-9]+", "-", Path(filename or "data").stem.lower()).strip("-")[:30] or "data"
+    name, k = f"yours-{stem}", 2
+    while set_dir(program, name, root).exists():
+        name, k = f"yours-{stem}-{k}", k + 1
+    label = f"Your Data: {Path(filename).name or 'uploaded file'}"
+    save_set(program, name, case, result, label, root)
+    return {"set": name, "records": n, "label": label}
+
+
+def remove_uploaded(program: str, name: str, root: Path = ROOT) -> None:
+    if not re.fullmatch(r"yours-[a-z0-9-]{1,40}", name):
+        raise ValueError("Only test data you uploaded can be removed.")
+    d = set_dir(program, name, root)
+    if d.exists():
+        shutil.rmtree(d)
+
+
+def describe_sets(program: str, root: Path = ROOT) -> list[dict]:
+    out = []
+    for name in set_names(program, root):
+        _, result, meta = load_set(program, name, root)
+        out.append({"set": name, "label": meta["label"], "records": meta.get("records", 0), "console_lines": meta.get("console_lines", 0),
+                    "removable": name.startswith("yours-"),
+                    "cobol_error": meta.get("error")})
+    return out

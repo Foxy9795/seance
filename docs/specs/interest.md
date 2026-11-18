@@ -2,20 +2,20 @@
 
 Purpose, from the source comment: Nightly interest posting. Overdrawn accounts earn nothing and pay a fee.
 
-Reads `INPUT.DAT` (text lines) and writes `OUTPUT.DAT` (text lines). Source format: free.
+The program reads `INPUT.DAT` (text lines), writes `OUTPUT.DAT` (text lines). Source format: free.
 
-## Input record (28 characters per record)
+## Input file INPUT.DAT: IN-REC (28 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | IN-ACCT-ID | 1-8 | text, 8 characters |
 | IN-BALANCE | 9-20 | number, 9 integer digit(s), 2 decimal(s), separate +/- character first |
 | IN-RATE | 21-25 | number, 1 integer digit(s), 4 decimal(s), unsigned |
 | IN-DAYS | 26-28 | number, 3 integer digit(s), 0 decimal(s), unsigned |
 
-## Output record (33 characters per record)
+## Output file OUTPUT.DAT: OUT-REC (33 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | OUT-ACCT-ID | 1-8 | text, 8 characters |
 | OUT-INTEREST | 9-20 | number, 9 integer digit(s), 2 decimal(s), separate +/- character first |

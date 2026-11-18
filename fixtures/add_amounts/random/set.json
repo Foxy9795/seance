@@ -1,0 +1,31 @@
+{
+  "label": "Random Records",
+  "stdin": [
+    "ZZZZZ",
+    "9346",
+    "9027",
+    "647",
+    "AAA",
+    "CCCCC",
+    "5221",
+    "754",
+    "6111",
+    "ZZZ",
+    "CCCCC",
+    "7608",
+    "6501",
+    "7458",
+    "CCC",
+    "ZZZZZ",
+    "9346",
+    "9027",
+    "647",
+    "NO "
+  ],
+  "inputs": {},
+  "outputs": {},
+  "return_code": 0,
+  "error": null,
+  "records": 0,
+  "console_lines": 20
+}

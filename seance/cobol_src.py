@@ -59,6 +59,37 @@ def normalize(text: str, fixed: bool | None = None) -> list[Line]:
     return out
 
 
+_PROGRAM_ID = re.compile(r"^(?P<head>\s*PROGRAM-ID\.?\s+['\"]?[A-Za-z0-9-]+['\"]?)(?P<tail>\s*)$", re.I)
+
+
+def source_fixes(text: str, fixed: bool) -> tuple[str, list[str]]:
+    """Dialect fixes GnuCOBOL needs to compile IBM Enterprise COBOL that IBM accepts as written.
+
+    Only changes that cannot alter behavior are made, line numbers never move, and each one is reported.
+    Today: a PROGRAM-ID name without its closing period (IBM allows it, GnuCOBOL stops with a syntax error).
+    """
+    notes: list[str] = []
+    out = []
+    for no, raw in enumerate(text.splitlines(keepends=True), start=1):
+        end = raw[len(raw.rstrip("\r\n")):]
+        line = raw[: len(raw) - len(end)]
+        exp = line.expandtabs(8)
+        if fixed and len(exp) > 7 and exp[6] == " ":
+            body = exp[7:72]
+            m = _PROGRAM_ID.match(body)
+            if m and len(exp[:7] + m.group("head")) < 72:
+                code = m.group("head") + "."
+                line = exp[:7] + (code.ljust(65) + exp[72:] if len(exp) > 72 else code)
+                notes.append(f"line {no}: added the period after the PROGRAM-ID name, which IBM COBOL lets you leave out.")
+        elif not fixed:
+            m = _PROGRAM_ID.match(exp)
+            if m:
+                line = m.group("head") + "."
+                notes.append(f"line {no}: added the period after the PROGRAM-ID name, which IBM COBOL lets you leave out.")
+        out.append(line + end)
+    return "".join(out), notes
+
+
 def _strip_inline_comment(line: str) -> str:
     quote = ""
     for i, ch in enumerate(line):

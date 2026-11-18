@@ -29,22 +29,21 @@ python -m venv .venv
 .\scripts\run.ps1        # starts the app and opens http://127.0.0.1:8000
 ```
 
-Any `cobc` already on PATH also works. Start with **Watch a Wrong Rewrite Get Caught**, then
-**Add My COBOL** and **Use the Example**.
+Any `cobc` already on PATH also works. Start with **See A Bug Being Caught** on the home page, then
+**Add Your COBOL** and **Load An Example Program**.
 
 ## The App
 
+Pick a program on the left. Each one has four tabs:
+
 | Tab | What it does |
 | --- | --- |
-| **Check** | Runs the COBOL and the Python on every saved test set and on new random records. Shows "Spirit Matched" or "Spirit Restless" and the smallest failing input, split by field with the wrong characters lit up. |
-| **Test Strength** | Plants one bug at a time (`>` to `>=`, ROUNDED dropped, a constant changed, `+` to `-`) and replays the saved records. Shows how many were caught and the COBOL line of every survivor. |
-| **Try a Record** | Type records and see the COBOL and Python answers side by side. Every failing case has a "Try This Record" button. |
-| **Code** | COBOL on the left, Python on the right. Save, Save and Check, Redraft From COBOL (the old file is kept as `.bak`), Download. |
-| **COBOL Explained** | A plain-English, line-numbered reading of the program, including every place a number is rounded or cut off. |
-| **Test Data** | The saved record sets. Drop a real input file, in text lines or fixed-length records, and every check replays it with the COBOL's answers. |
-| **Export** | The standalone program (.zip), the Python file, and the check report. |
+| **Overview** | What the program does, every file it reads and writes with its record layout, and a plain-English, line-numbered description. |
+| **Code Side By Side** | COBOL on the left, Python on the right. Click a Python line to see its COBOL line. Your own programs can be edited, saved and translated again. |
+| **Prove It** | Runs the check: "Spirit Matched" or "Spirit Restless", a receipt with hashes of both files, the smallest failing input, and field-by-field differences. Also Test Strength (planted bugs) and Test Data (upload real files). |
+| **Try Your Input** | Type records or console input, or replay a saved set, and see both programs' output side by side. |
 
-The progress strip above the tabs shows where each program stands: Python, Check, Test Strength, Export.
+**Download** gives the Python file, a standalone package that runs without Séance or COBOL, and the check report.
 
 ## What COBOL It Reads
 
@@ -52,38 +51,48 @@ The same lists are served by `/api/about` and shown in the app, from one place i
 
 **Works today:**
 
-- Fixed-format (columns 8-72, sequence numbers, `-` continuation) and free-format source, detected automatically
-- One input file and one output file with any names, including DD names such as `ACCTREC`
-- Fixed-length records (no line breaks) and `LINE SEQUENTIAL` text files
-- Records in the FD or in copybooks via `COPY`
-- Groups, `FILLER`, `VALUE`, and level-88 condition names
-- Text, numbers, decimals, and every sign style: trailing or leading overpunch, trailing or leading separate. Checked against GnuCOBOL, including negative zero.
-- Edited pictures such as `$$,$$9.99-`, `ZZ9.99CR`, `-(5)9.99`, `***,**9.99`. Checked against GnuCOBOL for values that fit.
-- `COMP` and `COMP-3` in WORKING-STORAGE
-- Translated statements: `MOVE`, `COMPUTE`, `ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, `IF`, `EVALUATE` (`TRUE` or a subject, `THRU`, `OTHER`), `PERFORM` (paragraphs, `THRU`, `UNTIL`, `VARYING`, `TIMES`, `WITH TEST AFTER`), `INITIALIZE`, `SET ... TO TRUE`, `ON SIZE ERROR`, and priming-read or read-inside-the-loop structures
+- Fixed-format and free-format source, including IBM-style programs (a missing period after PROGRAM-ID is fixed and reported)
+- Any number of sequential input and output files, with DD names such as `ACCTREC`
+- Console programs: `DISPLAY`, and `ACCEPT` for typed input
+- Fixed-length records, `LINE SEQUENTIAL` text files, and printed reports written with `ADVANCING`
+- Records in the FD, WORKING-STORAGE or copybooks (`COPY`, `COPY REPLACING`)
+- Packed decimal (`COMP-3`), binary (`COMP`, `COMP-5`) and display numbers anywhere, every sign style
+- `OCCURS` tables (`DEPENDING ON`, `INDEXED BY`), `REDEFINES`, groups, `FILLER`, `VALUE`, level-88 conditions
+- Edited pictures such as `$$,$$9.99-`, `ZZ9.99CR`, `***,**9.99`
+- `MOVE`, `COMPUTE`, `ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, `IF`, `EVALUATE`, `PERFORM` in every form, `GO TO`,
+  `ON SIZE ERROR`, `STRING`, `UNSTRING`, `INSPECT`, `SEARCH`, `SEARCH ALL`, `SET`, `INITIALIZE`, reference modification,
+  and intrinsic `FUNCTION`s such as `CURRENT-DATE`, `UPPER-CASE`, `TRIM`, `NUMVAL`
 
-**Not yet.** The app says so clearly, naming the field or line:
+**Not yet:** indexed or relative files, `SORT`/`MERGE`, `EXEC SQL` and CICS, `CALL`, REPORT and SCREEN sections,
+`COMP-1`/`COMP-2` and `P` scaling. A program that uses them is still accepted if it compiles; the statements the
+translator cannot handle raise an error naming the COBOL line, so the check fails there instead of passing quietly.
 
-- `COMP` or `COMP-3` fields inside the record files
-- `OCCURS` tables and `REDEFINES`
-- Indexed or relative files, or more than one input or output file
-- Programs that skip records or add header and total lines (one output record per input record is required)
-- `GO TO`, `STRING`, `UNSTRING`, `INSPECT`, `CALL`, intrinsic `FUNCTION`s: the draft marks them for a person
-- Edited-picture display when a value is too big for the picture (GnuCOBOL is inconsistent there, so Séance reports a difference instead of guessing)
+**Real-world test:** the 30 programs of the Open Mainframe Project COBOL course
+(github.com/openmainframeproject/cobol-programming-course). 20 of the 21 that GnuCOBOL can run translate with
+no gaps and match the COBOL byte for byte; the other one calls a second program (`CALL`). The other 9 are lab
+exercises with deliberate compile errors or an endless loop, or need DB2. Three of them ship as examples.
 
 ## How the Checking Works
 
-- **Saved test sets:** Edge cases come from the record layout: zero, the smallest and largest values, and negative zero. They also come from the code: level-88 values on input fields, and every literal an input field (or a field it is moved into) is compared against, plus the values just either side of it. Random records come next, then any files you upload.
-- **New random records each check:** Hypothesis generates them from the layout using the same code-derived values, and they run against the live COBOL binary. The first failure is made as simple as possible with a fixed budget of COBOL runs.
-- **Test strength:** Bugs that provably cannot change anything are skipped, such as adding ROUNDED to whole-number arithmetic. Each planted bug runs in its own process with a time limit, so a bug that makes a loop endless is caught, not hung on.
-- **Fresh code every time:** checks run in a separate process with a timeout (`SEANCE_VERIFY_TIMEOUT`), so edits are always picked up.
+- **Byte-accurate runtime:** the Python keeps every 01 record as bytes laid out the way GnuCOBOL lays them out, so
+  packed decimal, binary, REDEFINES, tables and group moves behave the same. The encodings are differential-tested
+  against GnuCOBOL.
+- **A test case is a whole run:** the bytes of every input file plus the console input. Both programs run on it with
+  the same fixed clock, and every output file, everything displayed, and the return code are compared.
+- **Saved test sets:** edge cases from the layout (zero, smallest and largest values) and from the code (level-88
+  values and every literal a field is compared against), random records, and any files you upload.
+- **Random runs each check:** Hypothesis generates fresh input files and console input; the first failure is shrunk
+  (fewer records, plainer values) within a fixed budget of COBOL runs.
+- **Test strength:** planted bugs run in their own process with a time limit, so a bug that loops forever is caught.
+- **Receipt:** each report records SHA-256 hashes of the COBOL and the Python, and the app says when either changed
+  after the check.
 
 ## Settings
 
 All in `seance/config.py`, read from the environment:
 
 `SEANCE_ROUNDS`, `SEANCE_MAX_ROUNDS`, `SEANCE_VERIFY_TIMEOUT`, `SEANCE_COMPARE_TIMEOUT`, `SEANCE_MUTANTS`,
-`SEANCE_MAX_DATA_RECORDS`, `SEANCE_RANDOM_RECORDS`.
+`SEANCE_MAX_DATA_RECORDS`, `SEANCE_RANDOM_RECORDS`, `SEANCE_RUN_TIMEOUT`.
 
 ## Security Model
 
@@ -96,7 +105,7 @@ Séance compiles and runs code you give it, so treat it like a local dev server.
 
 ## Kiro Integration
 
-- **MCP server** (`seance/mcp_server.py`, registered in `.kiro/settings/mcp.json`) with these tools: `list_programs`, `describe_program`, `describe_layout`, `run_legacy_program`, `generate_records`, `record_legacy_fixtures`, `draft_python`, `verify_migration`, `measure_test_strength`.
+- **MCP server** (`seance/mcp_server.py`, registered in `.kiro/settings/mcp.json`) with these tools: `list_programs`, `describe_program`, `describe_layout`, `run_legacy_program` (input files and console input), `record_legacy_fixtures`, `draft_python`, `verify_migration`, `measure_test_strength`.
 - **Steering** (`.kiro/steering/`): product rules and COBOL-to-Python rules.
 - **Hook** (`.kiro/hooks/`): re-verifies when a file in `migrated/` is saved.
 - **Spec** (`.kiro/specs/seance/`): requirements.
@@ -112,25 +121,30 @@ python -m seance translate accounts       # write the Python draft
 python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 76 tests, including differential tests against GnuCOBOL
-python scripts\ui_check.py                # 24 checks that drive the real UI in Edge (app must be running)
+python -m pytest                          # 53 tests, including differential tests against GnuCOBOL
+python scripts\ui_check.py                # 16 checks that drive the real UI in Edge (app must be running)
 ```
 
 ## Example Programs
 
 | Program | What it exercises |
 | --- | --- |
-| accounts | Mainframe style: fixed format, DD names, a copybook, a priming read, level-88 account types, compound interest in `PERFORM VARYING`, a tiered fee in `EVALUATE`, `ON SIZE ERROR`, a `COMP-3` work field and an edited output field. |
-| payroll | Per-step ROUNDED (half away from zero) against float `round()`. Ships with a naive float draft that fails. |
-| loan | `ON SIZE ERROR` on a payment that does not fit or a zero term, and exponentiation. Ships with a naive draft. |
+| accounts | Fixed format, DD names, a copybook, level-88 account types, `PERFORM VARYING`, `EVALUATE`, `ON SIZE ERROR`, an edited output field. |
+| payroll | Per-step ROUNDED (half away from zero). Ships with a buggy hand-written float port that the check catches. |
+| loan | `ON SIZE ERROR` on a payment that does not fit or a zero term, and exponentiation. Ships with a buggy port. |
 | interest | Overdraft fee overflow flips -999,999,999.99 to -24.99. |
 | inventory | Stock above 99,999 wraps, and shortfall backorders truncate to 5 digits. |
+| account_report | Real course program CBL0011: a report with headers and totals over packed-decimal (`COMP-3`) records. |
+| add_amounts | Real course program ADDAMT: an interactive console loop that runs until you answer NO. |
+| table_search | Real course program SRCHBIN: an `OCCURS` table loaded from a file and searched with `SEARCH ALL`. |
+
+The three course programs are CC-BY-4.0, unchanged; see `SOURCE.md` next to each.
 
 ## Limits
 
 - Windows-first. The COBOL runtime is the MinGW build of GnuCOBOL 3.1.2.
 - A pass is strong evidence, not a proof for every possible input. Test Strength shows where the evidence is thin.
 - The translator and the description are rule-based, not an LLM. They never guess: what they cannot read is marked.
-- Packed-decimal record files (`COMP-3` inside the record) are the main thing to add next.
+- `CALL` between programs and indexed files are the main things to add next.
 
 License: MIT.

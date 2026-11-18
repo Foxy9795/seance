@@ -2,11 +2,11 @@
 
 Purpose, from the source comment: Daily stock update. Shortfalls become backorders and stock floors at zero.
 
-Reads `INPUT.DAT` (text lines) and writes `OUTPUT.DAT` (text lines). Source format: free.
+The program reads `INPUT.DAT` (text lines), writes `OUTPUT.DAT` (text lines). Source format: free.
 
-## Input record (29 characters per record)
+## Input file INPUT.DAT: IN-REC (29 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | IN-SKU | 1-8 | text, 8 characters |
 | IN-ON-HAND | 9-14 | number, 5 integer digit(s), 0 decimal(s), separate +/- character first |
@@ -14,9 +14,9 @@ Reads `INPUT.DAT` (text lines) and writes `OUTPUT.DAT` (text lines). Source form
 | IN-SHIPPED | 20-24 | number, 5 integer digit(s), 0 decimal(s), unsigned |
 | IN-REORDER | 25-29 | number, 5 integer digit(s), 0 decimal(s), unsigned |
 
-## Output record (19 characters per record)
+## Output file OUTPUT.DAT: OUT-REC (19 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | OUT-SKU | 1-8 | text, 8 characters |
 | OUT-NEW-ON-HAND | 9-13 | number, 5 integer digit(s), 0 decimal(s), unsigned |

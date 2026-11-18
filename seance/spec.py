@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .cobol_src import Line, normalize
-from .copybook import Layout
+from .layout import Item, leaves, walk
 from .model import ModelError, ProgramModel, load_model
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -42,18 +42,11 @@ class Spec:
 
 def _symbols(lines: list[Line], model: ProgramModel) -> dict[str, Capacity]:
     table: dict[str, Capacity] = {}
-    for layout in (model.in_layout, model.out_layout):
-        for f in layout.fields:
-            if f.kind == "numeric":
-                table[f.name] = Capacity(f.digits, f.scale, f.signed)
-    for line in lines:
-        m = _PIC.match(line.text)
-        if not m or line.comment:
-            continue
-        pic = re.sub(r"([9SV])\((\d+)\)", lambda x: x.group(1) * int(x.group(2)), m.group(3).rstrip(".").upper())
-        nm = re.fullmatch(r"(S?)(9+)(?:V(9+))?", pic)
-        if nm:
-            table[m.group(2).upper()] = Capacity(len(nm.group(2)) + len(nm.group(3) or ""), len(nm.group(3) or ""), bool(nm.group(1)))
+    roots = [r for f in model.files for r in f.records] + list(model.ws_records)
+    for root in roots:
+        for it in walk(root):
+            if it.kind == "num":
+                table[it.name] = Capacity(it.digits, it.scale, it.signed)
     return table
 
 
@@ -67,8 +60,8 @@ _FOR = {"ROUNDED": "rounded half away from zero"}
 
 def _narrate(text: str, table: dict[str, Capacity]) -> str | None:
     """English for one statement, or None when we are not sure what it does."""
-    u = text.strip().rstrip(".").strip().upper()
-    t = text.strip().rstrip(".").strip()
+    t = re.sub(r"\s+", " ", text.strip().rstrip(".").strip())
+    u = t.upper()
     if m := re.fullmatch(r"OPEN (.+)", u):
         return f"Opens files ({m[1].lower()})."
     if m := re.fullmatch(r"CLOSE (.+)", u):
@@ -162,25 +155,31 @@ def _purpose(lines: list[Line]) -> str:
     return " ".join(block)[:300]
 
 
-def _meaning(f) -> str:
-    if f.kind == "alpha":
-        return f"text, {f.width} characters"
-    if f.kind == "edited":
-        return f"number shown with editing, picture `{f.pic}`"
-    signs = {
-        "none": "unsigned",
-        "leading_sep": "separate +/- character first",
-        "trailing_sep": "separate +/- character last",
-        "trailing_over": "sign stored in the last digit (a negative shows as p to y)",
-        "leading_over": "sign stored in the first digit (a negative shows as p to y)",
-    }
-    return f"number, {f.digits - f.scale} integer digit(s), {f.scale} decimal(s), {signs[f.sign]}"
+_USAGE = {"packed": "packed decimal (COMP-3)", "binary": "binary (COMP)", "native": "native binary (COMP-5)", "index": "index"}
+_SIGNS = {
+    "none": "unsigned",
+    "leading_sep": "separate +/- character first",
+    "trailing_sep": "separate +/- character last",
+    "trailing_over": "sign stored in the last digit",
+    "leading_over": "sign stored in the first digit",
+}
 
 
-def _layout_table(layout: Layout, label: str) -> list[str]:
-    out = [f"## {label} ({layout.width} characters per record)", "", "| Field | Columns | Meaning of the picture |", "| --- | --- | --- |"]
-    for f in layout.fields:
-        out.append(f"| {f.name} | {f.offset + 1}-{f.offset + f.width} | {_meaning(f)} |")
+def _meaning(it: Item) -> str:
+    if it.kind == "alpha":
+        return f"text, {it.size} characters"
+    if it.kind == "edited":
+        return f"number shown with editing, picture `{it.pic}`"
+    text = f"number, {it.digits - it.scale} integer digit(s), {it.scale} decimal(s), {_SIGNS.get(it.sign, 'signed' if it.signed else 'unsigned')}"
+    if it.usage != "display":
+        text += f", stored as {_USAGE.get(it.usage, it.usage)} in {it.size} bytes"
+    return text
+
+
+def _layout_table(rec: Item, label: str) -> list[str]:
+    out = [f"## {label}: {rec.name} ({rec.size} bytes per record)", "", "| Field | Bytes | Meaning |", "| --- | --- | --- |"]
+    for lf in leaves(rec):
+        out.append(f"| {lf.name} | {lf.offset + 1}-{lf.offset + lf.width} | {_meaning(lf.item)} |")
     return out + [""]
 
 
@@ -200,12 +199,20 @@ def generate_spec(program: str, root: Path = ROOT) -> Spec:
     purpose = _purpose(lines)
     if purpose:
         out += [f"Purpose, from the source comment: {purpose}", ""]
-    in_kind = "text lines" if model.input.organization == "line" else "fixed-length records"
-    out_kind = "text lines" if model.output.organization == "line" else "fixed-length records"
-    out += [f"Reads `{model.input.assign}` ({in_kind}) and writes `{model.output.assign}` ({out_kind}). Source format: {'fixed (columns 8-72)' if model.fixed else 'free'}.", ""]
+    def kind(f):
+        return "text lines" if f.organization == "line" else "fixed-length records"
+
+    io = [f"reads `{f.assign}` ({kind(f)})" for f in model.inputs] + [f"writes `{f.assign}` ({kind(f)})" for f in model.outputs]
+    if model.accepts:
+        io.append("reads console input (ACCEPT " + ", ".join(model.accepts) + ")")
+    out += [f"The program {', '.join(io) or 'uses no files'}. Source format: {'fixed (columns 8-72)' if model.fixed else 'free'}.", ""]
     for note in model.notes:
         out += [f"Note: {note}", ""]
-    out += _layout_table(model.in_layout, "Input record") + _layout_table(model.out_layout, "Output record")
+    for f in model.files:
+        for rec in f.records[:1]:
+            out += _layout_table(rec, f"{'Input' if f.is_input else 'Output'} file {f.assign}")
+    for item in model.unsupported:
+        out += [f"Not runnable yet: {item}.", ""]
 
     logical = _logical(lines[start + 1:])
     out += ["## Behavior by paragraph", ""]

@@ -31,7 +31,7 @@ from .programs import (
     program_info,
     program_names,
 )
-from .recorder import ROOT, cobc_available, cobol_env
+from .recorder import ROOT, LegacyRuntimeError, cobc_available, cobol_env
 
 sys.path.insert(0, str(ROOT))
 
@@ -63,13 +63,14 @@ def _require(program: str, implementation: str | None = None) -> None:
         raise HTTPException(404, f"unknown implementation {implementation!r}")
 
 
-def _run_cli(args: list[str], timeout: int) -> dict:
+def _run_cli(args: list[str], timeout: int, stdin: str | None = None) -> dict:
     """Run the CLI in a fresh process: no stale imports, and a hung migration cannot hang the server."""
     env = cobol_env()
     env["PYTHONPATH"] = str(ROOT)
     env["PYTHONDONTWRITEBYTECODE"] = "1"  # never run a stale .pyc after a same-second edit
     try:
-        proc = subprocess.run([sys.executable, "-m", "seance", *args], cwd=ROOT, capture_output=True, text=True, timeout=timeout, env=env)
+        proc = subprocess.run([sys.executable, "-m", "seance", *args], cwd=ROOT, input=stdin, capture_output=True, text=True,
+                              encoding="utf-8", timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         raise HTTPException(504, f"Timed out after {timeout} seconds. Does the Python loop forever?")
     try:
@@ -97,21 +98,38 @@ class NewProgram(BaseModel):
 class VerifyRequest(BaseModel):
     program: str
     implementation: str
-    examples: int = Field(default=config.DEFAULT_ROUNDS, ge=5, le=config.MAX_ROUNDS)
+    rounds: int = Field(default=config.DEFAULT_ROUNDS, ge=5, le=config.MAX_ROUNDS)
 
 
-class CompareRequest(BaseModel):
+def _plain_lines(lines: list[str]) -> list[str]:
+    for line in lines:
+        if len(line) > 2000 or any(c in line for c in "\r\n\x00"):
+            raise ValueError("Each line must be one line of at most 2000 characters.")
+    return lines
+
+
+class TryRequest(BaseModel):
     program: str
     implementation: str
-    lines: list[str] = Field(min_length=1, max_length=50)
+    files: dict[str, list[str]] = Field(default_factory=dict)
+    stdin: list[str] = Field(default_factory=list, max_length=200)
+    set: str | None = None
 
-    @field_validator("lines")
+    @field_validator("files")
     @classmethod
-    def _plain_records(cls, lines: list[str]) -> list[str]:
-        for line in lines:
-            if len(line) > 500 or any(c in line for c in "\r\n\x00"):
-                raise ValueError("Each record must be one line of at most 500 characters.")
-        return lines
+    def _files(cls, files: dict[str, list[str]]) -> dict[str, list[str]]:
+        if len(files) > 10:
+            raise ValueError("At most 10 input files.")
+        for lines in files.values():
+            if len(lines) > 200:
+                raise ValueError("At most 200 lines per file.")
+            _plain_lines(lines)
+        return files
+
+    @field_validator("stdin")
+    @classmethod
+    def _stdin(cls, lines: list[str]) -> list[str]:
+        return _plain_lines(lines)
 
 
 class MutateRequest(BaseModel):
@@ -126,7 +144,10 @@ class SaveSource(BaseModel):
 
 class TestData(BaseModel):
     filename: str = "data.txt"
-    text: str = Field(max_length=5_000_000)
+    text: str | None = Field(default=None, max_length=5_000_000)
+    base64: str | None = Field(default=None, max_length=7_000_000)
+    file: str | None = None  # which input file it is for (ASSIGN name); None when there is only one
+    console: bool = False  # the upload is console input, one value per line
 
 
 # ---------------------------------------------------------------- endpoints
@@ -135,7 +156,8 @@ class TestData(BaseModel):
 def about():
     return {
         "legacy_runtime": cobc_available(),
-        "defaults": {"rounds": config.DEFAULT_ROUNDS, "max_rounds": config.MAX_ROUNDS, "max_data_records": config.MAX_DATA_RECORDS},
+        "defaults": {"rounds": config.DEFAULT_ROUNDS, "max_rounds": config.MAX_ROUNDS, "max_data_records": config.MAX_DATA_RECORDS,
+                     "random_records": config.RANDOM_RECORDS},
         "supported": config.SUPPORTED,
         "not_yet": config.NOT_YET,
     }
@@ -213,41 +235,52 @@ def save_source(req: SaveSource):
 @app.get("/api/layout")
 def layout(program: str):
     _require(program)
+    from .layout import leaves
     from .recorder import get_model
 
     model = get_model(program)
-    out = {"format": "fixed" if model.fixed else "free", "notes": model.notes}
-    for key, lay, io in (("input", model.in_layout, model.input), ("output", model.out_layout, model.output)):
-        out[key] = {
-            "width": lay.width,
-            "file": io.assign,
-            "organization": io.organization,
-            "fields": [
-                {"name": f.name, "start": f.offset + 1, "end": f.offset + f.width, "kind": f.kind, "digits": f.digits, "scale": f.scale, "signed": f.signed, "sign": f.sign, "pic": f.pic}
-                for f in lay.fields
-            ],
-        }
-    return out
+    files = []
+    for f in model.files:
+        rec = f.record
+        fields = []
+        for lf in leaves(rec) if rec else []:
+            it = lf.item
+            fields.append({"name": lf.name, "start": lf.offset + 1, "end": lf.offset + lf.width, "kind": it.kind, "usage": it.usage,
+                           "digits": it.digits, "scale": it.scale, "signed": it.signed, "pic": it.pic})
+        files.append({"name": f.name, "assign": f.assign, "input": f.is_input, "output": f.is_output, "lines": f.organization == "line",
+                      "record": rec.name if rec else None, "size": f.size, "fields": fields,
+                      "text": all(x["usage"] == "display" for x in fields)})
+    return {"format": "fixed" if model.fixed else "free", "files": files, "console_input": model.accepts, "notes": model.notes,
+            "unsupported": model.unsupported}
 
 
 @app.get("/api/sample")
-def sample(program: str):
-    """A realistic input record to start from: the first saved random record, or a generated one."""
+def sample(program: str, limit: int = 6):
+    """Input to start a try from: the first records of the first saved test set, as text."""
     _require(program)
-    from .recorder import get_model, random_inputs
+    from .cases import load_set, set_names, show
+    from .recorder import get_model
 
-    saved = ROOT / "fixtures" / program / "random.in"
-    if saved.exists():
-        lines = saved.read_text(encoding="latin-1").splitlines()
-        if lines:
-            return {"line": lines[0]}
-    return {"line": random_inputs(get_model(program).in_layout, 1, seed=7)[0]}
+    model = get_model(program)
+    names = set_names(program)
+    out = {"files": {f.assign: [] for f in model.inputs}, "stdin": [], "set": None}
+    pick = "random" if "random" in names else (names[0] if names else None)
+    if pick:
+        case, _, _ = load_set(program, pick)
+        for f in model.inputs:
+            from .cases import _units
+
+            units = _units(f, case.files.get(f.assign, b""))
+            out["files"][f.assign] = [show(u).rstrip() for u in units[:max(1, min(limit, 50))]]
+        out["stdin"] = case.stdin[:200]  # all of it: a shorter list can leave an input loop waiting forever
+        out["set"] = pick
+    return out
 
 
 @app.get("/api/data")
 def list_data(program: str):
     _require(program)
-    from .testdata import describe_sets
+    from .cases import describe_sets
 
     return {"sets": describe_sets(program)}
 
@@ -257,21 +290,35 @@ async def upload_data(program: str, body: TestData):
     _require(program)
     if not cobc_available():
         raise HTTPException(503, "GnuCOBOL runtime not found")
-    from .testdata import add_set
+    import base64
+    import binascii
+
+    from .cases import ENC, add_uploaded
 
     try:
-        return await run_in_threadpool(add_set, program, body.filename, body.text)
-    except ValueError as exc:
+        if body.base64 is not None:
+            data = base64.b64decode(body.base64, validate=True)
+        else:
+            data = (body.text or "").encode(ENC, errors="replace")
+    except binascii.Error:
+        raise HTTPException(400, "The file could not be read.")
+    if body.console:
+        stdin, data, target = data.decode(ENC).splitlines(), b"", None
+    else:
+        stdin, target = None, body.file
+    try:
+        return await run_in_threadpool(add_uploaded, program, body.filename, data, target, stdin)
+    except (ValueError, LegacyRuntimeError) as exc:
         raise HTTPException(400, str(exc))
 
 
 @app.delete("/api/data/{program}/{name}")
 def delete_data(program: str, name: str):
     _require(program)
-    from .testdata import remove_set
+    from .cases import remove_uploaded
 
     try:
-        remove_set(program, name)
+        remove_uploaded(program, name)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     return {"deleted": name}
@@ -282,7 +329,7 @@ async def run_verify(req: VerifyRequest):
     _require(req.program, req.implementation)
     if not cobc_available():
         raise HTTPException(503, "GnuCOBOL runtime not found")
-    args = ["verify", req.program, "--impl", req.implementation, "--examples", str(req.examples), "--json"]
+    args = ["verify", req.program, "--impl", req.implementation, "--rounds", str(req.rounds), "--json"]
     return await run_in_threadpool(_run_cli, args, config.VERIFY_TIMEOUT)
 
 
@@ -292,15 +339,28 @@ async def run_mutate(req: MutateRequest):
     return await run_in_threadpool(_run_cli, ["mutate", req.program, "--impl", req.implementation, "--json"], config.VERIFY_TIMEOUT)
 
 
-@app.post("/api/compare")
-async def compare(req: CompareRequest):
+@app.post("/api/try")
+async def try_input(req: TryRequest):
     _require(req.program, req.implementation)
     if not cobc_available():
         raise HTTPException(503, "GnuCOBOL runtime not found")
-    args = ["compare", req.program, "--impl", req.implementation]
-    for line in req.lines:
-        args.append(f"--line={line.rstrip()}")  # '=' form: a record may start with '-'
-    return await run_in_threadpool(_run_cli, args, config.COMPARE_TIMEOUT)
+    payload = json.dumps({"files": req.files, "stdin": req.stdin, "set": req.set})
+    return await run_in_threadpool(_run_cli, ["try", req.program, "--impl", req.implementation], config.COMPARE_TIMEOUT, payload)
+
+
+@app.get("/api/report")
+def last_report(program: str, implementation: str):
+    """The last check of this Python, if any, with a flag saying whether the code changed since."""
+    _require(program, implementation)
+    from .programs import last_check
+
+    p = ROOT / "build" / "reports" / f"{implementation.replace('.', '_')}.json"
+    if not p.exists():
+        return {"report": None}
+    body = json.loads(p.read_text(encoding="utf-8"))
+    md = p.with_suffix(".md")
+    body["markdown"] = md.read_text(encoding="utf-8") if md.exists() else ""
+    return {"report": body, "status": last_check(implementation)}
 
 
 @app.get("/api/download/{program}")

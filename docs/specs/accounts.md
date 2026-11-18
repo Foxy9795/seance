@@ -2,26 +2,26 @@
 
 Purpose, from the source comment: Month-end account maintenance: compound interest on savings, a tiered service fee on checking, and an overdraft check.
 
-Reads `ACCTIN` (fixed-length records) and writes `ACCTOUT` (fixed-length records). Source format: fixed (columns 8-72).
+The program reads `ACCTIN` (fixed-length records), writes `ACCTOUT` (fixed-length records). Source format: fixed (columns 8-72).
 
-## Input record (38 characters per record)
+## Input file ACCTIN: ACCT-REC (38 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | ACCT-NO | 1-8 | text, 8 characters |
-| ACCT-BALANCE | 9-17 | number, 7 integer digit(s), 2 decimal(s), sign stored in the last digit (a negative shows as p to y) |
+| ACCT-BALANCE | 9-17 | number, 7 integer digit(s), 2 decimal(s), sign stored in the last digit |
 | ACCT-LIMIT | 18-26 | number, 7 integer digit(s), 2 decimal(s), unsigned |
 | ACCT-RATE | 27-30 | number, 0 integer digit(s), 4 decimal(s), unsigned |
 | ACCT-TYPE | 31-31 | text, 1 characters |
 | ACCT-MONTHS | 32-33 | number, 2 integer digit(s), 0 decimal(s), unsigned |
 | FILLER | 34-38 | text, 5 characters |
 
-## Output record (53 characters per record)
+## Output file ACCTOUT: OUT-REC (53 bytes per record)
 
-| Field | Columns | Meaning of the picture |
+| Field | Bytes | Meaning |
 | --- | --- | --- |
 | OUT-ACCT-NO | 1-8 | text, 8 characters |
-| OUT-NEW-BAL | 9-17 | number, 7 integer digit(s), 2 decimal(s), sign stored in the last digit (a negative shows as p to y) |
+| OUT-NEW-BAL | 9-17 | number, 7 integer digit(s), 2 decimal(s), sign stored in the last digit |
 | OUT-FEE | 18-22 | number, 3 integer digit(s), 2 decimal(s), unsigned |
 | OUT-INTEREST | 23-29 | number, 5 integer digit(s), 2 decimal(s), unsigned |
 | OUT-STATUS | 30-39 | text, 10 characters |
@@ -32,7 +32,7 @@ Reads `ACCTIN` (fixed-length records) and writes `ACCTOUT` (fixed-length records
 
 ### 0000-MAIN (line 32)
 
-- L33: Opens files (input  acct-in).
+- L33: Opens files (input acct-in).
   - L34: (continued) opens ACCT-OUT for writing.
 - L35: Runs paragraph 8000-READ.
 - L36: Runs paragraph 1000-PROCESS again and again until END-OF-FILE.
@@ -42,7 +42,7 @@ Reads `ACCTIN` (fixed-length records) and writes `ACCTOUT` (fixed-length records
 ### 1000-PROCESS (line 39)
 
 - L40: Resets OUT-REC: numbers to zero, text to spaces.
-- L41: Copies ACCT-NO      into OUT-ACCT-NO.
+- L41: Copies ACCT-NO into OUT-ACCT-NO.
 - L42: Copies ACCT-BALANCE into WS-BAL. (WS-BAL holds +/-999999999.9999 at most; larger values lose their leading digits)
 - L43: Adds 1 to WS-COUNT.
 - L44: Picks the first case below that is true:

@@ -5,877 +5,763 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 80 90%27%3E%3Cpath d=%27M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z%27 fill=%27%23f1ead9%27/%3E%3Ccircle cx=%2730%27 cy=%2738%27 r=%275%27 fill=%27%232a2118%27/%3E%3Ccircle cx=%2750%27 cy=%2738%27 r=%275%27 fill=%27%232a2118%27/%3E%3C/svg%3E">
-<title>Séance: Rewrite COBOL in Python and Prove It</title>
+<title>Séance: Move COBOL To Python And Prove It</title>
 <style>
   :root {
     color-scheme: dark;
-    --bg: #120e13; --surface: #1b161e; --raised: #251e29; --sunk: #0d0a0f; --line: #382f3e; --control: #857793;
-    --text: #f0e9dd; --muted: #b5aabb; --amber: #f1b44c; --amber-ink: #231706; --good: #7be0bd; --bad: #ff8f7e; --paper: #f1ead9;
+    --bg: #120e13; --surface: #1b161e; --raised: #251e29; --sunk: #0d0a0f; --line: #3a3140; --control: #857793;
+    --text: #f0e9dd; --muted: #b8adbe; --amber: #f1b44c; --amber-ink: #231706; --good: #7be0bd; --bad: #ff8f7e; --warn: #ffd27a;
+    --good-bg: #12342b; --bad-bg: #3b1c22; --warn-bg: #3a2d12;
     --mono: "Cascadia Mono", Consolas, "Courier New", monospace;
     --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
     --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-    --hand: "Segoe Print", "Bradley Hand", "Chalkboard SE", "Segoe UI", sans-serif;
-    --h: 40px; --r: 14px;
+    --r: 14px;
   }
-  * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #574a60 transparent; }
+  * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #5a4d63 transparent; }
   ::-webkit-scrollbar { width: 10px; height: 10px; } ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #574a60; border-radius: 8px; border: 2px solid var(--bg); } ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #5a4d63; border-radius: 8px; border: 2px solid var(--bg); } ::-webkit-scrollbar-corner { background: transparent; }
   html { background: var(--bg); }
   body { margin: 0; color: var(--text); font: 15px/1.6 var(--sans); min-height: 100vh;
-    background: radial-gradient(520px 520px at 96% -160px, rgba(241,234,217,.13), transparent 70%),
-                radial-gradient(760px 420px at 6% -6%, rgba(241,180,76,.12), transparent 70%),
-                radial-gradient(900px 520px at 100% 100%, rgba(112,76,160,.15), transparent 70%), var(--bg); }
+    background: radial-gradient(700px 420px at 4% -8%, rgba(241,180,76,.10), transparent 70%),
+                radial-gradient(900px 520px at 100% 100%, rgba(112,76,160,.13), transparent 70%), var(--bg); }
   :focus-visible { outline: 2px solid var(--good); outline-offset: 2px; border-radius: 6px; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   [hidden] { display: none !important; }
+  h1, h2, h3 { line-height: 1.25; }
+  h1 { font: 600 1.9rem/1.2 var(--serif); margin: 0; letter-spacing: .01em; }
+  h2 { font: 600 1.15rem/1.3 var(--sans); margin: 0 0 10px; }
+  h3 { font: 600 1rem/1.3 var(--sans); margin: 0 0 8px; }
+  p { margin: 0 0 10px; }
+  a { color: var(--amber); }
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  .muted { color: var(--muted); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-  /* ---------- top bar ---------- */
-  .top { display: flex; align-items: center; gap: 12px; padding: 12px 24px; }
-  .top button.home { all: unset; display: flex; align-items: center; gap: 10px; cursor: pointer; border-radius: 8px; padding: 2px 4px; }
-  .top button.home:focus-visible { outline: 2px solid var(--good); }
-  .brand { font: 600 1.4rem/1 var(--serif); letter-spacing: .03em; }
-  .tag { color: var(--muted); }
-  @media (max-width: 760px) { .tag { display: none; } }
-  #banner { margin: 0 24px 8px; padding: 10px 16px; background: #3a1d24; color: #ffd0c8; border: 1px solid #7a3a40; border-radius: var(--r); }
+  /* top bar */
+  .top { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid var(--line); background: rgba(18,14,19,.85); position: sticky; top: 0; z-index: 5; backdrop-filter: blur(6px); }
+  .brand { all: unset; display: flex; align-items: center; gap: 10px; cursor: pointer; border-radius: 8px; }
+  .brand b { font: 600 1.45rem/1 var(--serif); letter-spacing: .03em; }
+  .brand span { color: var(--muted); font-size: .95rem; }
+  @media (max-width: 760px) { .brand span { display: none; } }
+  .top .grow { flex: 1; }
+  @media (max-width: 560px) { .top { padding: 10px 12px; gap: 8px; } #runtime.good { display: none; } #openAdd { min-height: 34px; padding: 0 12px; font-size: .9rem; } }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: .82rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); white-space: nowrap; }
+  .pill.good { color: var(--good); border-color: #2f6b58; background: var(--good-bg); }
+  .pill.bad { color: var(--bad); border-color: #7a3a40; background: var(--bad-bg); }
+  .pill.warn { color: var(--warn); border-color: #7a6229; background: var(--warn-bg); }
 
-  /* ---------- layout ---------- */
-  .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 8px; padding: 0 12px; }
-  .side { padding: 8px 8px 24px; }
-  .side h2 { margin: 0 6px 18px; font: 600 1rem/1 var(--hand); color: var(--muted); }
-  .side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
-  .stone { all: unset; box-sizing: border-box; display: grid; justify-items: center; text-align: center; width: 100%; cursor: pointer; position: relative;
-    padding: 20px 10px 10px; border-radius: 80px 80px 14px 14px; background: linear-gradient(#2c2531, #211b26); border: 1px solid var(--line);
-    box-shadow: 0 6px 18px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04); transition: transform .15s, box-shadow .15s; }
-  .stone:hover { transform: translateY(-2px); }
-  .stone[aria-current=page] { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), 0 8px 26px rgba(241,180,76,.18); }
-  .stone:focus-visible { outline: 2px solid var(--good); outline-offset: 3px; }
-  .stone:disabled { opacity: .55; cursor: wait; transform: none; }
-  .stone svg { position: absolute; top: -13px; }
-  .stone b { margin-top: 4px; font-weight: 600; font-size: 1.02rem; }
-  .stone small { color: var(--muted); font-size: .82rem; }
-  .side .btn { margin-top: 18px; width: 100%; }
-  @media (max-width: 900px) {
-    .shell { grid-template-columns: minmax(0, 1fr); padding: 0 8px; }
-    .side { padding: 16px 4px 4px; display: flex; gap: 10px; align-items: center; overflow-x: auto; }
-    .side h2 { display: none; } .side ul { display: flex; gap: 10px; }
-    .stone { width: auto; white-space: nowrap; padding: 16px 16px 8px; border-radius: 50px 50px 12px 12px; }
-    .side .btn { margin: 0; width: auto; white-space: nowrap; }
-  }
-  main { padding: 8px 20px 72px; max-width: 1120px; width: 100%; min-width: 0; }
-  @media (max-width: 600px) { main { padding: 8px 10px 48px; } }
-
-  /* ---------- controls ---------- */
-  button, input, textarea { font: inherit; color: var(--text); }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--h); background: var(--raised); border: 1px solid var(--control);
+  /* buttons and inputs */
+  button, input, textarea, select { font: inherit; color: var(--text); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; background: var(--raised); border: 1px solid var(--control);
     border-radius: 999px; padding: 0 18px; cursor: pointer; text-decoration: none; color: var(--text); white-space: nowrap; }
-  .btn.small { height: 32px; padding: 0 14px; font-size: .9rem; }
-  .btn:hover:not(:disabled):not([aria-disabled=true]) { border-color: var(--text); }
+  .btn.small { min-height: 32px; padding: 0 14px; font-size: .9rem; }
+  .btn:hover:not(:disabled) { border-color: var(--text); }
   .btn.primary { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 600; }
-  .btn.primary:hover:not(:disabled) { filter: brightness(1.1); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.quiet:hover:not(:disabled) { color: var(--text); border-color: var(--line); }
   .btn.danger { color: var(--bad); border-color: #8a4a52; background: transparent; }
-  .btn:disabled, .btn[aria-disabled=true] { opacity: .5; cursor: not-allowed; pointer-events: none; }
-  input[type=text], input[type=number], textarea { background: var(--sunk); border: 1px solid var(--control); border-radius: 10px; padding: 8px 12px; width: 100%; }
-  input[type=text], input[type=number] { height: var(--h); padding-block: 0; }
-  input[type=number] { width: 96px; text-align: center; -moz-appearance: textfield; appearance: textfield; }
-  input[type=checkbox] { accent-color: var(--amber); width: 16px; height: 16px; }
-  textarea { min-width: 0; font: 13px/1.5 var(--mono); resize: none; tab-size: 4; white-space: pre; overflow: auto; }
-  textarea[readonly] { color: var(--muted); }
-  label.field { display: grid; gap: 4px; font-weight: 600; font-size: .92rem; }
-  label.field small { font-weight: 400; color: var(--muted); font-size: .85rem; }
-  label.check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; font-size: .92rem; }
+  .btn:disabled, .btn[aria-disabled=true] { opacity: .5; cursor: not-allowed; }
+  input[type=text], input[type=number], textarea, select { background: var(--sunk); border: 1px solid var(--control); border-radius: 10px; padding: 8px 12px; }
+  input[type=text], select { min-height: 40px; }
+  select { appearance: none; padding-right: 34px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23b8adbe' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; }
+  select option { background: var(--surface); color: var(--text); }
+  input[type=number] { width: 90px; min-height: 40px; text-align: center; }
+  textarea { width: 100%; font: 13px/1.55 var(--mono); resize: vertical; tab-size: 4; white-space: pre; overflow: auto; }
+  label.field { display: grid; gap: 6px; font-weight: 600; font-size: .92rem; }
+  label.field small { font-weight: 400; color: var(--muted); }
 
-  /* ---------- Wisp ---------- */
+  /* layout */
+  .shell { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: calc(100vh - 69px); }
+  aside { border-right: 1px solid var(--line); padding: 18px 14px 40px; }
+  aside h2 { font-size: .9rem; letter-spacing: .02em; color: var(--muted); margin: 18px 8px 8px; }
+  aside h2:first-child { margin-top: 0; }
+  .plist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .pcard { all: unset; box-sizing: border-box; display: grid; gap: 2px; width: 100%; padding: 10px 12px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; }
+  .pcard:hover { background: var(--surface); }
+  .pcard[aria-current=page] { background: var(--raised); border-color: var(--amber); }
+  .pcard:focus-visible { outline: 2px solid var(--good); }
+  .pcard .row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .pcard b { font-weight: 600; }
+  .pcard small { color: var(--muted); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 12px; }
+    .plist { display: flex; overflow-x: auto; } .pcard { width: 220px; flex: none; }
+    aside h2 { display: none; }
+  }
+  main { padding: 24px 28px 80px; min-width: 0; max-width: 1240px; }
+  @media (max-width: 600px) { main { padding: 16px 12px 60px; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; }
+  .stack { display: grid; gap: 16px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 980px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+
+  /* home */
+  .hero { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; margin-bottom: 26px; }
+  .hero h1 { font-size: 2.3rem; }
+  .hero p { color: var(--muted); font-size: 1.05rem; max-width: 62ch; margin-top: 10px; }
+  @media (max-width: 700px) { .hero { grid-template-columns: 1fr; } }
+  .step { position: relative; padding-top: 22px; }
+  .step .n { position: absolute; top: -14px; left: 18px; width: 30px; height: 30px; border-radius: 50%; background: var(--amber); color: var(--amber-ink); font-weight: 700; display: grid; place-items: center; }
+  .step p { color: var(--muted); margin: 0; }
+  ul.ticks { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
+  ul.ticks li { padding-left: 22px; position: relative; }
+  ul.ticks li::before { content: "✓"; position: absolute; left: 0; color: var(--good); }
+  ul.ticks.no li::before { content: "–"; color: var(--muted); }
+
+  /* program header and tabs */
+  .phead { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+  .phead p { color: var(--muted); max-width: 70ch; margin: 6px 0 0; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .seg { display: inline-flex; border: 1px solid var(--control); border-radius: 999px; overflow: hidden; }
+  .seg button { all: unset; padding: 6px 14px; cursor: pointer; font-size: .9rem; color: var(--muted); }
+  .seg button[aria-pressed=true] { background: var(--raised); color: var(--text); font-weight: 600; }
+  .seg button:focus-visible { outline: 2px solid var(--good); outline-offset: -2px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 6px 0 20px; overflow-x: auto; }
+  .tabs button { all: unset; padding: 10px 16px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-weight: 500; }
+  .tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--amber); }
+  .tabs button:focus-visible { outline: 2px solid var(--good); outline-offset: -2px; }
+  .tabs .count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--bad-bg); color: var(--bad); font-size: .78rem; text-align: center; }
+
+  details.menu { position: relative; }
+  details.menu summary { list-style: none; } details.menu summary::-webkit-details-marker { display: none; }
+  details.menu .items { position: absolute; right: 0; top: calc(100% + 6px); min-width: 250px; background: var(--raised); border: 1px solid var(--control); border-radius: 12px; padding: 6px; z-index: 4; display: grid; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+  details.menu .items a { display: grid; padding: 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; }
+  details.menu .items a small { color: var(--muted); }
+  details.menu .items a:hover, details.menu .items a:focus-visible { background: var(--surface); }
+  details.menu .items a[aria-disabled=true] { opacity: .5; pointer-events: none; }
+
+  /* tables */
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { overflow: auto; max-height: 420px; border: 1px solid var(--line); border-radius: 10px; }
+  .scroll table th { position: sticky; top: 0; background: var(--surface); }
+
+  /* code */
+  .code { background: var(--sunk); border: 1px solid var(--line); border-radius: 10px; font: 13px/1.6 var(--mono); overflow: auto; height: 62vh; min-height: 360px; }
+  .code .ln { display: flex; white-space: pre; padding-right: 16px; min-width: max-content; }
+  .code .ln i { font-style: normal; color: #7e7287; min-width: 46px; text-align: right; padding-right: 12px; user-select: none; flex: none; }
+  .code .ln.cm { color: #9c90a5; }
+  .code .ln.hl { background: rgba(241,180,76,.16); }
+  .code .ln.gap { background: rgba(255,143,126,.14); }
+  .code .ln[data-cobol] { cursor: pointer; }
+  .code .ln[data-cobol]:hover { background: rgba(255,255,255,.04); }
+  textarea.code { padding: 10px 12px; height: 62vh; resize: none; }
+  .panehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; min-height: 32px; }
+
+  /* verdict and diffs */
+  .verdict { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; }
+  .verdict .big { font: 600 1.7rem/1.2 var(--serif); }
+  .verdict.good .big { color: var(--good); } .verdict.bad .big { color: var(--bad); }
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 8px; }
+  .stats div b { display: block; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+  .stats div span { color: var(--muted); font-size: .85rem; }
+  .receipt { font: 12.5px/1.7 var(--mono); color: var(--muted); margin-top: 10px; word-break: break-all; }
+  .diff { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--sunk); }
+  .diff + .diff { margin-top: 10px; }
+  .diff .where { font-weight: 600; margin-bottom: 6px; }
+  .pair { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 2px 10px; font: 13px/1.6 var(--mono); }
+  .pair span:nth-child(odd) { color: var(--muted); font-family: var(--sans); font-size: .85rem; }
+  .pair code { white-space: pre; overflow-x: auto; display: block; font-size: 13px; }
+  mark { background: rgba(255,143,126,.35); color: var(--text); border-radius: 2px; }
+  .fields { margin-top: 8px; font-size: .88rem; }
+  .fields td.bad { color: var(--bad); }
+  td.mono { white-space: nowrap; }
+  .out { background: var(--sunk); border: 1px solid var(--line); border-radius: 10px; font: 13px/1.6 var(--mono); padding: 8px 0; overflow: auto; max-height: 360px; }
+  .out div { white-space: pre; padding: 0 12px; min-width: max-content; }
+  .out div.bad { background: rgba(255,143,126,.14); }
+  .out .empty { color: var(--muted); font-family: var(--sans); }
+  .note { border-left: 3px solid var(--warn); background: var(--warn-bg); padding: 10px 14px; border-radius: 0 10px 10px 0; }
+  .note.bad { border-color: var(--bad); background: var(--bad-bg); }
+  .note.good { border-color: var(--good); background: var(--good-bg); }
+
+  /* spec markdown */
+  .md h1 { font-size: 1.3rem; margin: 0 0 8px; } .md h2 { margin-top: 18px; } .md h3 { margin-top: 14px; color: var(--amber); }
+  .md ul { margin: 0 0 8px; padding-left: 22px; } .md li { margin: 2px 0; }
+  .md table { margin: 6px 0 14px; }
+
+  /* Wisp */
   .wisp { flex: none; animation: bob 4.5s ease-in-out infinite; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4)); }
   .wisp [class^=m-] { display: none; }
   .wisp[data-mood=calm] .m-calm, .wisp[data-mood=happy] .m-happy, .wisp[data-mood=worried] .m-worried, .wisp[data-mood=work] .m-work { display: block; }
-  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-  .say { position: relative; font: 1rem/1.5 var(--hand); background: var(--paper); color: #2a2118; border-radius: 18px; padding: 12px 16px; max-width: 66ch; }
-  .say::before { content: ""; position: absolute; left: -9px; top: 22px; border: 9px solid transparent; border-right-color: var(--paper); border-left: 0; }
-  .guide { display: flex; gap: 16px; align-items: flex-start; }
-  @media (max-width: 760px) { .guide { flex-direction: column; } .say::before { display: none; } }
+  @keyframes bob { 50% { transform: translateY(-6px); } }
+  @media (prefers-reduced-motion: reduce) { .wisp { animation: none; } * { transition: none !important; } }
 
-  /* ---------- home ---------- */
-  .hero { padding: 26px; background: linear-gradient(180deg, rgba(37,30,41,.92), rgba(27,22,30,.92)); border: 1px solid var(--line); border-radius: 24px; }
-  .hero h1 { margin: 0 0 8px; font: 600 2rem/1.2 var(--serif); }
-  .steps4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 22px 0; padding: 0; list-style: none; counter-reset: s; }
-  @media (max-width: 900px) { .steps4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 560px) { .steps4 { grid-template-columns: 1fr; } }
-  .steps4 li { counter-increment: s; background: rgba(13,10,15,.6); border: 1px dashed var(--line); border-radius: var(--r); padding: 14px 16px 14px 50px; position: relative; }
-  .steps4 li::before { content: counter(s); position: absolute; left: 14px; top: 14px; width: 26px; height: 26px; border-radius: 50%; background: var(--amber); color: var(--amber-ink); font-weight: 700; display: grid; place-items: center; }
-  .steps4 b { display: block; margin-bottom: 2px; } .steps4 span { color: var(--muted); font-size: .92rem; }
-  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-
-  /* ---------- program header ---------- */
-  .ph { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
-  .ph h1 { margin: 0; font: 600 1.9rem/1.2 var(--serif); }
-  .ph p { margin: 4px 0 10px; color: var(--muted); max-width: 75ch; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 14px; }
-  .chip { font-size: .82rem; padding: 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); color: var(--muted); }
-  .chip b { color: var(--text); font-weight: 600; }
-  .which { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 4px; }
-  .which > span.lbl { color: var(--muted); }
-  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control); border-radius: 999px; overflow: hidden; }
-  .seg label { cursor: pointer; display: flex; align-items: center; height: calc(var(--h) - 2px); padding: 0 16px; background: var(--raised); border-right: 1px solid var(--control); }
-  .seg label:last-child { border-right: 0; }
-  .seg input { position: absolute; opacity: 0; pointer-events: none; }
-  .seg label:has(input:checked) { background: var(--sunk); box-shadow: inset 0 0 0 1px var(--text); font-weight: 600; }
-  .seg label:has(input:focus-visible) { outline: 2px solid var(--good); outline-offset: -2px; }
-  .seg label:has(input:disabled) { cursor: wait; opacity: .6; }
-  .note { color: var(--muted); font-size: .9rem; margin: 6px 0 10px; }
-
-  /* ---------- workflow strip ---------- */
-  .flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0 6px; padding: 0; list-style: none; }
-  @media (max-width: 860px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .flow button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: 30px 1fr; column-gap: 10px; align-items: center;
-    padding: 10px 12px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); }
-  .flow button:hover { border-color: var(--control); }
-  .flow button:focus-visible { outline: 2px solid var(--good); }
-  .flow .dot { grid-row: span 2; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: .85rem; border: 2px solid var(--control); color: var(--muted); }
-  .flow [data-state=done] .dot { background: var(--good); border-color: var(--good); color: #0d2a20; }
-  .flow [data-state=bad] .dot { background: var(--bad); border-color: var(--bad); color: #2a0f0b; }
-  .flow [data-state=warn] .dot { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
-  .flow b { font-size: .95rem; } .flow small { color: var(--muted); font-size: .84rem; line-height: 1.3; }
-
-  #status { margin: 12px 0 0; min-height: 1.6em; color: var(--muted); display: flex; align-items: center; gap: 10px; }
-  #status:empty { display: none; }
-  #status.error { color: var(--bad); } #status.ok { color: var(--good); }
-  .flame { animation: flick 1.1s ease-in-out infinite; }
-  @keyframes flick { 0%,100% { transform: scale(1) rotate(-2deg); opacity: 1; } 50% { transform: scale(1.1, .92) rotate(3deg); opacity: .8; } }
-  @media (prefers-reduced-motion: reduce) { .flame, .wisp, .stamp { animation: none !important; } * { transition: none !important; } }
-
-  /* ---------- tabs ---------- */
-  [role=tablist] { display: flex; gap: 6px; margin: 18px 0 20px; overflow-x: auto; padding-bottom: 4px; }
-  [role=tab] { background: transparent; border: 1px solid transparent; color: var(--muted); padding: 7px 16px; cursor: pointer; white-space: nowrap; border-radius: 999px; }
-  [role=tab]:hover { color: var(--text); background: var(--raised); }
-  [role=tab][aria-selected=true] { color: var(--text); background: var(--raised); border-color: var(--control); font-weight: 600; }
-  @media (max-width: 600px) { [role=tablist] { mask-image: linear-gradient(90deg, #000 88%, transparent); } }
-  .lead { color: var(--muted); max-width: 78ch; margin: 0 0 16px; }
-  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
-  @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
-  h2.sec { margin: 0 0 8px; font: 600 1.15rem/1.3 var(--serif); }
-  h3 { margin: 0 0 8px; font: 600 1rem/1.3 var(--sans); }
-  pre, textarea#migrated { height: 460px; }
-  pre { margin: 0; padding: 12px 14px; background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; overflow: auto; font: 13px/1.5 var(--mono); white-space: pre; }
-  pre.wrap { white-space: pre-wrap; height: auto; max-height: 520px; }
-  pre, textarea { scrollbar-gutter: stable; }
-  textarea#lines { height: 150px; } textarea#pasteCobol { height: 300px; } .cbtext { height: 110px; }
-  code { font-family: var(--mono); font-size: .88em; background: var(--sunk); border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; }
-  details { margin-top: 16px; } summary { cursor: pointer; list-style: none; font-weight: 600; }
-  summary::-webkit-details-marker { display: none; }
-  summary::before { content: "\25B8"; display: inline-block; width: 1.1em; transition: transform .15s; color: var(--amber); }
-  details[open] > summary::before { transform: rotate(90deg); }
-
-  /* ---------- panels and results ---------- */
-  .card { border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; background: var(--surface); }
-  .empty { border: 1px dashed var(--control); border-radius: 18px; padding: 16px 18px; }
-  .empty ul { margin: 10px 0 0 4px; padding-left: 20px; color: var(--muted); }
-  .notice { border: 1px solid #7a6330; background: #2c2512; border-radius: var(--r); padding: 12px 16px; margin: 0 0 16px; }
-  .notice.good { border-color: #2f6b55; background: #12271f; }
-  .verdict { display: flex; gap: 20px; align-items: center; border: 1px solid var(--line); border-radius: 22px; padding: 18px 22px; background: var(--surface); margin: 6px 0 20px; }
-  .verdict.ok { box-shadow: 0 0 0 1px rgba(123,224,189,.3), 0 0 60px rgba(123,224,189,.16); }
-  .verdict.bad { box-shadow: 0 0 0 1px rgba(255,143,126,.34), 0 0 60px rgba(255,143,126,.18); }
-  .stamp { flex: none; font: 700 1.3rem/1.15 var(--serif); letter-spacing: .14em; text-transform: uppercase; text-align: center; padding: 14px 20px;
-    border: 4px double currentColor; border-radius: 8px; transform: rotate(-7deg); text-shadow: 0 0 14px currentColor; }
-  .verdict.bad .stamp { animation: shake .5s .1s 1; }
-  @keyframes shake { 0%,100% { transform: rotate(-7deg); } 25% { transform: rotate(-11deg); } 60% { transform: rotate(-3deg); } }
-  .verdict.ok .stamp { color: var(--good); } .verdict.bad .stamp { color: var(--bad); }
-  .verdict h2 { margin: 0; font: 600 1.12rem/1.4 var(--sans); } .verdict h2:focus { outline: none; }
-  .verdict p { margin: 4px 0 0; color: var(--muted); }
-  @media (max-width: 700px) { .verdict { flex-direction: column; align-items: flex-start; } }
-  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-  td, th { overflow-wrap: anywhere; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: #cbc0d0; font-weight: 600; font-size: .92rem; }
-  .mono { font-family: var(--mono); font-size: 13px; white-space: pre; }
-  .pass { color: var(--good); } .fail { color: var(--bad); }
-  .scroll { overflow-x: auto; }
-  mark { background: rgba(255,143,126,.4); color: #fff3f0; font-weight: 700; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255,143,126,.7), 0 0 10px rgba(255,143,126,.5); }
-  mark.cob { background: rgba(123,224,189,.32); color: #effff9; box-shadow: 0 0 0 1px rgba(123,224,189,.7), 0 0 10px rgba(123,224,189,.4); }
-  .evidence { margin-top: 24px; } .evidence h3 { font-size: 1.02rem; margin-bottom: 4px; }
-  .case { margin: 0 0 24px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-  .case .in { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: var(--raised); border-bottom: 1px solid var(--line); }
-  .case .in span { color: var(--muted); } .case .in .rec { flex: 1; min-width: 0; overflow-x: auto; white-space: pre; color: var(--text); }
-  .case table th, .case table td { padding: 6px 12px; }
-  .case tr.diff td:first-child { box-shadow: inset 3px 0 var(--bad); }
-  .badge { display: inline-block; font-size: .8rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; letter-spacing: .02em; }
-  .badge.ok { background: rgba(123,224,189,.16); color: var(--good); border: 1px solid rgba(123,224,189,.45); }
-  .badge.bad { background: rgba(255,143,126,.14); color: var(--bad); border: 1px solid rgba(255,143,126,.45); }
-  .meter { height: 12px; border-radius: 999px; background: var(--sunk); border: 1px solid var(--line); overflow: hidden; margin: 10px 0 6px; }
-  .meter span { display: block; height: 100%; background: linear-gradient(90deg, var(--amber), var(--good)); }
-  .error { color: var(--bad); white-space: pre-wrap; font-family: var(--mono); font-size: 13px; }
-  .spec h4 { margin: 18px 0 6px; font: 600 1.05rem/1.3 var(--serif); } .spec h5 { margin: 14px 0 4px; font: 600 .95rem/1.3 var(--mono); color: var(--amber); }
-  .spec ul { margin: 2px 0 6px; padding-left: 20px; } .spec li { margin: 2px 0; } .spec p { margin: 6px 0; }
-
-  /* ---------- drop zones ---------- */
-  .drop { border: 2px dashed var(--control); border-radius: 20px; padding: 28px; text-align: center; background: rgba(13,10,15,.5); transition: border-color .15s, background .15s; }
-  .drop.over { border-color: var(--amber); background: rgba(241,180,76,.08); }
-  .drop h3 { font: 600 1.15rem/1.3 var(--serif); margin: 8px 0 4px; }
-  .drop p { color: var(--muted); margin: 0 0 14px; }
-  .files { display: grid; gap: 8px; margin: 14px 0; padding: 0; list-style: none; }
-  .files li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-  .files li .role { font-size: .8rem; color: var(--muted); margin-left: auto; }
-  .downloads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-  @media (max-width: 900px) { .downloads { grid-template-columns: 1fr; } }
-  .downloads .card { display: flex; flex-direction: column; gap: 8px; }
-  .downloads .card p { margin: 0; color: var(--muted); font-size: .92rem; flex: 1; }
-  .support { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
-  @media (max-width: 800px) { .support { grid-template-columns: 1fr; } }
-  .support > div { border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; background: rgba(13,10,15,.5); }
-  .support ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: .92rem; } .support li { margin: 2px 0; }
-  .support .yes h3 { color: var(--good); } .support .no h3 { color: var(--amber); }
-  .cbrow { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 10px; margin-bottom: 10px; align-items: start; }
-  @media (max-width: 700px) { .cbrow { grid-template-columns: 1fr; } }
+  /* dialog, drop zone, toast, busy */
+  dialog { background: var(--surface); color: var(--text); border: 1px solid var(--control); border-radius: 18px; padding: 0; width: min(860px, 94vw); max-height: 92vh; }
+  dialog::backdrop { background: rgba(8,6,10,.7); }
+  dialog form { display: grid; gap: 14px; padding: 22px 24px; }
+  .drop { border: 2px dashed var(--control); border-radius: 14px; padding: 22px; text-align: center; color: var(--muted); }
+  .drop.over { border-color: var(--amber); background: rgba(241,180,76,.06); }
+  .files { display: flex; gap: 6px; flex-wrap: wrap; }
+  #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); max-width: min(720px, 92vw); padding: 12px 18px; border-radius: 12px; background: var(--raised); border: 1px solid var(--control); box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 20; white-space: pre-line; }
+  #toast.error { border-color: var(--bad); } #toast.ok { border-color: var(--good); }
+  .spin { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: sp 0.8s linear infinite; display: inline-block; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .skeleton { color: var(--muted); padding: 20px 0; }
 </style>
 </head>
 <body>
 <header class="top">
-  <button class="home" id="goHome" title="Home">
-    <svg width="30" height="34" viewBox="0 0 80 90" aria-hidden="true"><path d="M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z" fill="#f1ead9" stroke="#e0a63a" stroke-width="4"/><circle cx="30" cy="38" r="5" fill="#2a2118"/><circle cx="50" cy="38" r="5" fill="#2a2118"/></svg>
-    <span class="brand">Séance</span>
-  </button>
-  <span class="tag">Rewrite COBOL in Python, and Prove It Gives the Same Answers</span>
+  <button class="brand" id="goHome" title="Home"><span id="logo"></span><b>Séance</b><span>Move COBOL to Python, and prove nothing changed</span></button>
+  <div class="grow"></div>
+  <span id="runtime" class="pill">Checking COBOL Runtime…</span>
+  <button class="btn primary" id="openAdd">Add Your COBOL</button>
 </header>
-<p id="banner" role="alert" hidden></p>
 
 <div class="shell">
-  <nav class="side" aria-label="Programs">
-    <h2>Programs</h2>
-    <ul id="progList"></ul>
-    <button class="btn" id="goAdd">+ Add COBOL Program</button>
-  </nav>
+  <aside aria-label="Programs">
+    <h2 id="yoursHead" hidden>Your Programs</h2>
+    <ul class="plist" id="yours"></ul>
+    <h2>Examples</h2>
+    <ul class="plist" id="examples"><li class="skeleton">Loading…</li></ul>
+  </aside>
 
   <main>
-    <!-- =============================================================== HOME -->
-    <section id="v-home" aria-labelledby="homeTitle">
+    <!-- Home -->
+    <section id="home" hidden>
       <div class="hero">
-        <div class="guide">
-          <div id="homeWisp"></div>
-          <div>
-            <h1 id="homeTitle">Bring Old COBOL Back to Life in Python</h1>
-            <div class="say"><b>Hi, I'm Wisp.</b> Drop in a COBOL program. I'll write the Python for you, run both side by side on the same records, and show you every place they disagree, field by field.</div>
+        <div id="homeWisp"></div>
+        <div>
+          <h1>Move COBOL To Python. Prove Nothing Changed.</h1>
+          <p>Séance compiles your COBOL with GnuCOBOL, writes the Python for you, then runs both programs on the same input, record by record and byte by byte. You get the Python and a report that shows it behaves the same, or exactly where it does not.</p>
+          <div class="row" style="margin-top:14px">
+            <button class="btn primary" id="homeAdd">Add Your COBOL</button>
+            <button class="btn" id="homeDemo">See A Bug Being Caught</button>
           </div>
         </div>
-        <ol class="steps4">
-          <li><b>Add Your COBOL</b><span>Drop the program and its copybooks. I compile it and record what it really does.</span></li>
-          <li><b>Get a Python Draft</b><span>Translated statement by statement, each line tagged with its COBOL line.</span></li>
-          <li><b>Check and Measure</b><span>Compare every output with the COBOL, then plant bugs to see how strong the tests are.</span></li>
-          <li><b>Download It</b><span>A standalone Python program that runs without COBOL, Séance or anything else.</span></li>
-        </ol>
-        <div class="row"><button class="btn primary" id="homeAdd">Add My COBOL</button><button class="btn" id="demo" hidden>Watch a Wrong Rewrite Get Caught</button></div>
       </div>
-      <details id="supportBox"><summary>What COBOL Works Today</summary><div class="support" id="supportLists"></div></details>
+      <div class="grid3" style="margin-top:26px">
+        <div class="card step"><span class="n">1</span><h3>Add Your Program</h3><p>Drop in a .cbl file and its copybooks. Séance compiles it and runs it on hundreds of generated inputs to record what it really does.</p></div>
+        <div class="card step"><span class="n">2</span><h3>Get The Python</h3><p>A rule-based translator writes Python that keeps COBOL's data exactly: packed decimal, rounding, truncation, tables. Every line points back to its COBOL line.</p></div>
+        <div class="card step"><span class="n">3</span><h3>Prove It Matches</h3><p>The check replays every recorded run and fresh random ones. Any difference is shrunk to the smallest input that shows it.</p></div>
+      </div>
+      <div class="grid2" style="margin-top:16px">
+        <div class="card"><h3>What It Handles</h3><ul class="ticks" id="supported"></ul></div>
+        <div class="card"><h3>Not Yet</h3><ul class="ticks no" id="notYet"></ul><p class="muted" style="margin-top:10px">Programs that use these are still accepted when they compile; the parts Séance cannot translate are marked in the Python and reported.</p></div>
+      </div>
     </section>
 
-    <!-- =============================================================== ADD -->
-    <section id="v-add" aria-labelledby="addTitle" hidden>
-      <h1 id="addTitle" style="font:600 1.9rem/1.2 var(--serif);margin:0 0 6px">Add a COBOL Program</h1>
-      <p class="lead">Drop your program and any copybooks it uses. I'll compile it, run it on generated records, explain what it does, and draft the Python. This usually takes 5 to 20 seconds.</p>
-      <div class="drop" id="dropCobol">
-        <div id="dropWisp"></div>
-        <h3>Drop .cbl, .cob and .cpy Files Here</h3>
-        <p>The file with the PROCEDURE DIVISION is the program; the others are copybooks.</p>
-        <div class="row" style="justify-content:center">
-          <button class="btn primary" id="browse">Browse Files</button>
-          <button class="btn" id="loadTpl">Use the Example</button>
-          <button class="btn" id="pasteToggle" aria-expanded="false">Paste Code Instead</button>
-        </div>
-        <input type="file" id="filePick" multiple accept=".cbl,.cob,.cobol,.cpy,.copy,.txt,.CBL,.COB,.CPY" hidden>
-      </div>
-      <ul class="files" id="fileList"></ul>
-      <div id="pasteArea" hidden>
-        <label class="field" style="margin:14px 0 10px">COBOL Program<textarea id="pasteCobol" spellcheck="false"></textarea></label>
-        <div id="cbList"></div>
-        <button class="btn small" id="addCb" type="button">+ Add a Copybook</button>
-      </div>
-      <div class="row" style="margin-top:16px;align-items:flex-end">
-        <label class="field" for="newName" style="width:260px">Program Name <small>Optional. Leave blank to use the PROGRAM-ID.</small><input type="text" id="newName" maxlength="24" placeholder="For example: discount"></label>
-        <button class="btn primary" id="addProg">Add Program</button>
-      </div>
-      <p id="addStatus" class="note" role="status"></p>
-      <p class="error" id="addError" role="alert"></p>
-      <details><summary>What COBOL Works Today</summary><div class="support" id="supportLists2"></div></details>
-    </section>
-
-    <!-- =============================================================== PROGRAM -->
-    <section id="v-prog" hidden>
-      <div class="ph">
-        <div>
-          <h1 id="pName"></h1>
+    <!-- Program -->
+    <section id="prog" hidden>
+      <div class="phead">
+        <div style="min-width:0">
+          <h1 id="pTitle"></h1>
           <p id="pPurpose"></p>
           <div class="chips" id="pChips"></div>
         </div>
-        <button class="btn danger small" id="del" hidden>Delete Program</button>
-      </div>
-      <div class="which">
-        <span class="lbl" id="implLbl">Python Being Tested:</span>
-        <div id="implSeg" aria-labelledby="implLbl"></div>
-        <button class="btn small" id="copyPrompt" title="Copies an instruction for Kiro chat that asks it to improve this Python">Copy an AI Prompt</button>
-      </div>
-      <p class="note" id="whichHelp" hidden></p>
-      <ol class="flow" id="flow" aria-label="Progress"></ol>
-      <p id="status" role="status"></p>
-
-      <div role="tablist" aria-label="Sections" id="tablist">
-        <button role="tab" id="t-check" aria-selected="true" aria-controls="p-check">Check</button>
-        <button role="tab" id="t-strength" aria-selected="false" aria-controls="p-strength" tabindex="-1">Test Strength</button>
-        <button role="tab" id="t-try" aria-selected="false" aria-controls="p-try" tabindex="-1">Try a Record</button>
-        <button role="tab" id="t-code" aria-selected="false" aria-controls="p-code" tabindex="-1">Code</button>
-        <button role="tab" id="t-spec" aria-selected="false" aria-controls="p-spec" tabindex="-1">COBOL Explained</button>
-        <button role="tab" id="t-data" aria-selected="false" aria-controls="p-data" tabindex="-1">Test Data</button>
-        <button role="tab" id="t-export" aria-selected="false" aria-controls="p-export" tabindex="-1">Export</button>
-      </div>
-
-      <!-- ---------------- CHECK -->
-      <div id="p-check" role="tabpanel" aria-labelledby="t-check">
-        <p class="lead">I run the real COBOL and the Python on every saved test set and on brand-new random records, then compare each output character by character. If you edited the Python, I save it first.</p>
-        <div id="stubNote" class="notice" hidden></div>
-        <div class="row" style="margin-bottom:6px">
-          <label class="field" for="examples" style="display:inline-flex;align-items:center;gap:10px">Random Test Rounds</label>
-          <input id="examples" type="number" min="5" aria-describedby="roundsHelp">
-          <button id="go" class="btn primary">Run Check</button>
+        <div class="row">
+          <div class="seg" id="implSeg" role="group" aria-label="Python To Check"></div>
+          <details class="menu" id="dlMenu">
+            <summary class="btn">Download</summary>
+            <div class="items">
+              <a id="dlPython" download><b>Python File</b><small>The program, ready to edit</small></a>
+              <a id="dlBundle" download><b>Standalone Package (.zip)</b><small>Runs without Séance or COBOL</small></a>
+              <a id="dlReport" download><b>Check Report (.md)</b><small>The last check, with its receipt</small></a>
+            </div>
+          </details>
         </div>
-        <p class="note" id="roundsHelp">Each round tries up to 25 new random records. More rounds test more and take longer.</p>
-        <div id="checkEmpty" class="empty"></div>
-        <div id="result" aria-live="polite" hidden></div>
+      </div>
+      <div class="tabs" role="tablist" id="tabs">
+        <button role="tab" data-tab="overview" id="tab-overview">Overview</button>
+        <button role="tab" data-tab="code" id="tab-code">Code Side By Side</button>
+        <button role="tab" data-tab="prove" id="tab-prove">Prove It</button>
+        <button role="tab" data-tab="try" id="tab-try">Try Your Input</button>
       </div>
 
-      <!-- ---------------- TEST STRENGTH -->
-      <div id="p-strength" role="tabpanel" aria-labelledby="t-strength" hidden>
-        <p class="lead">A pass is only as good as the records behind it. I plant one small bug at a time in the Python, such as <code>&gt;</code> turned into <code>&gt;=</code>, a dropped ROUNDED or a changed constant, and replay the saved records. Strong tests catch every planted bug.</p>
-        <div class="row" style="margin-bottom:14px"><button id="mutateBtn" class="btn primary">Measure Test Strength</button></div>
-        <div id="strengthEmpty" class="empty"></div>
-        <div id="strength" aria-live="polite" hidden></div>
+      <div role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" class="stack"></div>
+
+      <div role="tabpanel" id="panel-code" aria-labelledby="tab-code" hidden>
+        <div id="gapNote"></div>
+        <div class="grid2">
+          <div><div class="panehead"><h3 style="margin:0">COBOL</h3><span class="muted" id="cobolInfo"></span></div><div class="code" id="cobolPane" tabindex="0" aria-label="COBOL source"></div></div>
+          <div><div class="panehead"><h3 style="margin:0">Python</h3><div class="row" id="pyTools"></div></div><div id="pyPane"></div></div>
+        </div>
+        <p class="muted" style="margin-top:8px">Click a Python line to see the COBOL line it came from.</p>
       </div>
 
-      <!-- ---------------- TRY -->
-      <div id="p-try" role="tabpanel" aria-labelledby="t-try" hidden>
-        <p class="lead">Type a record and see what the real COBOL prints next to what the Python prints, split into fields. Good for poking at one suspicious case.</p>
-        <div class="cols">
-          <div>
-            <h3>Input Records, One per Line</h3>
-            <textarea id="lines" spellcheck="false" aria-label="Input records, one per line"></textarea>
-            <div class="row" style="margin-top:12px"><button id="sample" class="btn">Fill In a Sample</button><button id="tryit" class="btn primary">Run Both</button></div>
+      <div role="tabpanel" id="panel-prove" aria-labelledby="tab-prove" hidden class="stack">
+        <div class="card">
+          <div class="row" style="justify-content:space-between">
+            <div style="max-width:70ch"><h2>Run The Check</h2><p class="muted" style="margin:0">Replays every saved run of the COBOL through the Python and compares every output byte, then runs both programs on fresh random input. Takes a few seconds.</p></div>
+            <div class="row">
+              <label class="row muted" for="rounds" style="gap:8px">Random Runs <input type="number" id="rounds" min="5" max="200"></label>
+              <button class="btn primary" id="runCheck">Run Check</button>
+            </div>
           </div>
-          <div><h3>Record Layout</h3><div id="layout"></div></div>
         </div>
-        <div id="tryout" aria-live="polite"></div>
-      </div>
-
-      <!-- ---------------- CODE -->
-      <div id="p-code" role="tabpanel" aria-labelledby="t-code" hidden>
-        <p class="lead" id="codeLead"></p>
-        <div class="row" style="margin-bottom:12px">
-          <label class="check"><input type="checkbox" id="wrap"> Wrap Long Lines</label>
-          <span style="flex:1"></span>
-          <button id="redraft" class="btn small" hidden>Redraft From COBOL</button>
-          <a id="dlPy" class="btn small" href="#">Download .py</a>
-        </div>
-        <div class="cols">
-          <div><h3>Original COBOL</h3><pre id="legacy" tabindex="0" role="region" aria-label="Original COBOL source"></pre></div>
-          <div>
-            <h3>Python</h3>
-            <textarea id="migrated" spellcheck="false" aria-label="Python source" aria-describedby="editHint"></textarea>
-            <div class="row" style="margin:12px 0 6px"><button id="save" class="btn">Save</button><button id="saveRun" class="btn primary">Save and Check</button></div>
-            <p class="note" id="editHint"></p>
+        <div id="result" class="stack"></div>
+        <div class="grid2">
+          <div class="card" id="strengthCard">
+            <h2>Test Strength</h2>
+            <p class="muted">Breaks the Python on purpose, one small bug at a time (a &gt; turned into &gt;=, a ROUNDED dropped, a constant changed) and checks that the saved runs catch each one. A bug that slips through points at code no test reaches.</p>
+            <button class="btn" id="runStrength">Measure Test Strength</button>
+            <div id="strength" style="margin-top:12px"></div>
+          </div>
+          <div class="card">
+            <h2>Test Data</h2>
+            <p class="muted">The saved runs used by the check. Add your own production-like data: the COBOL runs on it first, and its output becomes the expected answer.</p>
+            <div id="sets"></div>
+            <div class="row" style="margin-top:12px" id="uploadRow">
+              <select id="uploadTarget" aria-label="Which input the data is for"></select>
+              <label class="btn" for="uploadFile" tabindex="0" id="uploadLabel">Add Data File</label>
+              <input type="file" id="uploadFile" hidden>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- ---------------- SPEC -->
-      <div id="p-spec" role="tabpanel" aria-labelledby="t-spec" hidden>
-        <p class="lead">What the COBOL does, in plain English with line numbers, including every place a number is rounded or cut off. It comes from fixed rules, not an AI, so anything I couldn't read is listed at the bottom instead of being guessed.</p>
-        <div id="spec" class="spec" tabindex="0" role="region" aria-label="Description of the COBOL"></div>
-      </div>
-
-      <!-- ---------------- TEST DATA -->
-      <div id="p-data" role="tabpanel" aria-labelledby="t-data" hidden>
-        <p class="lead">Every check replays these saved record sets. Add a real input file from production (or a file you know is tricky) and I'll run it through the COBOL once and keep the answers.</p>
-        <div id="sets"></div>
-        <div class="drop" id="dropData" style="margin-top:16px">
-          <h3>Drop an Input Data File Here</h3>
-          <p id="dataHint">Text lines or fixed-length records, the same file the COBOL program reads.</p>
-          <button class="btn primary" id="browseData">Choose a Data File</button>
-          <input type="file" id="dataPick" hidden>
+      <div role="tabpanel" id="panel-try" aria-labelledby="tab-try" hidden class="stack">
+        <div class="card">
+          <div class="row" style="justify-content:space-between">
+            <div style="max-width:70ch"><h2>Try Your Input</h2><p class="muted" style="margin:0">Type or paste input, then run the COBOL and the Python side by side. Lines that differ are highlighted.</p></div>
+            <div class="row">
+              <label class="row muted" for="trySet" style="gap:8px">Start From <select id="trySet"></select></label>
+              <button class="btn primary" id="runTry">Run Both</button>
+            </div>
+          </div>
+          <div id="tryInputs" class="stack" style="margin-top:16px"></div>
         </div>
-      </div>
-
-      <!-- ---------------- EXPORT -->
-      <div id="p-export" role="tabpanel" aria-labelledby="t-export" hidden>
-        <p class="lead">Take the Python with you. The standalone program reads and writes the same files the COBOL did and needs only Python 3.10 or newer.</p>
-        <div id="exportNote" class="notice" hidden></div>
-        <div class="downloads">
-          <div class="card"><h3>Standalone Program (.zip)</h3><p>The Python, its record layouts, the COBOL number rules it needs, a <code>run.py</code> that processes a whole file, a README and the last check report.</p><a class="btn primary" id="dlZip" href="#">Download .zip</a></div>
-          <div class="card"><h3>Python File (.py)</h3><p>Just the migrated business logic, to drop into your own project next to its record module.</p><a class="btn" id="dlPy2" href="#">Download .py</a></div>
-          <div class="card"><h3>Check Report (.md)</h3><p>The result of the last check: what was compared, what matched, and any differences. Attach it to a code review.</p><a class="btn" id="dlReport" href="#">Download Report</a></div>
-        </div>
+        <div id="tryResult" class="stack"></div>
       </div>
     </section>
   </main>
 </div>
 
-<script>
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const TOKEN = '__SESSION_TOKEN__';
-const st = { about: null, catalog: [], demo: null, current: null, impl: '', layout: null, editable: false, dirty: false, busy: false, token: 0, files: [] };
-const store = JSON.parse(sessionStorage.getItem('seance-state') || '{}');   // 'prog|module' -> { check: 'ok'|'bad', checkText, strength }
-const saveStore = () => sessionStorage.setItem('seance-state', JSON.stringify(store));
-const key = (p = st.current, m = st.impl) => p + '|' + m;
-const rec = (p, m) => (store[key(p, m)] = store[key(p, m)] || {});
+<dialog id="addDlg" aria-labelledby="addTitle">
+  <form method="dialog" id="addForm">
+    <div class="row" style="justify-content:space-between"><h2 id="addTitle" style="margin:0">Add Your COBOL</h2><button class="btn quiet small" value="cancel" formnovalidate>Close</button></div>
+    <div class="drop" id="drop">
+      <p style="margin:0 0 8px"><b>Drop your program and its copybooks here</b></p>
+      <p style="margin:0 0 12px">.cbl, .cob or .cobol for the program, .cpy for copybooks</p>
+      <label class="btn small" for="pickFiles" tabindex="0" id="pickLabel">Choose Files</label>
+      <input type="file" id="pickFiles" multiple hidden accept=".cbl,.cob,.cobol,.cpy,.copy,.txt,.CBL,.COB,.CPY">
+    </div>
+    <div class="files" id="addFiles"></div>
+    <label class="field">COBOL Source <small>Or paste it here. Fixed format (columns 8-72) and free format both work.</small>
+      <textarea id="addCobol" rows="12" spellcheck="false"></textarea></label>
+    <label class="field" style="max-width:340px">Program Name <small>Lowercase, used for file names. Filled in from PROGRAM-ID.</small>
+      <input type="text" id="addName" autocomplete="off" spellcheck="false"></label>
+    <div id="addStatus" role="status"></div>
+    <div class="row" style="justify-content:space-between">
+      <button class="btn quiet" type="button" id="loadTpl">Load An Example Program</button>
+      <button class="btn primary" type="button" id="addGo">Add And Translate</button>
+    </div>
+  </form>
+</dialog>
 
-/* ---------- helpers ---------- */
-async function api(path, opts, ms = 15000) {
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+'use strict';
+const TOKEN = '__SESSION_TOKEN__';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const st = { about: null, programs: [], current: null, info: null, impl: null, tab: 'overview', layout: null, source: null, busy: false };
+
+/* ---------- API ---------- */
+async function api(path, opts = {}, ms = 30000) {
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), ms);
+  const headers = { ...(opts.headers || {}) };
+  if (opts.method && opts.method !== 'GET') headers['X-Seance-Token'] = TOKEN;
   try {
-    const headers = { ...(opts && opts.headers), 'X-Seance-Token': TOKEN };
     const res = await fetch(path, { ...opts, headers, signal: ctl.signal });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) { const d = body.detail; throw new Error(Array.isArray(d) ? d.map((x) => x.msg).join('; ') : d || res.statusText); }
+    const body = res.headers.get('content-type')?.includes('json') ? await res.json() : await res.text();
+    if (!res.ok) throw new Error(typeof body === 'object' ? (Array.isArray(body.detail) ? body.detail.map((d) => d.msg).join('\n') : body.detail) : body);
     return body;
-  } catch (e) { throw e.name === 'AbortError' ? new Error('The server took too long to answer.') : e; }
+  } catch (e) { if (e.name === 'AbortError') throw new Error('This took too long and was stopped.'); throw e; }
   finally { clearTimeout(timer); }
 }
 const send = (path, data, method = 'POST', ms) => api(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }, ms);
-const FLAME = '<svg class="flame" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-4 3-7 1 1 1 2 2 2 0-2 0-5 1-7Z" fill="#f1b44c"/></svg>';
-function say(text = '', cls = '', flame = false) { const s = $('status'); s.className = cls; s.innerHTML = text ? (flame ? FLAME : '') + `<span>${esc(text)}</span>` : ''; }
-const fail = (prefix) => (e) => say(`${prefix}${e.message}`, 'error');
-const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
-const title = (s) => String(s).replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
+let toastTimer;
+function say(msg, kind = '') { const t = $('toast'); t.textContent = msg; t.className = kind; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), kind === 'error' ? 9000 : 4000); }
+
+async function busy(btn, label, fn) {
+  if (st.busy) { say('Wait for the current task to finish.'); return; } st.busy = true; const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spin" aria-hidden="true"></span> ${esc(label)}`;
+  try { return await fn(); } catch (e) { say(e.message, 'error'); } finally { btn.disabled = false; btn.innerHTML = old; st.busy = false; }
+}
+
+/* ---------- Wisp ---------- */
 const WISP = (mood, size = 64) => `<svg class="wisp" data-mood="${mood}" width="${size}" height="${Math.round(size * 1.12)}" viewBox="0 0 80 90" aria-hidden="true">
   <path d="M40 6C22 6 12 20 12 38v40c0 3 3 4 5 2l6-6 6 6c2 2 4 2 6 0l5-6 5 6c2 2 4 2 6 0l6-6 6 6c2 2 5 1 5-2V38C68 20 58 6 40 6Z" fill="#f1ead9" stroke="#cdbf9f" stroke-width="2"/>
   <g class="m-calm"><circle cx="30" cy="38" r="4.5" fill="#2a2118"/><circle cx="50" cy="38" r="4.5" fill="#2a2118"/><path d="M33 52q7 7 14 0" stroke="#2a2118" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="22" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".6"/><ellipse cx="58" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".6"/></g>
   <g class="m-happy"><path d="M24 40q6-9 12 0M44 40q6-9 12 0" stroke="#2a2118" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M30 50q10 12 20 0" stroke="#2a2118" stroke-width="3" fill="#f3a6a0" stroke-linecap="round"/><ellipse cx="21" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".7"/><ellipse cx="59" cy="48" rx="5" ry="3" fill="#f3a6a0" opacity=".7"/></g>
   <g class="m-worried"><circle cx="30" cy="40" r="4.5" fill="#2a2118"/><circle cx="50" cy="40" r="4.5" fill="#2a2118"/><path d="M23 30l12 4M57 30l-12 4" stroke="#2a2118" stroke-width="3" stroke-linecap="round"/><path d="M32 58q4-6 8 0t8 0" stroke="#2a2118" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M66 26q4 6 0 10-4-4 0-10Z" fill="#9fd8ff"/></g>
   <g class="m-work"><circle cx="30" cy="35" r="4.5" fill="#2a2118"/><circle cx="50" cy="35" r="4.5" fill="#2a2118"/><ellipse cx="40" cy="54" rx="4" ry="5" fill="#2a2118"/></g></svg>`;
-const candle = (state) => {
-  const c = state === 'ok' ? '#7be0bd' : state === 'bad' ? '#ff8f7e' : '#8c8296';
-  const f = state === 'bad' ? 'M12 3c.5 3 4.5 5 4.5 10a4.5 4.5 0 0 1-9 0c0-2.5 1.5-3.5 2.5-5.5.6.8.9 1.6 1.4 1.6.6-1.6.4-3.8.6-6.1Z' : 'M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-4 3-7 1 1 1 2 2 2 0-2 0-5 1-7Z';
-  return `<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="${f}" fill="${state ? c : 'none'}" fill-opacity="${state === 'bad' ? .45 : .9}" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
-};
-$('homeWisp').innerHTML = WISP('calm', 92); $('dropWisp').innerHTML = WISP('work', 56);
+$('logo').innerHTML = WISP('calm', 30); $('homeWisp').innerHTML = WISP('calm', 110);
 
-/* ---------- views ---------- */
-function showView(v) { ['home', 'add', 'prog'].forEach((x) => ($('v-' + x).hidden = x !== v)); if (v !== 'prog') { st.current = null; renderList(); } }
-function confirmDiscard() { return !st.dirty || confirm('You have unsaved changes to the Python. Discard them?'); }
-$('goHome').addEventListener('click', () => { if (confirmDiscard()) { st.dirty = false; showView('home'); } });
-$('goAdd').addEventListener('click', () => { if (confirmDiscard()) { st.dirty = false; showView('add'); } });
-$('homeAdd').addEventListener('click', () => showView('add'));
-$('demo').addEventListener('click', async () => {
-  try {
-    await selectProgram(st.demo, true);
-    const naive = progInfo().implementations.find((i) => i.role === 'naive');
-    if (naive) { const r = document.querySelector(`#implSeg input[value="${naive.module}"]`); if (r) { r.checked = true; r.dispatchEvent(new Event('change')); } }
-    $('examples').value = 10; showTab('check'); await go();
-  } catch (e) { say('Could not start the demo: ' + e.message, 'error'); }
-});
-
-/* ---------- tabs ---------- */
-const tabs = ['check', 'strength', 'try', 'code', 'spec', 'data', 'export'];
-function showTab(name, focus) {
-  tabs.forEach((t) => { const on = t === name; $('t-' + t).setAttribute('aria-selected', on); $('t-' + t).tabIndex = on ? 0 : -1; $('p-' + t).hidden = !on; });
-  if (focus) $('t-' + name).focus();
-  if (name === 'data') loadSets().catch(fail('Could not load test data: '));
+/* ---------- helpers ---------- */
+const titleCase = (s) => String(s).replace(/\b([a-z])/g, (m) => m.toUpperCase());
+function statusOf(impl) {
+  const c = impl && impl.last_check;
+  if (!c) return { cls: '', text: 'Not Checked' };
+  if (!c.current) return { cls: 'warn', text: 'Changed Since Check' };
+  return c.matched ? { cls: 'good', text: 'Matched' } : { cls: 'bad', text: 'Restless' };
 }
-tabs.forEach((t) => $('t-' + t).addEventListener('click', () => showTab(t)));
-$('tablist').addEventListener('keydown', (e) => {
-  const focused = tabs.indexOf((document.activeElement && document.activeElement.id || '').replace(/^t-/, ''));
-  const i = focused >= 0 ? focused : tabs.findIndex((t) => $('t-' + t).getAttribute('aria-selected') === 'true');
-  const j = { ArrowRight: (i + 1) % tabs.length, ArrowLeft: (i + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1 }[e.key];
-  if (j !== undefined) { e.preventDefault(); showTab(tabs[j], true); }
-});
+function charDiff(a, b) {
+  a = a ?? ''; b = b ?? ''; let x = '', y = ''; const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const p = a[i] ?? '', q = b[i] ?? '';
+    x += p === q ? esc(p) : `<mark>${esc(p || ' ')}</mark>`; y += p === q ? esc(q) : `<mark>${esc(q || ' ')}</mark>`;
+  }
+  return [x, y];
+}
+function md(text) { // small Markdown reader for the generated spec: headings, lists, tables, code
+  const out = []; let table = null, list = 0;
+  const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const closeTable = () => { if (table) { out.push('<div class="scroll" style="max-height:none"><table>' + table.join('') + '</table></div>'); table = null; } };
+  const closeList = () => { while (list > 0) { out.push('</ul>'); list--; } };
+  for (const line of text.split('\n')) {
+    if (/^\|/.test(line)) { closeList(); if (/^\|\s*-/.test(line)) continue; const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+      if (!table) { table = ['<tr>' + cells.map((c) => `<th>${inline(c)}</th>`).join('') + '</tr>']; } else table.push('<tr>' + cells.map((c) => `<td>${inline(c)}</td>`).join('') + '</tr>'); continue; }
+    closeTable();
+    const h = line.match(/^(#{1,3}) (.*)/); if (h) { closeList(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+    const li = line.match(/^(\s*)- (.*)/);
+    if (li) { const depth = Math.floor(li[1].length / 2) + 1; while (list < depth) { out.push('<ul>'); list++; } while (list > depth) { out.push('</ul>'); list--; } out.push(`<li>${inline(li[2])}</li>`); continue; }
+    closeList(); if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+  }
+  closeTable(); closeList(); return out.join('');
+}
+
+/* ---------- routing ---------- */
+function go(program, tab) { const h = program ? `#/${program}/${tab || 'overview'}` : '#/'; if (location.hash !== h) location.hash = h; else route(); }
+async function route() {
+  const [, prog, tab] = location.hash.split('/');
+  if (!prog || !st.programs.some((p) => p.name === prog)) { showHome(); return; }
+  if (prog !== st.current) await openProgram(prog);
+  showTab(['overview', 'code', 'prove', 'try'].includes(tab) ? tab : 'overview');
+  if (st.autoCheck && st.tab === 'prove') { st.autoCheck = false; $('result').innerHTML = ''; $('runCheck').click(); }
+}
+window.addEventListener('hashchange', route);
 
 /* ---------- catalog ---------- */
-const progInfo = (name = st.current) => st.catalog.find((p) => p.name === name);
-const stateOf = (name) => { const p = progInfo(name); const v = (p ? p.implementations : []).map((i) => (store[key(name, i.module)] || {}).check).filter(Boolean); return v.includes('bad') ? 'bad' : v.includes('ok') ? 'ok' : ''; };
-function renderList(refocus) {
-  const words = { ok: 'Matched', bad: 'Differs' };
-  $('progList').innerHTML = st.catalog.map((p) => `<li><button class="stone" data-name="${esc(p.name)}" ${st.current === p.name ? 'aria-current="page"' : ''} ${st.busy ? 'disabled' : ''}>${candle(stateOf(p.name))}<b>${esc(p.title)}</b><small>${p.user_added ? 'Yours' : 'Example'} &middot; ${words[stateOf(p.name)] || 'Not Checked Yet'}</small></button></li>`).join('');
-  $('progList').querySelectorAll('.stone').forEach((b) => b.addEventListener('click', () => selectProgram(b.dataset.name).catch(fail('Could not open the program: '))));
-  if (refocus) { const b = $('progList').querySelector('[aria-current=page]'); if (b) b.focus(); }
-}
-function supportHtml() {
-  const a = st.about; if (!a) return '';
-  return `<div class="yes"><h3>Works Today</h3><ul>${a.supported.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div><div class="no"><h3>Not Yet (I'll Say So Clearly)</h3><ul>${a.not_yet.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
-}
-async function loadCatalog(select) {
+async function loadCatalog() {
   const [about, data] = await Promise.all([st.about ? Promise.resolve(st.about) : api('/api/about'), api('/api/programs')]);
-  st.about = about; st.catalog = data.programs; st.demo = data.demo;
-  $('banner').hidden = data.legacy_runtime;
-  if (!data.legacy_runtime) $('banner').textContent = 'GnuCOBOL was not found, so nothing can be run. Start the app with scripts/run.ps1.';
-  $('demo').hidden = !st.demo;
-  $('examples').max = about.defaults.max_rounds; if (!$('examples').value) $('examples').value = about.defaults.rounds;
-  $('supportLists').innerHTML = $('supportLists2').innerHTML = supportHtml();
+  st.about = about; st.programs = data.programs; st.demo = data.demo;
+  const rt = $('runtime');
+  rt.className = 'pill ' + (data.legacy_runtime ? 'good' : 'bad');
+  rt.textContent = data.legacy_runtime ? 'GnuCOBOL Ready' : 'GnuCOBOL Not Found';
+  rt.title = data.legacy_runtime ? 'The real COBOL compiler and runtime are available.' : 'Install GnuCOBOL into tools\\gnucobol to record and check programs.';
+  $('supported').innerHTML = about.supported.map((s) => `<li>${esc(s)}</li>`).join('');
+  $('notYet').innerHTML = about.not_yet.map((s) => `<li>${esc(s)}</li>`).join('');
+  $('rounds').value = $('rounds').value || about.defaults.rounds; $('rounds').max = about.defaults.max_rounds;
   renderList();
-  if (select) await selectProgram(select, true);
 }
+function renderList() {
+  const card = (p) => { const s = statusOf(p.implementations[0]);
+    return `<li><button class="pcard" data-p="${esc(p.name)}" ${p.name === st.current ? 'aria-current="page"' : ''}>
+      <span class="row"><b>${esc(p.title)}</b><span class="pill ${s.cls}">${s.text}</span></span>
+      <small>${esc(p.error ? 'Cannot be read: see Overview' : titleCase(p.io || ''))}</small></button></li>`; };
+  const yours = st.programs.filter((p) => p.user_added), ex = st.programs.filter((p) => !p.user_added);
+  $('yours').innerHTML = yours.map(card).join(''); $('yoursHead').hidden = !yours.length;
+  $('examples').innerHTML = ex.map(card).join('') || '<li class="muted">No examples found.</li>';
+  document.querySelectorAll('.pcard').forEach((b) => b.addEventListener('click', () => go(b.dataset.p, st.current === b.dataset.p ? st.tab : 'overview')));
+}
+function showHome() { st.current = null; $('home').hidden = false; $('prog').hidden = true; renderList(); document.title = 'Séance: Move COBOL To Python And Prove It'; }
 
 /* ---------- program ---------- */
-function setBusy(v) {
-  st.busy = v;
-  ['go', 'tryit', 'mutateBtn'].forEach((id) => ($(id).disabled = v));
-  $('saveRun').disabled = $('save').disabled = v || !st.editable;
-  ['del', 'goAdd', 'copyPrompt', 'redraft', 'browseData', 'homeAdd'].forEach((id) => ($(id).disabled = v));
-  document.querySelectorAll('.stone, #implSeg input').forEach((b) => (b.disabled = v));
-}
-async function selectProgram(name, force) {
-  if (!force && name === st.current) return;
-  if (!force && !confirmDiscard()) return;
-  const token = ++st.token;
-  st.current = name; st.dirty = false; showView('prog'); st.current = name; renderList(!force);
-  const p = progInfo(name);
-  $('pName').textContent = p.title;
-  $('del').hidden = !p.user_added;
-  $('redraft').hidden = !p.user_added;
-  const chips = [];
-  if (p.format) chips.push(`<span class="chip"><b>${title(p.format)}</b> Format</span>`);
-  if (p.input) chips.push(`<span class="chip">Reads <b>${esc(p.input.file)}</b> &middot; ${p.input.lines ? 'Text Lines' : 'Fixed Records'} of ${p.input.width}</span>`);
-  if (p.output) chips.push(`<span class="chip">Writes <b>${esc(p.output.file)}</b> &middot; ${p.output.lines ? 'Text Lines' : 'Fixed Records'} of ${p.output.width}</span>`);
+async function openProgram(name) {
+  st.current = name; st.info = st.programs.find((p) => p.name === name); st.layout = null; st.source = null; st.lastReport = null;
+  const info = st.info;
+  if (!st.impl || !info.implementations.some((i) => i.module === st.impl)) st.impl = info.implementations[0]?.module || null;
+  $('home').hidden = true; $('prog').hidden = false; renderList();
+  document.title = `${info.title}: Séance`;
+  $('pTitle').textContent = info.title;
+  $('pPurpose').textContent = info.purpose || (info.user_added ? 'Your program.' : '');
+  const chips = (info.files || []).map((f) => `<span class="pill" title="${esc(f.name)}, ${f.size} bytes per record">${f.role === 'output' ? 'Writes' : f.role === 'input' ? 'Reads' : 'Reads And Writes'} ${esc(f.assign)}</span>`);
+  if (info.console_input?.length) chips.push('<span class="pill">Reads Console Input</span>');
+  if (info.program_id) chips.unshift(`<span class="pill" title="PROGRAM-ID in the COBOL">${esc(info.program_id)}</span>`);
+  chips.push(`<span class="pill">${info.format === 'fixed' ? 'Fixed Format' : 'Free Format'}</span>`);
+  if (info.user_added) chips.push('<span class="pill warn">Yours</span>');
   $('pChips').innerHTML = chips.join('');
-  const impls = p.implementations;
-  st.impl = impls.some((i) => i.module === st.impl) ? st.impl : (impls.find((i) => i.role !== 'naive') || impls[0] || {}).module || '';
-  const roles = impls.map((i) => i.role);
-  $('whichHelp').hidden = !roles.includes('naive');
-  $('whichHelp').textContent = 'The reference version should pass. The naive draft, written the way a first attempt often is, should fail. Flip between them to see the difference.';
-  if (impls.length <= 1) $('implSeg').innerHTML = `<span style="font-weight:600">${esc(impls[0] ? impls[0].label : 'None Yet')}</span>`;
-  else {
-    $('implSeg').innerHTML = `<div class="seg" role="radiogroup" aria-labelledby="implLbl">${impls.map((i) => `<label><input type="radio" name="impl" value="${esc(i.module)}" ${i.module === st.impl ? 'checked' : ''}>${esc(i.label)}</label>`).join('')}</div>`;
-    $('implSeg').querySelectorAll('input').forEach((r) => r.addEventListener('change', () => {
-      if (r.value === st.impl) return;
-      if (!confirmDiscard()) { document.querySelector(`#implSeg input[value="${st.impl}"]`).checked = true; return; }
-      st.impl = r.value; st.dirty = false; st.token++; loadSource().catch(fail('Could not load the code: '));
-    }));
+  renderImpl();
+  ['result', 'strength', 'tryResult'].forEach((id) => ($(id).innerHTML = ''));
+  renderOverview(); loadSets(); loadLastReport();
+}
+function renderImpl() {
+  const info = st.info; const seg = $('implSeg');
+  seg.hidden = info.implementations.length < 2;
+  seg.title = 'Which Python to check. The buggy hand-written port uses floats on purpose, to show what the check catches.';
+  seg.innerHTML = info.implementations.map((i) => `<button aria-pressed="${i.module === st.impl}" data-m="${esc(i.module)}" title="${esc(i.module)}">${esc(i.role === 'naive' ? 'Buggy Hand-Written Port' : i.role === 'yours' ? 'Your Python' : 'Séance Python')}</button>`).join('');
+  seg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { st.impl = b.dataset.m; st.source = null; renderImpl(); $('result').innerHTML = ''; $('strength').innerHTML = ''; $('tryResult').innerHTML = ''; loadLastReport(); if (st.tab === 'code') renderCode(); }));
+  const q = (what) => `/api/download/${encodeURIComponent(st.current)}?what=${what}&implementation=${encodeURIComponent(st.impl || '')}`;
+  $('dlPython').href = q('python'); $('dlBundle').href = q('bundle'); $('dlReport').href = q('report');
+  const c = info.implementations.find((i) => i.module === st.impl)?.last_check;
+  $('dlReport').setAttribute('aria-disabled', String(!c));
+}
+function showTab(tab) {
+  st.tab = tab;
+  document.querySelectorAll('#tabs [role=tab]').forEach((b) => { const on = b.dataset.tab === tab; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+  ['overview', 'code', 'prove', 'try'].forEach((t) => ($('panel-' + t).hidden = t !== tab));
+  if (tab === 'code') renderCode();
+  if (tab === 'try') renderTry();
+}
+document.querySelectorAll('#tabs [role=tab]').forEach((b) => {
+  b.addEventListener('click', () => go(st.current, b.dataset.tab));
+  b.addEventListener('keydown', (e) => { const tabs = [...document.querySelectorAll('#tabs [role=tab]')]; const i = tabs.indexOf(b);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; n.focus(); go(st.current, n.dataset.tab); } });
+});
+
+async function getLayout() { if (!st.layout) st.layout = await api('/api/layout?program=' + encodeURIComponent(st.current)); return st.layout; }
+async function getSource() { if (!st.source) st.source = await api('/api/source?' + new URLSearchParams({ program: st.current, implementation: st.impl })); return st.source; }
+
+/* ---------- overview ---------- */
+async function renderOverview() {
+  const el = $('panel-overview'); const info = st.info; const name = st.current;
+  if (info.error) { el.innerHTML = `<div class="note bad"><b>Séance cannot read this program yet.</b><br>${esc(info.error)}</div>`; return; }
+  el.innerHTML = '<p class="skeleton">Loading…</p>';
+  let lay, src;
+  try { [lay, src] = await Promise.all([getLayout(), getSource()]); } catch (e) { el.innerHTML = `<div class="note bad">${esc(e.message)}</div>`; return; }
+  if (st.current !== name) return;
+  const notes = [...(lay.unsupported || []).map((u) => `<div class="note bad"><b>Not runnable yet:</b> ${esc(u)}. The Python marks these spots and the check reports them.</div>`),
+    ...(lay.notes || []).map((n) => `<div class="note"><b>Compiler Note:</b> ${esc(n)} The original file is unchanged.</div>`)];
+  const draft = info.draft;
+  const step = (n, title, body) => `<div class="card step"><span class="n">${n}</span><h3>${title}</h3><p>${body}</p></div>`;
+  const impl = info.implementations.find((i) => i.module === st.impl); const s = statusOf(impl);
+  const sets = info.sets || [];
+  const runs = sets.reduce((a, x) => a + (x.records || 0), 0), lines = sets.reduce((a, x) => a + (x.console_lines || 0), 0);
+  const fileCard = (f) => `<div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${f.input && f.output ? 'Reads And Writes' : f.input ? 'Reads' : 'Writes'} ${esc(f.assign)}</h3>
+      <span class="muted">${f.lines ? 'Text lines' : 'Fixed-length records'}, ${f.size} bytes</span></div>
+      <p class="muted" style="margin:4px 0 10px">Record ${esc(f.record || '')} (${esc(f.name)})</p>
+      <div class="scroll"><table><tr><th>Field</th><th class="num">Bytes</th><th>Type</th></tr>${f.fields.map((x) => `<tr><td class="mono">${esc(x.name)}</td><td class="num">${x.start}-${x.end}</td><td>${esc(fieldType(x))}</td></tr>`).join('')}</table></div></div>`;
+  el.innerHTML = `${notes.join('')}
+    <div class="grid3">
+      ${step(1, 'Recorded', `The real COBOL ran on ${runs ? runs + ' input records' : ''}${runs && lines ? ' and ' : ''}${lines ? lines + ' console lines' : ''}${!runs && !lines ? 'its fixed input' : ''} in ${sets.length} test set${sets.length === 1 ? '' : 's'}.`)}
+      ${step(2, 'Translated', draft ? (draft.translated ? (draft.gaps ? `${draft.gaps} statement${draft.gaps === 1 ? '' : 's'} need a person. Everything else was translated.` : 'Every statement was translated to Python.') : 'Written by hand.') : 'No Python yet.')}
+      ${step(3, 'Checked', s.text === 'Not Checked' ? 'Not checked yet. Open Prove It and run the check.' : s.text === 'Matched' ? 'The last check matched the COBOL exactly.' : s.text === 'Restless' ? 'The last check found differences. Open Prove It to see them.' : 'The code changed since the last check. Run it again.')}
+    </div>
+    ${info.user_added ? '<div class="row" style="justify-content:flex-end"><button class="btn danger small" id="delProg">Delete This Program</button></div>' : ''}
+    ${lay.files.length ? `<h2 style="margin-top:8px">Files</h2><div class="grid2">${lay.files.map(fileCard).join('')}</div>` : '<div class="note">This program uses no files. It talks only through the console.</div>'}
+    ${lay.console_input?.length ? `<div class="card"><h3>Console Input</h3><p class="muted" style="margin:0">It asks for: ${lay.console_input.map((a) => `<code>${esc(a)}</code>`).join(', ')}, one value per line.</p></div>` : ''}
+    <details class="card"><summary style="cursor:pointer"><b>What The Program Does, In Plain English</b> <span class="muted">(generated from the COBOL, with line numbers)</span></summary><div class="md" style="margin-top:12px">${md(src.spec || 'No description yet.')}</div></details>`;
+  el.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(st.current, b.dataset.go)));
+  const del = $('delProg'); if (del) del.addEventListener('click', async () => {
+    if (!confirm(`Delete ${info.title}? This removes its COBOL, Python and test data from Séance.`)) return;
+    try { await api('/api/programs/' + encodeURIComponent(st.current), { method: 'DELETE' }); say('Deleted.', 'ok'); st.current = null; await loadCatalog(); go(null); } catch (e) { say(e.message, 'error'); }
+  });
+}
+function fieldType(f) {
+  if (f.kind === 'alpha') return 'Text';
+  if (f.kind === 'edited') return `Edited number ${f.pic}`;
+  const storage = { packed: ', packed (COMP-3)', binary: ', binary (COMP)', native: ', binary (COMP-5)', index: ', index' }[f.usage] || '';
+  return `${f.signed ? 'Signed number' : 'Number'}, ${f.digits - f.scale} digit${f.digits - f.scale === 1 ? '' : 's'}${f.scale ? ` + ${f.scale} decimal${f.scale === 1 ? '' : 's'}` : ''}${storage}`;
+}
+
+/* ---------- code ---------- */
+async function renderCode() {
+  const name = st.current, impl = st.impl; let src;
+  try { src = await getSource(); } catch (e) { say(e.message, 'error'); return; }
+  if (st.current !== name || st.impl !== impl) return;
+  const cob = src.legacy.split('\n');
+  $('cobolInfo').textContent = `${cob.length} lines`;
+  $('cobolPane').innerHTML = cob.map((l, i) => { const fixed = st.info.format === 'fixed'; const comment = fixed ? /^.{6}[*/]/.test(l) : /^\s*\*>/.test(l);
+    return `<div class="ln${comment ? ' cm' : ''}" id="c${i + 1}"><i>${i + 1}</i>${esc(l) || ' '}</div>`; }).join('');
+  const gaps = [...src.migrated.matchAll(/S\.unsupported\("line (\d+): ([^"]*)"\)/g)];
+  $('gapNote').innerHTML = gaps.length ? `<div class="note bad" style="margin-bottom:12px"><b>${gaps.length} statement${gaps.length === 1 ? '' : 's'} need a person.</b> They raise an error naming the COBOL line, so the check fails there instead of passing quietly: ${gaps.slice(0, 6).map((g) => `<a href="#" data-line="${g[1]}">line ${g[1]}</a>`).join(', ')}${gaps.length > 6 ? ' …' : ''}</div>` : '';
+  $('gapNote').querySelectorAll('[data-line]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); jumpCobol(+a.dataset.line); }));
+  const tools = $('pyTools');
+  if (src.editable) {
+    $('pyPane').innerHTML = `<textarea class="code" id="pyEdit" spellcheck="false" aria-label="Python source"></textarea>`;
+    $('pyEdit').value = src.migrated;
+    tools.innerHTML = '<button class="btn small" id="redraft" title="Translate the COBOL again. Your current file is kept as a .bak copy.">Translate Again</button><button class="btn small primary" id="savePy">Save</button>';
+    $('savePy').addEventListener('click', (e) => busy(e.currentTarget, 'Saving', async () => { await send('/api/source', { program: st.current, code: $('pyEdit').value }, 'PUT'); st.source = null; say('Saved. Run the check to see if it still matches.', 'ok'); await refreshInfo(); }));
+    $('redraft').addEventListener('click', (e) => { if (!confirm('Translate the COBOL again? Your current Python is kept as a .bak file next to it.')) return;
+      busy(e.currentTarget, 'Translating', async () => { const r = await send(`/api/programs/${encodeURIComponent(st.current)}/draft`, {}); st.source = null; await refreshInfo(); renderCode(); say(r.translated ? `Translated. ${r.gaps.length} statement(s) need a person.` : r.reason, r.translated ? 'ok' : 'error'); }); });
+  } else {
+    tools.innerHTML = `<span class="muted">${st.info.user_added ? '' : 'Read-only example'}</span>`;
+    const py = src.migrated.split('\n');
+    $('pyPane').innerHTML = `<div class="code" tabindex="0" aria-label="Python source">${py.map((l, i) => { const m = l.match(/#\s*L(\d+)/); const gap = /S\.unsupported\(/.test(l);
+      return `<div class="ln${gap ? ' gap' : ''}${/^\s*#|^\s*"""/.test(l) ? ' cm' : ''}"${m ? ` data-cobol="${m[1]}" title="From COBOL line ${m[1]}"` : ''}><i>${i + 1}</i>${esc(l) || ' '}</div>`; }).join('')}</div>`;
+    $('pyPane').querySelectorAll('[data-cobol]').forEach((d) => d.addEventListener('click', () => { $('pyPane').querySelectorAll('.hl').forEach((x) => x.classList.remove('hl')); d.classList.add('hl'); jumpCobol(+d.dataset.cobol); }));
   }
-  if (p.error) { say(p.error, 'error'); return; }
-  try { await Promise.all([loadSource(), loadLayout()]); }
-  catch (e) { if (token === st.token) { $('migrated').value = ''; $('legacy').textContent = ''; st.editable = false; setBusy(st.busy); say('Could not open ' + p.title + ': ' + e.message, 'error'); } }
 }
-function resetResults() {
-  $('result').hidden = true; $('result').innerHTML = ''; $('checkEmpty').hidden = false; $('tryout').innerHTML = '';
-  $('strength').hidden = true; $('strength').innerHTML = ''; $('strengthEmpty').hidden = false;
+function jumpCobol(n) {
+  document.querySelectorAll('#cobolPane .hl').forEach((x) => x.classList.remove('hl'));
+  const line = $('c' + n); if (!line) return; line.classList.add('hl');
+  const pane = $('cobolPane'); pane.scrollTop = line.offsetTop - pane.clientHeight / 3;
 }
-function implInfo() { return (progInfo().implementations || []).find((i) => i.module === st.impl) || {}; }
-async function loadSource() {
-  const prog = st.current, token = st.token;
-  const s = await api('/api/source?' + new URLSearchParams({ program: prog, implementation: st.impl }));
-  if (prog !== st.current || token !== st.token) return;
-  resetResults(); say();
-  $('legacy').textContent = s.legacy;
-  $('migrated').value = s.migrated; $('migrated').readOnly = !s.editable; st.dirty = false;
-  st.editable = s.editable; $('save').disabled = $('saveRun').disabled = !st.editable || st.busy;
-  const p = progInfo(), info = implInfo();
-  $('codeLead').textContent = s.editable ? 'Left: the original COBOL. Right: your Python, drafted from it. Every drafted line ends with # Lnn, the COBOL line it came from. Ctrl+S saves.'
-    : 'Left: the original COBOL. Right: a shipped example, so it is read-only. Add your own program to get Python you can edit.';
-  $('editHint').textContent = s.editable ? `Saved as migrated/${prog}.py on this computer. Tab inserts spaces; press Esc, then Tab, to move on.` : '';
-  const isStub = s.migrated.includes('Write the migration here');
-  const gaps = (s.migrated.match(/S\.unsupported\(/g) || []).length;
-  $('stubNote').hidden = !(isStub || gaps);
-  $('stubNote').innerHTML = isStub ? '<b>This Python file is still an empty starter.</b> I could not translate this program automatically. Write it in the Code tab, or copy the AI prompt above and give it to Kiro.'
-    : `<b>${plural(gaps, 'statement')} could not be translated automatically.</b> They raise an error naming the COBOL line, so the check will point straight at them. Fix them in the Code tab.`;
-  $('spec').innerHTML = s.spec ? renderSpec(s.spec) : '<p>No description was generated for this program.</p>';
-  const m = /^Purpose, from the source comment: (.*)$/m.exec(s.spec || '');
-  $('pPurpose').textContent = m ? m[1] : 'Open "COBOL Explained" for a description of this program.';
-  const q = new URLSearchParams({ implementation: st.impl });
-  $('dlPy').href = $('dlPy2').href = `/api/download/${encodeURIComponent(prog)}?what=python&${q}`;
-  $('dlZip').href = `/api/download/${encodeURIComponent(prog)}?what=bundle&${q}`;
-  $('dlReport').href = `/api/download/${encodeURIComponent(prog)}?what=report&${q}`;
-  renderEmpty(); renderFlow(); restoreResults();
-}
-function renderEmpty() {
-  $('checkEmpty').innerHTML = `<div class="guide">${WISP('calm', 56)}<div><b>Nothing Checked Yet.</b> Press <b>Run Check</b> and you'll get:<ul><li>A clear pass or fail.</li><li>How many records were compared, set by set.</li><li>If something differs: the smallest input that breaks it, with both answers split into fields and the wrong characters lit up.</li></ul></div></div>`;
-  $('strengthEmpty').innerHTML = `<div class="guide">${WISP('work', 56)}<div><b>Not Measured Yet.</b> This takes a few seconds and needs the check to pass first. You'll see how many planted bugs the saved records catch, and the COBOL line of every bug they miss, so you know which test to add.</div></div>`;
-}
-function renderFlow() {
-  const p = progInfo(), info = implInfo(), r = store[key()] || {};
-  const d = p.draft;
-  const draft = info.role === 'naive' ? ['warn', 'Naive Example', 'A deliberately wrong draft.']
-    : !d ? ['', 'No Python', 'Nothing to test yet.']
-    : d.translated ? (d.gaps ? ['warn', 'Draft Has Gaps', `${plural(d.gaps, 'statement')} to finish by hand.`] : ['done', 'Drafted', 'Every statement translated.'])
-    : d.stub ? ['warn', 'Empty Starter', 'Write it, or ask Kiro.'] : ['done', 'Hand-Written', 'Reference Python.'];
-  const check = !r.check ? ['', 'Not Run', 'Compare with the real COBOL.'] : r.check === 'ok' ? ['done', 'Matched', r.checkText] : ['bad', 'Differs', r.checkText];
-  const strength = !r.strength ? ['', 'Not Measured', 'Plant bugs, see what is caught.'] : [r.strength.caught === r.strength.total ? 'done' : 'warn', `${r.strength.caught} of ${r.strength.total} Caught`, r.strength.caught === r.strength.total ? 'Every planted bug was caught.' : 'Some spots are not tested.'];
-  const exp = r.check === 'ok' ? ['done', 'Ready', 'Download a standalone program.'] : ['', 'Available', 'Best after a passing check.'];
-  const steps = [['code', 'Python', ...draft], ['check', 'Check', ...check], ['strength', 'Test Strength', ...strength], ['export', 'Export', ...exp]];
-  $('flow').innerHTML = steps.map(([tab, name, state, head, sub], i) => `<li><button data-tab="${tab}" data-state="${state}"><span class="dot">${state === 'done' ? '&#10003;' : state === 'bad' ? '!' : i + 1}</span><b>${esc(name)}: ${esc(head)}</b><small>${esc(sub || '')}</small></button></li>`).join('');
-  $('flow').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab, true)));
-  $('exportNote').hidden = r.check === 'ok';
-  $('exportNote').innerHTML = r.check === 'bad' ? '<b>The last check found differences.</b> You can still download the Python, but it does not match the COBOL yet.' : '<b>No passing check yet in this session.</b> Run the check first so the report can go in the download.';
-}
+async function refreshInfo() { const data = await api('/api/programs'); st.programs = data.programs; st.info = st.programs.find((p) => p.name === st.current) || st.info; renderList(); renderImpl(); }
 
-/* ---------- layout and samples ---------- */
-const fieldType = (f) => f.kind === 'alpha' ? 'Text' : f.kind === 'edited' ? `Edited Number <code>${esc(f.pic)}</code>`
-  : `Number, ${f.digits - f.scale} Digit${f.digits - f.scale === 1 ? '' : 's'}${f.scale ? ' + ' + f.scale + ' Decimal' + (f.scale === 1 ? '' : 's') : ''}${{ none: '', leading_sep: ', +/- First', trailing_sep: ', +/- Last', leading_over: ', Sign in First Digit', trailing_over: ', Sign in Last Digit' }[f.sign] || ''}`;
-async function loadLayout() {
-  const prog = st.current;
-  const l = await api('/api/layout?program=' + encodeURIComponent(prog));
-  if (prog !== st.current) return;
-  st.layout = l;
-  const rows = l.input.fields.map((f) => `<tr><td class="mono">${esc(f.name)}</td><td>${f.start}&ndash;${f.end}</td><td>${fieldType(f)}</td></tr>`).join('');
-  $('layout').innerHTML = `<div class="scroll"><table><tr><th>Field</th><th style="width:90px">Columns</th><th>Contents</th></tr>${rows}</table></div><p class="note">${l.input.width} characters per record. Numbers have no decimal point: with two decimals, 12.50 is written <code>1250</code>, padded with zeros.</p>${l.notes.map((n) => `<p class="note">${esc(n)}</p>`).join('')}`;
-  $('dataHint').textContent = `${l.input.organization === 'line' ? 'Text lines' : `Fixed-length records of ${l.input.width} characters, with or without line breaks`}: the same ${l.input.file} file the COBOL reads. Up to ${st.about.defaults.max_data_records} records.`;
-  await fillSample();
+/* ---------- prove ---------- */
+async function loadLastReport() {
+  const name = st.current, impl = st.impl; if (!impl) return;
+  try { const r = await api('/api/report?' + new URLSearchParams({ program: name, implementation: impl }));
+    if (st.current === name && st.impl === impl && r.report && !$('result').innerHTML) renderReport(r.report, r.status);
+  } catch { /* no report yet */ }
 }
-async function fillSample() { try { $('lines').value = (await api('/api/sample?program=' + encodeURIComponent(st.current))).line; } catch { $('lines').value = ''; } }
-
-/* ---------- field-level diff ---------- */
-const splitFields = (text, fields) => fields.map((f) => text.slice(f.start - 1, f.end).padEnd(f.end - f.start + 1));
-function hl(a, b, cls = '') { let out = ''; for (let i = 0; i < Math.max(a.length, b.length); i++) { const ch = a[i] ?? ''; out += ch !== (b[i] ?? '') ? `<mark class="${cls}">${esc(ch === ' ' ? '\u00a0' : ch) || '\u2205'}</mark>` : esc(ch); } return out; }
-function fieldTable(expected, actual) {
-  const fields = st.layout.output.fields, crashed = actual.startsWith('<') && actual.endsWith('>');
-  if (crashed) return `<p class="note" style="padding:8px 12px 0">The Python raised an error instead of producing a record:</p><pre style="margin:8px 12px 12px" class="fail wrap">${esc(actual)}</pre><div class="scroll"><table><tr><th>COBOL Printed</th></tr><tr><td class="mono">${esc(expected)}</td></tr></table></div>`;
-  const e = splitFields(expected, fields), a = splitFields(actual, fields);
-  const rows = fields.map((f, i) => { const same = e[i] === a[i];
-    return `<tr class="${same ? '' : 'diff'}"><td>${esc(f.name)}</td><td class="mono">${same ? esc(e[i]) : hl(e[i], a[i], 'cob')}</td><td class="mono">${same ? esc(a[i]) : hl(a[i], e[i])}</td><td style="width:90px" class="${same ? 'pass' : 'fail'}">${same ? 'Same' : 'Differs'}</td></tr>`; }).join('');
-  return `<div class="scroll"><table><tr><th>Field</th><th>COBOL Printed</th><th>Python Printed</th><th style="width:90px"></th></tr>${rows}</table></div>`;
+$('runCheck').addEventListener('click', (e) => busy(e.currentTarget, 'Checking', async () => {
+  const name = st.current, impl = st.impl;
+  $('result').innerHTML = `<div class="card verdict"><div>${WISP('work', 64)}</div><div><div class="big">Running Both Programs…</div><p class="muted" style="margin:0">Replaying the saved runs, then generating fresh input.</p></div></div>`;
+  try { const r = await send('/api/verify', { program: name, implementation: impl, rounds: +$('rounds').value || st.about.defaults.rounds }, 'POST', 900000);
+    if (st.current === name && st.impl === impl) renderReport(r, { current: true }); await refreshInfo();
+  } catch (err) { $('result').innerHTML = `<div class="note bad"><b>The check could not run.</b><br>${esc(err.message)}</div>`; }
+}));
+function diffBlock(d, title) {
+  const where = d.index < 0 ? (d.stream === 'run' ? 'How The Run Ended' : `File ${esc(d.stream)}`) : `${d.stream === 'console' ? 'Console' : esc(d.stream)}, Line ${d.index + 1}`;
+  const [a, b] = charDiff(d.expected, d.actual);
+  const bad = (d.fields || []).filter((f) => !f.same);
+  return `<div class="diff"><div class="where">${title ? esc(title) + ': ' : ''}${where}</div>
+    <div class="pair"><span>COBOL</span><code>${a}</code><span>Python</span><code>${b}</code></div>
+    ${bad.length ? `<table class="fields"><tr><th>Field</th><th>COBOL</th><th>Python</th></tr>${bad.map((f) => `<tr><td class="mono">${esc(f.name)}</td><td class="mono">${esc(f.expected)}</td><td class="mono bad">${esc(f.actual)}</td></tr>`).join('')}</table>` : ''}</div>`;
 }
-const caseBlock = (m, head, explain) => `<div class="evidence"><h3>${esc(head)}</h3><p class="note">${esc(explain)}</p>
-  <div class="case"><div class="in"><span>Input Record</span><span class="rec mono">${esc(m.input)}</span><button class="btn small" data-try="${esc(m.input)}">Try This Record</button></div>${fieldTable(m.expected, m.actual)}</div></div>`;
-
-/* ---------- check ---------- */
-function renderCheck(r, label) {
-  $('checkEmpty').hidden = true; $('result').hidden = false;
-  const sets = Object.entries(r.fixtures);
-  const total = sets.reduce((a, [, f]) => a + f.records, 0), bad = sets.reduce((a, [, f]) => a + f.mismatches, 0);
-  const rows = sets.map(([, f]) => `<tr><td>${esc(f.label)}</td><td style="width:140px">${plural(f.records, 'Record')}</td><td style="width:170px" class="${f.mismatches ? 'fail' : 'pass'}">${f.mismatches ? `${plural(f.mismatches, 'Record')} ${f.mismatches === 1 ? 'Differs' : 'Differ'}` : 'All Identical'}</td></tr>`).join('')
-    + `<tr><td>New random records, generated for this check</td><td>${r.property_mismatch ? 'Stopped at First Failure' : plural(r.property_runs, 'Round')}</td><td class="${r.property_mismatch ? 'fail' : 'pass'}">${r.property_mismatch ? 'A Difference Was Found' : 'All Identical'}</td></tr>`;
-  const headline = r.matched ? 'The Python gave exactly the same output as the COBOL on every record tried.'
-    : `The Python output differs from the COBOL${bad ? ` on ${bad} of ${plural(total, 'saved record')}` : ' on newly generated records'}.`;
-  const sub = r.matched ? `Checked ${esc(label)} at ${new Date().toLocaleTimeString()}: ${plural(total, 'saved record')} and ${plural(r.property_runs, 'random round')}. That's strong evidence, not a proof for every possible input. Next: measure Test Strength.`
-    : 'Below is an input where the two disagree. Fix the Python and run the check again. "COBOL Explained" lists every place the COBOL rounds or cuts off a number.';
-  let h = `<div class="verdict ${r.matched ? 'ok' : 'bad'}">${WISP(r.matched ? 'happy' : 'worried', 72)}<div class="stamp" aria-hidden="true">${r.matched ? 'Spirit<br>Matched' : 'Spirit<br>Restless'}</div><div>
-    <h2 id="verdictH" tabindex="-1"><span class="sr">${r.matched ? 'Spirit matched. ' : 'Spirit restless. '}</span>${headline}</h2><p>${sub}</p></div></div>
-    <div class="scroll"><table><tr><th>What Was Compared</th><th style="width:140px">How Many</th><th style="width:170px">Result</th></tr>${rows}</table></div>`;
-  if (!r.matched) {
-    if (r.property_mismatch) h += caseBlock(r.property_mismatch, 'Smallest Failing Input', 'I generated random records, found a failure, then made it as simple as I could while it still fails.');
-    r.mismatches.slice(0, 2).forEach((m) => { h += caseBlock(m, `Failing Record ${m.index + 1} of "${(r.fixtures[m.source] || {}).label || m.source}"`, 'A saved record where the outputs differ. The lit-up characters are the ones that are not the same.'); });
-    if (r.mismatches.length > 2) h += `<p class="note">${plural(r.mismatches.length - 2, 'more failing saved record')} not shown.</p>`;
-  } else h += `<details><summary>Not Covered by This Check</summary><ul class="note"><li>Input that does not follow the record layout, such as letters in a number field.</li><li>File errors, abends and other behavior outside the record transformation.</li><li>Inputs nobody generated. Add real files in Test Data, and see which spots are untested in Test Strength.</li></ul></details>`;
-  h += `<details><summary>Plain-Text Report</summary><pre class="wrap">${esc(r.markdown)}</pre></details>`;
-  $('result').innerHTML = h;
-}
-function restoreResults() {
-  const r = store[key()] || {};
-  if (r.lastCheck) renderCheck(r.lastCheck, r.lastLabel || '');
-  if (r.lastStrength) renderStrength(r.lastStrength);
-}
-$('result').addEventListener('click', (e) => { const b = e.target.closest('[data-try]'); if (!b) return; $('lines').value = b.dataset.try; showTab('try'); $('tryit').click(); });
-async function save() {
-  const snapshot = $('migrated').value;
-  await send('/api/source', { program: st.current, code: snapshot }, 'PUT');
-  delete store[key()]; saveStore(); renderList(); renderFlow();
-  if ($('migrated').value === snapshot) st.dirty = false;
-}
-async function go() {
-  if (st.busy) return;
-  const prog = st.current, impl = st.impl, token = st.token, label = implInfo().label || impl;
-  setBusy(true); resetResults(); renderEmpty();
-  say('Running the COBOL and the Python side by side. This can take up to a minute.', '', true);
-  try {
-    if (!$('migrated').readOnly && st.dirty) { say('Saving your Python first.', '', true); await save(); }
-    const r = await send('/api/verify', { program: prog, implementation: impl, examples: Number($('examples').value) }, 'POST', 660000);
-    if (prog !== st.current || token !== st.token) return;
-    const total = Object.values(r.fixtures).reduce((a, f) => a + f.records, 0), bad = Object.values(r.fixtures).reduce((a, f) => a + f.mismatches, 0);
-    Object.assign(rec(prog, impl), { check: r.matched ? 'ok' : 'bad', checkText: r.matched ? `${total} saved records + ${r.property_runs} rounds identical.` : bad ? `${bad} of ${total} saved records differ.` : 'New random records differ.', lastCheck: r, lastLabel: label });
-    delete rec(prog, impl).strength; delete rec(prog, impl).lastStrength; saveStore();
-    showTab('check'); renderCheck(r, label); say(); renderList(); renderFlow(); $('verdictH').focus();
-  } catch (e) { say('The check could not finish: ' + e.message, 'error'); }
-  finally { setBusy(false); }
-}
-$('go').addEventListener('click', go);
-$('saveRun').addEventListener('click', async () => { try { await save(); showTab('check'); await go(); } catch (e) { say('Not saved: ' + e.message, 'error'); } });
-
-/* ---------- test strength ---------- */
-function renderStrength(r) {
-  $('strengthEmpty').hidden = true; $('strength').hidden = false;
-  const pct = r.total ? Math.round(100 * r.caught / r.total) : 0;
-  const survivors = r.mutants.filter((m) => !m.caught);
-  const where = (m) => m.cobol_line ? `COBOL Line ${m.cobol_line}` : `Python Line ${m.line}`;
-  let h = `<div class="card"><div class="guide">${WISP(survivors.length ? 'worried' : 'happy', 56)}<div style="flex:1"><h2 class="sec">${r.caught} of ${r.total} Planted Bugs Caught</h2>
-    <div class="meter" role="img" aria-label="${pct} percent caught"><span style="width:${pct}%"></span></div>
-    <p class="note">Replayed ${plural(r.records, 'saved record')} against each planted bug. ${survivors.length ? `${plural(survivors.length, 'bug')} slipped through: no saved record tells the buggy version apart from the real one.` : 'Every planted bug changed at least one output, so the saved records exercise all of these spots.'}</p></div></div></div>`;
-  h += `<div class="scroll" style="margin-top:16px"><table><tr><th style="width:110px">Result</th><th style="width:150px">Where</th><th>Planted Bug</th><th style="width:160px">Records It Broke</th></tr>${r.mutants.map((m) =>
-    `<tr><td><span class="badge ${m.caught ? 'ok' : 'bad'}">${m.caught ? 'Caught' : 'Survived'}</span></td><td>${where(m)}</td><td>${esc(m.change.charAt(0).toUpperCase() + m.change.slice(1))}</td><td>${m.caught ? (m.failing ? plural(m.failing, 'Record') : 'Crashed or Hung') : 'None'}</td></tr>`).join('')}</table></div>`;
-  if (survivors.length) h += `<div class="notice" style="margin-top:16px"><b>What To Do With a Survivor.</b> Look at its line in the Code tab. If that line matters for the output, add a record that reaches it, for example a value right on a boundary, through Test Data or Try a Record. If the line can never change the output (a counter that is never written, a boundary where both branches give the same answer), the survivor is expected.</div>`;
-  $('strength').innerHTML = h;
-}
-$('mutateBtn').addEventListener('click', async () => {
-  if (st.busy) return;
-  const prog = st.current, impl = st.impl, token = st.token;
-  setBusy(true); say('Planting bugs one at a time and replaying the saved records.', '', true);
-  try {
-    if (!$('migrated').readOnly && st.dirty) await save();
-    const r = await send('/api/mutate', { program: prog, implementation: impl }, 'POST', 660000);
-    if (prog !== st.current || token !== st.token) return;
-    Object.assign(rec(prog, impl), { strength: { caught: r.caught, total: r.total }, lastStrength: r }); saveStore();
-    renderStrength(r); renderFlow(); say();
-  } catch (e) { say('Could not measure test strength: ' + e.message, 'error'); }
-  finally { setBusy(false); }
-});
-
-/* ---------- try a record ---------- */
-$('sample').addEventListener('click', fillSample);
-$('tryit').addEventListener('click', async () => {
-  const lines = $('lines').value.split('\n').map((l) => l.replace(/\r$/, '')).filter((l) => l.trim());
-  if (!lines.length) { say('Type at least one record first.', 'error'); return; }
-  const prog = st.current;
-  setBusy(true); say('Running both programs.', '', true);
-  try {
-    if (!$('migrated').readOnly && st.dirty) await save();
-    const { rows } = await send('/api/compare', { program: prog, implementation: st.impl, lines }, 'POST', 130000);
-    if (prog !== st.current) return;
-    $('tryout').innerHTML = '<div class="evidence"><h3>Results</h3>' + rows.map((r, i) => `<div class="case"><div class="in"><span>Record ${i + 1}</span><span class="rec mono">${esc(r.input)}</span><span class="badge ${r.match ? 'ok' : 'bad'}">${r.match ? 'Same' : 'Differs'}</span></div>${fieldTable(r.legacy, r.python)}</div>`).join('') + '</div>';
-    say();
-  } catch (e) { say('Could not run: ' + e.message, 'error'); }
-  finally { setBusy(false); }
-});
-
-/* ---------- code editor ---------- */
-$('wrap').addEventListener('change', (e) => { $('legacy').classList.toggle('wrap', e.target.checked); $('migrated').style.whiteSpace = e.target.checked ? 'pre-wrap' : 'pre'; });
-$('migrated').addEventListener('input', () => { st.dirty = true; resetResults(); renderEmpty(); });
-let escapeArmed = false;
-$('migrated').addEventListener('keydown', (e) => {
-  const t = e.target;
-  if (e.key === 'Escape') { escapeArmed = true; return; }
-  if (e.key === 'Tab' && !t.readOnly && !escapeArmed && !e.shiftKey) { e.preventDefault(); t.setRangeText('    ', t.selectionStart, t.selectionEnd, 'end'); st.dirty = true; resetResults(); renderEmpty(); }
-  if (e.key !== 'Escape') escapeArmed = false;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (!t.readOnly) save().then(() => say('Saved.', 'ok')).catch(fail('Not saved: ')); }
-});
-$('save').addEventListener('click', () => save().then(() => say(`Saved migrated/${st.current}.py`, 'ok')).catch(fail('Not saved: ')));
-$('redraft').addEventListener('click', async () => {
-  if (!confirm('Write a fresh Python draft from the COBOL? Your current file is kept next to it as a .bak copy.')) return;
-  setBusy(true); say('Translating the COBOL again.', '', true);
-  try {
-    const r = await send(`/api/programs/${encodeURIComponent(st.current)}/draft`, {}, 'POST', 120000);
-    delete store[key()]; saveStore();
-    await loadCatalog(st.current);
-    say(r.translated ? `Redrafted: ${plural(r.statements, 'statement')}, ${plural(r.gaps.length, 'gap')}. The old file is saved as migrated/${st.current}.py.bak.` : `Could not translate: ${r.reason}`, r.translated ? 'ok' : 'error');
-  } catch (e) { say('Could not redraft: ' + e.message, 'error'); }
-  finally { setBusy(false); }
-});
-window.addEventListener('beforeunload', (e) => { if (st.dirty) { e.preventDefault(); e.returnValue = ''; } });
-document.querySelectorAll('a.btn[download], #dlZip, #dlPy, #dlPy2').forEach((a) => a.setAttribute('download', ''));
-$('dlReport').addEventListener('click', async (e) => {
-  e.preventDefault();
-  try { const res = await fetch($('dlReport').href); if (!res.ok) throw new Error((await res.json()).detail); const blob = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${st.current}-report.md`; a.click(); URL.revokeObjectURL(a.href); }
-  catch (err) { say('No report yet: ' + err.message, 'error'); }
-});
-
-/* ---------- spec renderer (the spec is generated markdown) ---------- */
-function renderSpec(md) {
-  const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-  const out = []; let table = [], list = false;
-  const flush = () => { if (!table.length) return; const [head, , ...body] = table; const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
-    out.push(`<div class="scroll"><table><tr>${cells(head).map((c) => `<th>${inline(c)}</th>`).join('')}</tr>${body.map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`); table = []; };
-  for (const line of md.split('\n')) {
-    if (line.startsWith('|')) { table.push(line); continue; } flush();
-    const m = /^(\s*)- (.*)$/.exec(line);
-    if (m) { if (!list) { out.push('<ul>'); list = true; } out.push(`<li style="margin-left:${m[1].length * 8}px">${inline(m[2])}</li>`); continue; }
-    if (list) { out.push('</ul>'); list = false; }
-    if (line.startsWith('### ')) out.push(`<h5>${inline(line.slice(4))}</h5>`);
-    else if (line.startsWith('## ')) out.push(`<h4>${inline(title(line.slice(3).toLowerCase()).replace(/\b(Of|By|The|A|An|And|Or|In|To|Per|Can)\b/g, (w) => w.toLowerCase()).replace(/^./, (c) => c.toUpperCase()))}</h4>`);
-    else if (line.startsWith('# ')) out.push(`<h4>${inline(line.slice(2))}</h4>`);
-    else if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+function renderReport(r, status) {
+  const good = r.matched; const rc = r.receipt || {};
+  const differing = r.sets.reduce((a, s) => a + s.differing, 0), compared = r.sets.reduce((a, s) => a + s.compared, 0);
+  const stale = status && status.current === false;
+  const naive = st.info.implementations.find((i) => i.module === r.implementation)?.role === 'naive';
+  let html = `<div class="card"><div class="verdict ${good ? 'good' : 'bad'}"><div>${WISP(good ? 'happy' : 'worried', 72)}</div><div>
+      <div class="big">${good ? 'Spirit Matched' : 'Spirit Restless'}</div>
+      <p style="margin:2px 0 0">${good ? 'The Python produced exactly the same output as the COBOL in every saved run and every random run.' : naive ? 'This is the deliberately buggy hand-written port. It does its money math in floats, so amounts drift by a cent and overflow differently. Below is exactly where.' : 'The Python does not behave like the COBOL yet. The differences are below; the COBOL\'s output is the expected answer.'}</p>
+      ${stale ? '<p class="pill warn" style="margin-top:8px">The code changed after this check. Run it again.</p>' : ''}
+      <div class="stats"><div><b>${compared}</b><span>Output Lines Compared</span></div><div><b>${differing}</b><span>Lines Differ</span></div><div><b>${r.random_runs}</b><span>Random Runs</span></div><div><b>${r.sets.length}</b><span>Saved Test Sets</span></div></div>
+      ${rc.cobol_sha256 ? `<div class="receipt">Receipt: COBOL ${esc(rc.cobol_sha256)} · Python ${esc(rc.python_sha256)} · ${esc(rc.checked_at)}</div>` : ''}
+    </div></div></div>`;
+  html += `<div class="card"><h2>Saved Test Sets</h2><div class="scroll" style="max-height:none"><table><tr><th>Set</th><th class="num">Input</th><th class="num">Compared</th><th class="num">Differ</th></tr>${r.sets.map((s) => `<tr><td>${esc(s.label)}${s.python_error ? `<br><small class="muted">Python stopped: ${esc(s.python_error)}</small>` : ''}</td><td class="num">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' console lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num">${s.compared}</td><td class="num">${s.differing ? `<span class="pill bad">${s.differing}</span>` : '<span class="pill good">0</span>'}</td></tr>`).join('')}</table></div></div>`;
+  const f = r.random_failure;
+  if (f) {
+    const inputs = Object.entries(f.inputs || {}).map(([k, rows]) => `<p style="margin:8px 0 4px"><b>${esc(k)}</b>, ${rows.length} record${rows.length === 1 ? '' : 's'}:</p><div class="out">${rows.map((x) => `<div>${esc(x)}</div>`).join('')}</div>`).join('');
+    const stdin = f.stdin?.length ? `<p style="margin:8px 0 4px"><b>Console input</b>:</p><div class="out">${f.stdin.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : '';
+    html += `<div class="card"><h2>Smallest Input That Shows The Problem</h2><p class="muted">A random run failed. Séance shrank its input to this:</p>${inputs}${stdin}<div style="margin-top:12px">${f.diffs.slice(0, 3).map((d) => diffBlock(d)).join('')}</div>
+      <div class="row" style="margin-top:12px"><button class="btn small" id="tryShrunk">Open In Try Your Input</button></div></div>`;
   }
-  if (list) out.push('</ul>'); flush();
-  return out.join('');
+  const label = (d) => r.sets.find((s) => s.name === d.set)?.label.split(' (')[0];
+  if (r.diffs.length) html += `<div class="card"><h2>Differences In Saved Runs</h2><p class="muted">${differing} line${differing === 1 ? '' : 's'} differ. Highlighted characters are where the two outputs part.</p>${r.diffs.slice(0, 3).map((d) => diffBlock(d, label(d))).join('')}
+    ${r.diffs.length > 3 ? `<details style="margin-top:10px"><summary class="btn small" style="display:inline-flex">Show ${Math.min(r.diffs.length, 20) - 3} More</summary><div style="margin-top:10px">${r.diffs.slice(3, 20).map((d) => diffBlock(d, label(d))).join('')}</div></details>` : ''}</div>`;
+  $('result').innerHTML = html;
+  const ts = $('tryShrunk'); if (ts) ts.addEventListener('click', () => { st.tryPreset = { files: f.inputs, stdin: f.stdin }; go(st.current, 'try'); });
 }
 
-/* ---------- test data ---------- */
+$('runStrength').addEventListener('click', (e) => busy(e.currentTarget, 'Planting Bugs', async () => {
+  const name = st.current;
+  const r = await send('/api/mutate', { program: name, implementation: st.impl }, 'POST', 900000);
+  if (st.current !== name) return;
+  const surv = r.mutants.filter((m) => !m.caught);
+  $('strength').innerHTML = `<div class="note ${surv.length ? 'bad' : 'good'}" style="margin-bottom:10px"><b>${surv.length ? `${surv.length} Bug${surv.length === 1 ? '' : 's'} Slipped Through.` : 'Every Bug Was Caught.'}</b> Séance broke the Python on purpose ${r.total} ways; the saved runs (${r.records} records) noticed ${r.caught}.</div>
+    <div class="scroll" style="max-height:none"><table><tr><th>Where</th><th>Planted Bug</th><th>Result</th></tr>${r.mutants.map((m) => `<tr><td>${m.cobol_line ? `<a href="#" data-line="${m.cobol_line}">COBOL line ${m.cobol_line}</a>` : `Python line ${m.line}`}</td><td>${esc(m.change)}</td><td>${m.caught ? '<span class="pill good">Caught</span>' : '<span class="pill bad">Slipped Through</span>'}</td></tr>`).join('')}</table></div>
+    ${surv.length ? '<p class="muted" style="margin-top:8px">For each bug that slipped through, add test data that reaches that COBOL line, then measure again.</p>' : ''}`;
+  $('strength').querySelectorAll('[data-line]').forEach((a) => a.addEventListener('click', (ev) => { ev.preventDefault(); go(st.current, 'code'); setTimeout(() => jumpCobol(+a.dataset.line), 300); }));
+}));
+
 async function loadSets() {
-  const prog = st.current;
-  const { sets } = await api('/api/data?program=' + encodeURIComponent(prog));
-  if (prog !== st.current) return;
-  $('sets').innerHTML = `<div class="scroll"><table><tr><th>Test Set</th><th style="width:140px">Records</th><th style="width:120px"></th></tr>${sets.map((s) =>
-    `<tr><td>${esc(s.label)}</td><td>${plural(s.records, 'Record')}</td><td>${s.removable ? `<button class="btn small danger" data-remove="${esc(s.set)}">Remove</button>` : ''}</td></tr>`).join('')}</table></div>`;
-  $('sets').querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm('Remove this test set?')) return;
-    try { await api(`/api/data/${encodeURIComponent(prog)}/${encodeURIComponent(b.dataset.remove)}`, { method: 'DELETE' }); delete store[key()]; saveStore(); renderFlow(); await loadSets(); say('Removed.', 'ok'); } catch (e) { say(e.message, 'error'); }
-  }));
+  const name = st.current; let sets, lay;
+  try { [{ sets }, lay] = await Promise.all([api('/api/data?program=' + encodeURIComponent(name)), getLayout()]); } catch (e) { $('sets').innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  if (st.current !== name) return;
+  st.sets = sets;
+  $('sets').innerHTML = `<div class="scroll"><table><tr><th>Set</th><th class="num">Input</th><th></th></tr>${sets.map((s) => `<tr><td>${esc(s.label)}${s.cobol_error ? `<br><small class="muted">The COBOL stopped: ${esc(s.cobol_error)}</small>` : ''}</td><td class="num">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' lines' : ''].filter(Boolean).join(', ') || '–'}</td><td>${s.removable ? `<button class="btn danger small" data-rm="${esc(s.set)}">Remove</button>` : ''}</td></tr>`).join('')}</table></div>`;
+  $('sets').querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', async () => {
+    try { await api(`/api/data/${encodeURIComponent(st.current)}/${encodeURIComponent(b.dataset.rm)}`, { method: 'DELETE' }); say('Removed.', 'ok'); loadSets(); } catch (e) { say(e.message, 'error'); } }));
+  const targets = lay.files.filter((f) => f.input).map((f) => `<option value="file:${esc(f.assign)}">For ${esc(f.assign)}</option>`);
+  if (lay.console_input?.length) targets.push('<option value="console">As Console Input</option>');
+  $('uploadTarget').innerHTML = targets.join(''); $('uploadRow').hidden = !targets.length; $('uploadTarget').hidden = targets.length < 2;
 }
-const readText = (file, enc = 'utf-8') => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => bad(r.error); r.readAsText(file, enc); });
-async function uploadData(file) {
-  if (!file) return;
-  setBusy(true); say(`Running ${file.name} through the real COBOL.`, '', true);
-  try {
-    const text = await readText(file, 'ISO-8859-1');
-    const r = await send(`/api/data/${encodeURIComponent(st.current)}`, { filename: file.name, text }, 'POST', 300000);
-    delete store[key()]; saveStore(); renderFlow(); await loadSets();
-    say(`Added ${plural(r.records, 'record')} from ${file.name}. Every check now replays them.`, 'ok');
-  } catch (e) { say('Could not add the data: ' + e.message, 'error'); }
-  finally { setBusy(false); $('dataPick').value = ''; }
+$('uploadLabel').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('uploadFile').click(); } });
+$('uploadFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+  const target = $('uploadTarget').value; const buf = new Uint8Array(await file.arrayBuffer());
+  let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  const body = { filename: file.name, base64: btoa(bin), console: target === 'console', file: target.startsWith('file:') ? target.slice(5) : null };
+  say('Running the COBOL on your data…');
+  try { const r = await send(`/api/data/${encodeURIComponent(st.current)}`, body, 'POST', 300000); say(`Added ${r.label} (${r.records} records). The next check uses it.`, 'ok'); loadSets(); await refreshInfo(); }
+  catch (err) { say(err.message, 'error'); }
+});
+
+/* ---------- try ---------- */
+async function renderTry() {
+  const name = st.current; let lay; try { lay = await getLayout(); } catch (e) { say(e.message, 'error'); return; }
+  if (st.current !== name || $('tryInputs').dataset.p === name) { applyPreset(); return; }
+  $('tryInputs').dataset.p = name;
+  const sets = st.sets || (await api('/api/data?program=' + encodeURIComponent(name))).sets;
+  $('trySet').innerHTML = '<option value="">My Own Input</option>' + sets.map((s) => `<option value="${esc(s.set)}">${esc(s.label.split(' (')[0])}</option>`).join('');
+  const inputs = lay.files.filter((f) => f.input);
+  const blocks = inputs.map((f) => {
+    const ruler = f.fields.map((x) => `${x.name} ${x.start}-${x.end}`).join(' · ');
+    return f.text ? `<label class="field">${esc(f.assign)} <small>One record per line. ${esc(ruler)}</small><textarea rows="7" data-file="${esc(f.assign)}" spellcheck="false"></textarea></label>`
+      : `<div class="note">${esc(f.assign)} has packed or binary fields, which cannot be typed as text. Run Both replays the saved test set picked above. To use your own file, add it under Prove It, Test Data.</div>`;
+  });
+  if (lay.console_input?.length) blocks.push(`<label class="field">Console Input <small>One value per line, in the order the program asks: ${esc(lay.console_input.join(', '))}</small><textarea rows="7" data-console spellcheck="false"></textarea></label>`);
+  const typeable = inputs.some((f) => f.text) || lay.console_input?.length;
+  if (!typeable && inputs.length && sets.length) { $('trySet').querySelector('option[value=""]').remove(); $('trySet').value = sets[0].set; }
+  if (!blocks.length) blocks.push('<p class="muted">This program reads no input. Run it to compare what both versions print.</p>');
+  $('tryInputs').innerHTML = blocks.join('');
+  if (!applyPreset()) { try { const s = await api('/api/sample?program=' + encodeURIComponent(name)); fillTry(s.files, s.stdin); } catch { /* empty is fine */ } }
 }
-$('browseData').addEventListener('click', () => $('dataPick').click());
-$('dataPick').addEventListener('change', (e) => uploadData(e.target.files[0]));
-wireDrop($('dropData'), (files) => uploadData(files[0]));
+function fillTry(files, stdin) {
+  document.querySelectorAll('#tryInputs [data-file]').forEach((t) => (t.value = (files?.[t.dataset.file] || []).join('\n')));
+  const c = document.querySelector('#tryInputs [data-console]'); if (c) c.value = (stdin || []).join('\n');
+}
+function applyPreset() { if (!st.tryPreset) return false; fillTry(st.tryPreset.files, st.tryPreset.stdin); $('trySet').value = ''; st.tryPreset = null; return true; }
+$('runTry').addEventListener('click', (e) => busy(e.currentTarget, 'Running', async () => {
+  const body = { program: st.current, implementation: st.impl, files: {}, stdin: [] };
+  if ($('trySet').value) body.set = $('trySet').value;
+  else {
+    document.querySelectorAll('#tryInputs [data-file]').forEach((t) => (body.files[t.dataset.file] = t.value.replace(/\r/g, '').split('\n').filter((x, i, a) => x !== '' || i < a.length - 1)));
+    const c = document.querySelector('#tryInputs [data-console]'); if (c) body.stdin = c.value.replace(/\r/g, '').split('\n').filter((x, i, a) => x !== '' || i < a.length - 1);
+  }
+  const r = await send('/api/try', body, 'POST', 180000);
+  const streams = [...new Set([...Object.keys(r.cobol.outputs), ...Object.keys(r.python.outputs)])];
+  const badLines = (name) => new Set(r.diffs.filter((d) => d.stream === name && d.index >= 0).map((d) => d.index));
+  const col = (rows, bad) => rows.length ? rows.map((x, i) => `<div class="${bad.has(i) ? 'bad' : ''}">${esc(x) || ' '}</div>`).join('') : '<div class="empty">(nothing)</div>';
+  const pane = (title, a, b) => { const bad = badLines(title === 'Console' ? 'console' : title);
+    return `<div class="card"><h3>${esc(title)}</h3><div class="grid2"><div><p class="muted" style="margin:0 0 4px">COBOL</p><div class="out">${col(a, bad)}</div></div><div><p class="muted" style="margin:0 0 4px">Python</p><div class="out">${col(b, bad)}</div></div></div></div>`; };
+  const lines = (s) => (s ? s.replace(/\n$/, '').split('\n') : []);
+  let html = `<div class="note ${r.match ? 'good' : 'bad'}"><b>${r.match ? 'Same Output.' : 'Different Output.'}</b> ${r.match ? `All ${r.compared} output lines are identical.` : `${r.diffs.length} difference${r.diffs.length === 1 ? '' : 's'} found.`}
+    ${r.cobol.error ? `<br>The COBOL stopped: ${esc(r.cobol.error)}` : ''}${r.python.error ? `<br>The Python stopped: ${esc(r.python.error)}` : ''}</div>`;
+  html += streams.map((s) => pane(s, r.cobol.outputs[s] || [], r.python.outputs[s] || [])).join('');
+  if (r.cobol.stdout || r.python.stdout) html += pane('Console', lines(r.cobol.stdout), lines(r.python.stdout));
+  const fieldDiffs = r.diffs.filter((d) => (d.fields || []).some((f) => !f.same)).slice(0, 5);
+  if (fieldDiffs.length) html += `<div class="card"><h3>Field By Field</h3>${fieldDiffs.map((d) => diffBlock(d)).join('')}</div>`;
+  $('tryResult').innerHTML = html;
+}));
 
 /* ---------- add program ---------- */
-function wireDrop(zone, onFiles) {
-  ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('over'); }));
-  zone.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) onFiles([...e.dataTransfer.files]); });
-}
-async function addFiles(list) {
+const dlg = $('addDlg'); const added = { copybooks: {} };
+function openAdd() { $('addStatus').innerHTML = ''; dlg.showModal(); }
+$('openAdd').addEventListener('click', openAdd); $('homeAdd').addEventListener('click', openAdd);
+$('homeDemo').addEventListener('click', () => { const demo = st.demo || st.programs[0]?.name; if (!demo) return; const p = st.programs.find((x) => x.name === demo); st.impl = p.implementations.find((i) => i.role === 'naive')?.module || p.implementations[0].module; st.autoCheck = true; go(demo, 'prove'); });
+$('pickLabel').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pickFiles').click(); } });
+const suggest = (cobol) => { const m = cobol.match(/PROGRAM-ID\.?\s+['"]?([A-Za-z0-9-]+)/i); let n = (m ? m[1] : 'program').toLowerCase().replace(/-/g, '_').replace(/[^a-z0-9_]/g, ''); if (!/^[a-z]/.test(n)) n = 'p_' + n; return n.slice(0, 24); };
+$('addCobol').addEventListener('input', () => { if (!$('addName').dataset.touched) $('addName').value = suggest($('addCobol').value); });
+$('addName').addEventListener('input', () => ($('addName').dataset.touched = '1'));
+async function takeFiles(list) {
   for (const f of list) {
-    const text = await readText(f);
-    const isProgram = /PROCEDURE\s+DIVISION/i.test(text);
-    st.files = st.files.filter((x) => x.name !== f.name);
-    st.files.push({ name: f.name, text, isProgram, copyName: f.name.replace(/\.[^.]+$/, '').toUpperCase() });
+    const text = await f.text(); const stem = f.name.replace(/\.[^.]+$/, '');
+    if (/\.(cpy|copy)$/i.test(f.name) || (!/PROCEDURE\s+DIVISION/i.test(text) && !/\.(cbl|cob|cobol)$/i.test(f.name))) added.copybooks[stem.toUpperCase()] = text;
+    else { $('addCobol').value = text; if (!$('addName').dataset.touched) $('addName').value = suggest(text); added.program = f.name; }
   }
-  renderFiles();
+  $('addFiles').innerHTML = [added.program ? `<span class="pill good">Program ${esc(added.program)}</span>` : '', ...Object.keys(added.copybooks).map((c) => `<span class="pill">Copybook ${esc(c)} <button type="button" class="btn quiet small" style="min-height:20px;padding:0 4px" data-cb="${esc(c)}" aria-label="Remove copybook ${esc(c)}">×</button></span>`)].join('');
+  $('addFiles').querySelectorAll('[data-cb]').forEach((b) => b.addEventListener('click', () => { delete added.copybooks[b.dataset.cb]; takeFiles([]); }));
 }
-function renderFiles() {
-  $('fileList').innerHTML = st.files.map((f, i) => `<li><span class="mono">${esc(f.name)}</span><span class="role">${f.isProgram ? 'Program' : `Copybook ${esc(f.copyName)}`} &middot; ${plural(f.text.split('\n').length, 'Line')}</span><button class="btn small" data-rm="${i}" aria-label="Remove ${esc(f.name)}">Remove</button></li>`).join('');
-  $('fileList').querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { st.files.splice(Number(b.dataset.rm), 1); renderFiles(); }));
-}
-wireDrop($('dropCobol'), addFiles);
-$('browse').addEventListener('click', () => $('filePick').click());
-$('filePick').addEventListener('change', (e) => { addFiles([...e.target.files]).catch(fail('')); e.target.value = ''; });
-$('pasteToggle').addEventListener('click', () => { const open = $('pasteArea').hidden; $('pasteArea').hidden = !open; $('pasteToggle').setAttribute('aria-expanded', open); });
-function addCopybookRow(name = '', text = '') {
-  const row = document.createElement('div'); row.className = 'cbrow';
-  row.innerHTML = `<label class="field">Copybook Name <small>The name used in COPY</small><input type="text" class="cbname" maxlength="32" placeholder="ACCTREC"></label><label class="field">Copybook Text<textarea class="cbtext" spellcheck="false"></textarea></label>`;
-  row.querySelector('.cbname').value = name; row.querySelector('.cbtext').value = text; $('cbList').appendChild(row);
-}
-$('addCb').addEventListener('click', () => addCopybookRow());
-$('loadTpl').addEventListener('click', () => api('/api/template').then((t) => {
-  st.files = []; renderFiles(); $('pasteArea').hidden = false; $('pasteToggle').setAttribute('aria-expanded', 'true');
-  $('newName').value = t.name; $('pasteCobol').value = t.cobol; $('cbList').innerHTML = ''; (t.copybooks || []).forEach((c) => addCopybookRow(c.name, c.text));
-}).catch((e) => ($('addError').textContent = e.message)));
-$('addProg').addEventListener('click', async () => {
-  $('addError').textContent = '';
-  let cobol = '', copybooks = [];
-  const programs = st.files.filter((f) => f.isProgram);
-  if (programs.length > 1) { $('addError').textContent = 'More than one file has a PROCEDURE DIVISION. Add one program at a time.'; return; }
-  if (programs.length) { cobol = programs[0].text; copybooks = st.files.filter((f) => !f.isProgram).map((f) => ({ name: f.copyName, text: f.text })); }
-  else { cobol = $('pasteCobol').value; copybooks = [...document.querySelectorAll('.cbrow')].map((r) => ({ name: r.querySelector('.cbname').value.trim(), text: r.querySelector('.cbtext').value })).filter((c) => c.name || c.text.trim()); }
-  if (!cobol.trim()) { $('addError').textContent = 'Drop a COBOL program, use the example, or paste the code first.'; return; }
-  $('addProg').disabled = true; $('addStatus').innerHTML = FLAME + ' Compiling, recording the real COBOL, explaining it and drafting the Python.';
-  try {
-    const r = await send('/api/programs', { name: $('newName').value.trim(), cobol, copybooks }, 'POST', 300000);
-    st.files = []; renderFiles(); $('newName').value = ''; $('pasteCobol').value = ''; $('cbList').innerHTML = ''; $('addStatus').textContent = '';
-    await loadCatalog(r.name);
-    const recorded = Object.values(r.fixtures).reduce((a, b) => a + b, 0), d = r.draft;
-    const draftText = d.translated ? (d.gaps.length ? `drafted Python for ${d.statements - d.gaps.length} of ${d.statements} statements; ${plural(d.gaps.length, 'one needs', 'need')} you` : `drafted Python for all ${d.statements} statements`) : 'could not translate it, so you get an empty starter';
-    say(`Added ${progInfo(r.name).title}: recorded ${recorded} records from the real COBOL and ${draftText}. Next: Run Check.`, 'ok');
-    showTab('check', true);
-  } catch (e) { $('addError').textContent = e.message; $('addStatus').textContent = ''; }
-  finally { $('addProg').disabled = false; }
-});
-$('del').addEventListener('click', async () => {
-  const p = progInfo();
-  if (!confirm(`Delete ${p.title} and everything generated for it? This cannot be undone.`)) return;
-  try { await api('/api/programs/' + encodeURIComponent(st.current), { method: 'DELETE' }); Object.keys(store).filter((k) => k.startsWith(st.current + '|')).forEach((k) => delete store[k]); saveStore(); st.dirty = false; await loadCatalog(); showView('home'); } catch (e) { say(e.message, 'error'); }
+$('pickFiles').addEventListener('change', (e) => { takeFiles([...e.target.files]); e.target.value = ''; });
+const drop = $('drop');
+['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', (e) => takeFiles([...e.dataTransfer.files]));
+$('loadTpl').addEventListener('click', async () => { try { const t = await api('/api/template'); $('addCobol').value = t.cobol; $('addName').value = t.name; $('addName').dataset.touched = '1'; } catch (e) { say(e.message, 'error'); } });
+$('addGo').addEventListener('click', (e) => {
+  const cobol = $('addCobol').value; if (!cobol.trim()) { $('addStatus').innerHTML = '<div class="note bad">Paste or drop a COBOL program first.</div>'; return; }
+  busy(e.currentTarget, 'Compiling, Recording, Translating', async () => {
+    $('addStatus').innerHTML = '<p class="muted">Compiling with GnuCOBOL, running it on generated input, then translating. This takes a few seconds.</p>';
+    try {
+      const r = await send('/api/programs', { name: $('addName').value.trim(), cobol, copybooks: Object.entries(added.copybooks).map(([name, text]) => ({ name, text })) }, 'POST', 600000);
+      dlg.close(); $('addCobol').value = ''; $('addName').value = ''; delete $('addName').dataset.touched; added.copybooks = {}; added.program = null; $('addFiles').innerHTML = '';
+      await loadCatalog(); st.impl = null; go(r.name, 'overview');
+      say(r.draft.translated ? `Added. ${r.draft.gaps.length ? r.draft.gaps.length + ' statement(s) need a person; ' : 'Every statement was translated; '}open Prove It to check it.` : `Added, but it could not be translated: ${r.draft.reason}`, 'ok');
+    } catch (err) { $('addStatus').innerHTML = `<div class="note bad" style="white-space:pre-line">${esc(err.message)}</div>`; }
+  });
 });
 
-/* ---------- AI prompt ---------- */
-$('copyPrompt').addEventListener('click', async () => {
-  const p = progInfo();
-  const text = `Improve the Python migration of the COBOL program "${p.name}" in migrated/${p.name}.py. Use the seance MCP tools: call describe_program and read the description, call run_legacy_program whenever you are unsure what the COBOL does for an input, and call verify_migration until the result says "Spirit matched". Replace any S.unsupported(...) lines with working code. Follow .kiro/steering/cobol-migration.md. Do not edit the fixtures or the COBOL.`;
-  try { await navigator.clipboard.writeText(text); say('Copied. Paste it into Kiro chat.', 'ok'); } catch { say('Could not copy automatically. Select this text: ' + text, 'error'); }
-});
-
-loadCatalog().catch((e) => { $('banner').hidden = false; $('banner').textContent = 'Could not load programs: ' + e.message; });
+/* ---------- start ---------- */
+$('goHome').addEventListener('click', () => go(null));
+document.addEventListener('click', (e) => { const m = $('dlMenu'); if (m.open && !m.contains(e.target)) m.open = false; });
+$('dlMenu').querySelectorAll('a').forEach((a) => a.addEventListener('click', () => ($('dlMenu').open = false)));
+loadCatalog().then(route).catch((e) => { $('examples').innerHTML = ''; say('Séance could not start: ' + e.message, 'error'); });
 </script>
 </body>
 </html>
-

@@ -1,0 +1,31 @@
+{
+  "label": "Edge Cases (zero, smallest and largest values, plus values the code tests for)",
+  "stdin": [
+    "AAAAA",
+    "1",
+    "1",
+    "1",
+    "AAA",
+    "AAAAA",
+    "2",
+    "2",
+    "2",
+    "AAA",
+    "AAAAA",
+    "3",
+    "3",
+    "3",
+    "AAA",
+    "AAAAA",
+    "1",
+    "1",
+    "1",
+    "NO "
+  ],
+  "inputs": {},
+  "outputs": {},
+  "return_code": 0,
+  "error": null,
+  "records": 0,
+  "console_lines": 20
+}
