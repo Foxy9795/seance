@@ -104,7 +104,7 @@ def _case_strategy(model: ProgramModel, hints: dict[str, list]):
 
 
 def _stdin(model: ProgramModel, hints: dict[str, list], seed: int, rounds: int) -> list[str]:
-    return console_lines(model, hints, random.Random(seed), rounds) if model.accepts else []
+    return console_lines(model, hints, random.Random(seed), rounds) if model.all_accepts else []
 
 
 class _Runner:
@@ -177,7 +177,7 @@ def describe_case(model: ProgramModel, case: Case) -> dict:
 def random_check(program: str, impl, model: ProgramModel, rounds: int) -> tuple[int, dict | None]:
     from .hints import value_hints
 
-    if not model.inputs and not model.accepts:
+    if not model.inputs and not model.all_accepts:
         return 0, None  # the program reads nothing, so every run is the same as the saved one
     exe = compile_legacy(program)
     hints = value_hints(model)

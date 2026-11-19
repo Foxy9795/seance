@@ -1,6 +1,6 @@
 """Python translation of legacy/table_search/table_search.cbl (PROGRAM-ID SRCHBIN).
 
-Written by the Séance translator on 2026-11-18. The program reads ACCTREC.
+Written by the Séance translator on 2026-11-19. The program reads ACCTREC.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).
 Each line ends with # Lnn, the COBOL line it came from. Data is kept byte for byte as COBOL lays it out.
 Every statement was translated.
@@ -9,7 +9,7 @@ This file is yours now: edit it, then run the check.
 
 from decimal import Decimal as D
 
-from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, Program, StopRun, run_cli
+from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, NextSentence, Program, StopRun, run_cli
 
 ITEMS = {
     "ACCT-FIELDS": ['ACCT-FIELDS', 0, 170, 'alpha', 'display', 0, 0, False, 'none', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', [], [], False, False],
@@ -32,9 +32,10 @@ ITEMS = {
     "COMMENTS": ['ACCT-TABLE', 120, 50, 'alpha', 'display', 0, 0, False, 'none', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', [(45, 170)], [], False, False],
     "RETURN-CODE": ['_SPECIAL', 0, 4, 'num', 'native', 9, 0, True, 'none', '', [], [], False, False],
     "TALLY": ['_SPECIAL', 4, 2, 'num', 'native', 5, 0, False, 'none', '', [], [], False, False],
+    "SORT-RETURN": ['_SPECIAL', 6, 4, 'num', 'binary', 9, 0, True, 'none', '', [], [], False, False],
 }
 
-RECORDS = {'ACCT-FIELDS': 170, 'FLAGS': 5, 'ACCT-TABLE': 7650, '_SPECIAL': 6}
+RECORDS = {'ACCT-FIELDS': 170, 'FLAGS': 5, 'ACCT-TABLE': 7650, '_SPECIAL': 10}
 
 VALUES = [
     ("LASTREC", SPACE, False),
@@ -46,12 +47,12 @@ CONDITIONS = {
 }
 
 FILES = [
-    ["ACCT-REC", "ACCTREC", "sequential", "ACCT-FIELDS", 170, None],
+    ["ACCT-REC", "ACCTREC", "sequential", "ACCT-FIELDS", 170, None, {'access': 'sequential'}],
 ]
 
 INDEXES = ['TABLE-IDX']
 
-S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES)
+S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage=[])
 
 
 def p_open_files():  # paragraph OPEN-FILES (line 47)
@@ -85,7 +86,7 @@ def p_search_record():  # paragraph SEARCH-RECORD (line 58)
 
 def p_close_stop():  # paragraph CLOSE-STOP (line 65)
     S.close("ACCT-REC")  # L66
-    raise StopRun()  # L67
+    raise GoBack()  # L67
 
 
 def p_read_record():  # paragraph READ-RECORD (line 69)
@@ -105,10 +106,13 @@ PARAGRAPHS = [
 SECTIONS = {}
 
 
+RUN_FILES = [['ACCT-REC', 'ACCTREC']]  # every file the run touches, in this program and the programs it calls
+
+
 def main(io=None):
     """Run the whole program, like the COBOL batch job. io holds the input files and console input."""
     return S.run(io if io is not None else IO(), PARAGRAPHS, SECTIONS)
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_cli(main, FILES))
+    raise SystemExit(run_cli(main, RUN_FILES))

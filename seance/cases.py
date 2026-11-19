@@ -59,22 +59,32 @@ def spec_of(it: Item) -> tuple:
 # ---------------------------------------------------------------- running
 
 def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> Result:
-    from .recorder import LegacyRuntimeError, cobol_env
+    import os
+
+    from . import keyed
+    from .recorder import LegacyRuntimeError, cobc_path, cobol_env
 
     with tempfile.TemporaryDirectory(prefix="seance_") as tmp:
         work = Path(tmp)
         env = cobol_env()
         env["COB_CURRENT_DATE"] = FIXED_CLOCK
         env["TZ"] = "UTC0"
-        paths = {}
-        for f in model.files:
+        # called programs are compiled as modules next to the main program
+        env["COB_LIBRARY_PATH"] = os.pathsep.join(x for x in (str(exe.parent), env.get("COB_LIBRARY_PATH", "")) if x)
+        paths, tools = {}, {}
+        for f in model.all_files:
             target = work / f.assign
             paths[f.assign] = target
             if not f.literal:
                 env[f"DD_{f.assign}"] = str(target)
                 env[f"dd_{f.assign}"] = str(target)
-            if f.is_input:
-                target.write_bytes(case.files.get(f.assign, b""))
+            if f.keyed:
+                tools[f.assign] = keyed.tools(f, exe.parent, cobc_path(), cobol_env())
+            if f.is_input and f.assign in case.files:
+                if f.keyed:
+                    keyed.load(tools[f.assign][0], case.files[f.assign], target, work, env)
+                else:
+                    target.write_bytes(case.files[f.assign])
         stdin = "".join(line + "\n" for line in case.stdin).encode(ENC, errors="replace")
         try:
             proc = subprocess.run([str(exe)], cwd=work, input=stdin, capture_output=True, env=env, timeout=timeout)
@@ -82,7 +92,16 @@ def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> 
             raise LegacyRuntimeError(
                 f"The COBOL program did not finish within {timeout} seconds. A loop probably never ends, or it waits for more console input."
             ) from None
-        outputs = {f.assign: paths[f.assign].read_bytes() for f in model.files if f.is_output and paths[f.assign].exists()}
+        outputs = {}
+        for f in model.all_files:
+            if not f.is_output or not paths[f.assign].exists():
+                continue
+            if f.keyed:
+                data = keyed.dump(tools[f.assign][1], paths[f.assign], work, env)
+                if data is not None:
+                    outputs[f.assign] = data
+            else:
+                outputs[f.assign] = paths[f.assign].read_bytes()
         err = proc.stderr.decode(ENC, errors="replace")
         error = None
         m = re.search(r"libcob: (?:error|.*?error): (.*)", err)
@@ -110,6 +129,9 @@ def run_python(module, case: Case) -> Result:
 
 def _units(f: FileDef | None, data: bytes) -> list[bytes]:
     """Split an output stream into records or lines."""
+    if f is not None and f.keyed:
+        step = f.size + (9 if f.organization == "relative" else 0)
+        return [data[i:i + step] for i in range(0, len(data), step)]
     if f is not None and f.organization != "line" and (b"\n" in data or b"\f" in data):
         return _record_units(f, data)
     if f is None or f.organization == "line":
@@ -144,6 +166,9 @@ def decode_fields(f: FileDef, unit: bytes) -> list[tuple[str, str]]:
     rec = f.record
     if rec is None:
         return []
+    out_slot = []
+    if f.organization == "relative":
+        out_slot, unit = [("(slot)", unit[:9].decode(ENC).lstrip("0") or "0")], unit[9:]
     data = unit.ljust(rec.size, b" ")
     out = []
     for lf in leaves(rec):
@@ -154,7 +179,7 @@ def decode_fields(f: FileDef, unit: bytes) -> list[tuple[str, str]]:
             out.append((lf.name, format(v, "f")))
         else:
             out.append((lf.name, show(raw)))
-    return out
+    return out_slot + out
 
 
 def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 50) -> tuple[list[Diff], int]:
@@ -167,7 +192,7 @@ def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 
         diffs.append(Diff("run", -1, f"return code {expected.return_code}", f"return code {actual.return_code}"))
     streams = sorted(set(expected.outputs) | set(actual.outputs))
     for name in streams + [CONSOLE]:
-        f = next((x for x in model.files if x.assign == name), None)
+        f = next((x for x in model.all_files if x.assign == name), None)
         if name == CONSOLE:
             e_units, a_units = _units(None, expected.stdout.encode(ENC, errors="replace")), _units(None, actual.stdout.encode(ENC, errors="replace"))
         else:
@@ -239,6 +264,8 @@ def encode_record(rec: Item, values: dict[int, object]) -> bytes:
 
 
 def pack_file(f: FileDef, records: list[bytes]) -> bytes:
+    if f.organization == "relative":  # slot number, then the record: record n goes in slot n
+        return b"".join(b"%09d" % (i + 1) + r.ljust(f.size, b" ")[:f.size] for i, r in enumerate(records))
     if f.organization == "line":
         return b"".join(r.rstrip(b" ").replace(b"\n", b" ").replace(b"\r", b" ") + b"\n" for r in records)
     size = f.size
@@ -300,7 +327,7 @@ def random_rows(rec: Item, count: int, rng: random.Random, hints: dict[str, list
 
 def console_lines(model: ProgramModel, hints: dict[str, list], rng: random.Random | None, rounds: int = 3) -> list[str]:
     """Console input for programs that ACCEPT: values for each ACCEPT target, then the values the code tests for."""
-    if not model.accepts:
+    if not model.all_accepts:
         return []
     from .translate import build_names
 
@@ -311,7 +338,7 @@ def console_lines(model: ProgramModel, hints: dict[str, list], rng: random.Rando
 
     lines = []
     for k in range(rounds):
-        for name in model.accepts:
+        for name in model.all_accepts:
             it = names.by_name.get(name, [None])[0]
             if it is None or it.kind != "num":
                 lines.append(("A" if rng is None else rng.choice("ABCXYZ")) * min(it.size if it else 4, 5))
@@ -319,11 +346,11 @@ def console_lines(model: ProgramModel, hints: dict[str, list], rng: random.Rando
                 v = Decimal(k + 1) if rng is None else Decimal(rng.randrange(0, 10 ** min(it.digits - it.scale, 4)))
                 lines.append(text(v))
     # Then rounds that use the values the code tests for (such as 'NO' or 9 to quit), so input loops can end.
-    most = max((len(hints.get(n, [])) for n in model.accepts), default=0)
+    most = max((len(hints.get(n, [])) for n in model.all_accepts), default=0)
     for j in range(most):
-        for name in model.accepts:
+        for name in model.all_accepts:
             h = hints.get(name, [])
-            lines.append(text(h[j % len(h)]) if h else lines[model.accepts.index(name)] if lines else "")
+            lines.append(text(h[j % len(h)]) if h else lines[model.all_accepts.index(name)] if lines else "")
     return lines
 
 
@@ -346,7 +373,7 @@ def generated_cases(model: ProgramModel, random_count: int = 300, seed: int = 10
     edges = {f.name: edge_rows(f.record, hints) for f in model.inputs if f.record is not None}
     rand = {f.name: random_rows(f.record, random_count, rng, hints) for f in model.inputs if f.record is not None}
     sets = {"edges": build_case(model, edges, console_lines(model, hints, None))}
-    if model.inputs or model.accepts:
+    if model.inputs or model.all_accepts:
         sets["random"] = build_case(model, rand, console_lines(model, hints, rng))
     return sets
 
@@ -433,7 +460,7 @@ def add_uploaded(program: str, filename: str, data: bytes, target_file: str | No
 
     model = get_model(program, root)
     inputs = model.inputs
-    if not inputs and not model.accepts:
+    if not inputs and not model.all_accepts:
         raise ValueError("This program reads no input files and no console input, so there is nothing to upload.")
     if inputs:
         f = next((x for x in inputs if x.assign == target_file or x.name == target_file), inputs[0] if len(inputs) == 1 or target_file is None else None)

@@ -1,6 +1,6 @@
 """Python translation of legacy/account_report/account_report.cbl (PROGRAM-ID CBL0011).
 
-Written by the Séance translator on 2026-11-18. The program reads ACCTREC, writes PRTLINE.
+Written by the Séance translator on 2026-11-19. The program reads ACCTREC, writes PRTLINE.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).
 Each line ends with # Lnn, the COBOL line it came from. Data is kept byte for byte as COBOL lays it out.
 Every statement was translated.
@@ -9,7 +9,7 @@ This file is yours now: edit it, then run the check.
 
 from decimal import Decimal as D
 
-from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, Program, StopRun, run_cli
+from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, NextSentence, Program, StopRun, run_cli
 
 ITEMS = {
     "PRINT-REC": ['PRINT-REC', 0, 62, 'group', 'display', 0, 0, False, 'none', '', [], ['ACCT-NO-O', 'FILLER#23-1', 'LAST-NAME-O', 'FILLER#25-2', 'ACCT-LIMIT-O', 'FILLER#27-3', 'ACCT-BALANCE-O', 'FILLER#29-4'], False, False],
@@ -95,9 +95,10 @@ ITEMS = {
     "WS-CURRENT-CENTISECOND": ['WS-CURRENT-DATE-DATA', 14, 2, 'num', 'display', 2, 0, False, 'none', '99', [], [], False, False],
     "RETURN-CODE": ['_SPECIAL', 0, 4, 'num', 'native', 9, 0, True, 'none', '', [], [], False, False],
     "TALLY": ['_SPECIAL', 4, 2, 'num', 'native', 5, 0, False, 'none', '', [], [], False, False],
+    "SORT-RETURN": ['_SPECIAL', 6, 4, 'num', 'binary', 9, 0, True, 'none', '', [], [], False, False],
 }
 
-RECORDS = {'PRINT-REC': 62, 'ACCT-FIELDS': 170, 'FLAGS': 1, 'TLIMIT-TBALANCE': 12, 'HEADER-1': 80, 'HEADER-2': 83, 'HEADER-3': 95, 'HEADER-4': 100, 'TRAILER-1': 100, 'TRAILER-2': 100, 'WS-CURRENT-DATE-DATA': 16, '_SPECIAL': 6}
+RECORDS = {'PRINT-REC': 62, 'ACCT-FIELDS': 170, 'FLAGS': 1, 'TLIMIT-TBALANCE': 12, 'HEADER-1': 80, 'HEADER-2': 83, 'HEADER-3': 95, 'HEADER-4': 100, 'TRAILER-1': 100, 'TRAILER-2': 100, 'WS-CURRENT-DATE-DATA': 16, '_SPECIAL': 10}
 
 VALUES = [
     ("LASTREC", SPACE, False),
@@ -144,13 +145,13 @@ CONDITIONS = {
 }
 
 FILES = [
-    ["PRINT-LINE", "PRTLINE", "sequential", "PRINT-REC", 62, None],
-    ["ACCT-REC", "ACCTREC", "sequential", "ACCT-FIELDS", 170, None],
+    ["PRINT-LINE", "PRTLINE", "sequential", "PRINT-REC", 62, None, {'access': 'sequential'}],
+    ["ACCT-REC", "ACCTREC", "sequential", "ACCT-FIELDS", 170, None, {'access': 'sequential'}],
 ]
 
 INDEXES = []
 
-S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES)
+S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage=[])
 
 
 def p_open_files():  # paragraph OPEN-FILES (line 118)
@@ -192,7 +193,7 @@ def p_write_tlimit_tbalance():  # paragraph WRITE-TLIMIT-TBALANCE (line 143)
 def p_close_stop():  # paragraph CLOSE-STOP (line 149)
     S.close("ACCT-REC")  # L150
     S.close("PRINT-LINE")  # L151
-    raise StopRun()  # L152
+    raise GoBack()  # L152
 
 
 def p_read_record():  # paragraph READ-RECORD (line 154)
@@ -229,10 +230,13 @@ PARAGRAPHS = [
 SECTIONS = {}
 
 
+RUN_FILES = [['PRINT-LINE', 'PRTLINE'], ['ACCT-REC', 'ACCTREC']]  # every file the run touches, in this program and the programs it calls
+
+
 def main(io=None):
     """Run the whole program, like the COBOL batch job. io holds the input files and console input."""
     return S.run(io if io is not None else IO(), PARAGRAPHS, SECTIONS)
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_cli(main, FILES))
+    raise SystemExit(run_cli(main, RUN_FILES))

@@ -1,0 +1,15 @@
+{
+  "label": "Random Records",
+  "stdin": [],
+  "inputs": {
+    "TRANSIN": "in0.dat"
+  },
+  "outputs": {
+    "BIGONES": "out0.dat",
+    "BYACCT": "out1.dat"
+  },
+  "return_code": 0,
+  "error": null,
+  "records": 300,
+  "console_lines": 0
+}

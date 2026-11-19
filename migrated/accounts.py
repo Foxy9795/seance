@@ -1,6 +1,6 @@
 """Python translation of legacy/accounts/accounts.cbl (PROGRAM-ID ACCOUNTS).
 
-Written by the Séance translator on 2026-11-18. The program reads ACCTIN, writes ACCTOUT.
+Written by the Séance translator on 2026-11-19. The program reads ACCTIN, writes ACCTOUT.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).
 Each line ends with # Lnn, the COBOL line it came from. Data is kept byte for byte as COBOL lays it out.
 Every statement was translated.
@@ -9,7 +9,7 @@ This file is yours now: edit it, then run the check.
 
 from decimal import Decimal as D
 
-from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, Program, StopRun, run_cli
+from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, NextSentence, Program, StopRun, run_cli
 
 ITEMS = {
     "ACCT-REC": ['ACCT-REC', 0, 38, 'group', 'display', 0, 0, False, 'none', '', [], ['ACCT-NO', 'ACCT-BALANCE', 'ACCT-LIMIT', 'ACCT-RATE', 'ACCT-TYPE', 'ACCT-MONTHS', 'FILLER#11-1'], False, False],
@@ -36,9 +36,10 @@ ITEMS = {
     "WS-COUNT": ['WS-WORK', 17, 7, 'num', 'display', 7, 0, False, 'none', '9999999', [], [], False, False],
     "RETURN-CODE": ['_SPECIAL', 0, 4, 'num', 'native', 9, 0, True, 'none', '', [], [], False, False],
     "TALLY": ['_SPECIAL', 4, 2, 'num', 'native', 5, 0, False, 'none', '', [], [], False, False],
+    "SORT-RETURN": ['_SPECIAL', 6, 4, 'num', 'binary', 9, 0, True, 'none', '', [], [], False, False],
 }
 
-RECORDS = {'ACCT-REC': 38, 'OUT-REC': 53, 'WS-FLAGS': 1, 'WS-WORK': 24, '_SPECIAL': 6}
+RECORDS = {'ACCT-REC': 38, 'OUT-REC': 53, 'WS-FLAGS': 1, 'WS-WORK': 24, '_SPECIAL': 10}
 
 VALUES = [
     ("WS-EOF", 'N', False),
@@ -52,13 +53,13 @@ CONDITIONS = {
 }
 
 FILES = [
-    ["ACCT-IN", "ACCTIN", "sequential", "ACCT-REC", 38, None],
-    ["ACCT-OUT", "ACCTOUT", "sequential", "OUT-REC", 53, None],
+    ["ACCT-IN", "ACCTIN", "sequential", "ACCT-REC", 38, None, {'access': 'sequential'}],
+    ["ACCT-OUT", "ACCTOUT", "sequential", "OUT-REC", 53, None, {'access': 'sequential'}],
 ]
 
 INDEXES = []
 
-S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES)
+S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage=[])
 
 
 def p_0000_main():  # paragraph 0000-MAIN (line 32)
@@ -69,7 +70,7 @@ def p_0000_main():  # paragraph 0000-MAIN (line 32)
             break
         S.perform("1000-PROCESS")  # L36
     S.close("ACCT-IN"); S.close("ACCT-OUT")  # L37
-    raise StopRun()  # L38
+    raise GoBack()  # L38
 
 
 def p_1000_process():  # paragraph 1000-PROCESS (line 39)
@@ -137,10 +138,13 @@ PARAGRAPHS = [
 SECTIONS = {}
 
 
+RUN_FILES = [['ACCT-IN', 'ACCTIN'], ['ACCT-OUT', 'ACCTOUT']]  # every file the run touches, in this program and the programs it calls
+
+
 def main(io=None):
     """Run the whole program, like the COBOL batch job. io holds the input files and console input."""
     return S.run(io if io is not None else IO(), PARAGRAPHS, SECTIONS)
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_cli(main, FILES))
+    raise SystemExit(run_cli(main, RUN_FILES))

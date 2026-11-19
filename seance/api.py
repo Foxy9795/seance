@@ -92,7 +92,8 @@ class Copybook(BaseModel):
 class NewProgram(BaseModel):
     name: str = ""
     cobol: str
-    copybooks: list[Copybook] = Field(default_factory=list, max_length=20)
+    copybooks: list[Copybook] = Field(default_factory=list, max_length=40)
+    programs: list[Copybook] = Field(default_factory=list, max_length=20)  # programs it CALLs
 
 
 class VerifyRequest(BaseModel):
@@ -178,7 +179,8 @@ def template():
 @app.post("/api/programs")
 async def add_program(req: NewProgram):
     try:
-        return await run_in_threadpool(create_program, req.name, req.cobol, {c.name: c.text for c in req.copybooks})
+        return await run_in_threadpool(create_program, req.name, req.cobol, {c.name: c.text for c in req.copybooks}, ROOT,
+                                    {c.name: c.text for c in req.programs})
     except ProgramError as exc:
         raise HTTPException(400, str(exc))
 
@@ -240,7 +242,7 @@ def layout(program: str):
 
     model = get_model(program)
     files = []
-    for f in model.files:
+    for f in model.all_files:
         rec = f.record
         fields = []
         for lf in leaves(rec) if rec else []:
@@ -250,7 +252,7 @@ def layout(program: str):
         files.append({"name": f.name, "assign": f.assign, "input": f.is_input, "output": f.is_output, "lines": f.organization == "line",
                       "record": rec.name if rec else None, "size": f.size, "fields": fields,
                       "text": all(x["usage"] == "display" for x in fields)})
-    return {"format": "fixed" if model.fixed else "free", "files": files, "console_input": model.accepts, "notes": model.notes,
+    return {"format": "fixed" if model.fixed else "free", "files": files, "console_input": model.all_accepts, "notes": model.notes,
             "unsupported": model.unsupported}
 
 

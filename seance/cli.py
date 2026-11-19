@@ -25,7 +25,7 @@ def _shown(model, result) -> dict:
 
     outs = {}
     for name, data in result.outputs.items():
-        f = next((x for x in model.files if x.assign == name), None)
+        f = next((x for x in model.all_files if x.assign == name), None)
         outs[name] = [show(u) for u in _units(f, data)]
     return {"outputs": outs, "stdout": result.stdout, "return_code": result.return_code, "error": result.error}
 
@@ -61,7 +61,7 @@ def _analyze(program: str) -> None:
 
     model = get_model(program)
     print(f"{'fixed' if model.fixed else 'free'}-format source; {model.describe_io()}")
-    for f in model.files:
+    for f in model.all_files:
         print(f"{f.assign} ({f.organization}, {', '.join(sorted(f.modes))}): {f.size} bytes per record")
         for lf in leaves(f.record) if f.record else []:
             it = lf.item

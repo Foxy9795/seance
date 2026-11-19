@@ -43,6 +43,10 @@ class StopRun(Exception):
     pass
 
 
+class NextSentence(Exception):
+    """NEXT SENTENCE: carry on after the period that ends the current sentence."""
+
+
 class GoBack(StopRun):
     pass
 
@@ -68,14 +72,26 @@ class Ref:
 class FileState:
     name: str
     assign: str
-    organization: str  # "line" or "sequential"
+    organization: str  # "line", "sequential", "indexed", "relative" or "sort"
     record: str  # name of the record area (first 01)
     size: int
     status: str | None  # FILE STATUS item
+    extra: dict = field(default_factory=dict)  # access, key, alt [(name, dups)], relkey, optional
     mode: str | None = None
     data: bytes = b""
     pos: int = 0
     out: bytearray = field(default_factory=bytearray)
+    last_pos: int = -1  # start of the last record read (REWRITE of a sequential file)
+    at_end: bool = False  # the last READ reported end of file
+    table: dict = field(default_factory=dict)  # keyed files: primary key (bytes, or slot number) -> [seq, record]
+    seq: int = 0
+    extent: int = 0  # relative: the highest slot the file has ever held (deleting does not shrink it)
+    keyref: str | None = None  # the key of reference for sequential reads (START / READ KEY IS)
+    last: tuple | None = None  # position of the last record read, in key-of-reference order
+    pending: tuple | None = None  # set by START: (position, inclusive)
+    cache: list | None = None  # sorted positions for the key of reference
+    released: list = field(default_factory=list)  # SORT: records RELEASEd by an input procedure
+    returning: list = field(default_factory=list)  # SORT: records left for RETURN
 
 
 class IO:
@@ -117,7 +133,8 @@ class Program:
     SPACE, ZERO, HIGH, LOW, QUOTE = SPACE, ZERO, HIGH, LOW, QUOTE
     LOOP_LIMIT = 2_000_000
 
-    def __init__(self, items: dict, records: dict, values: list, conds: dict, files: list, indexes: list, aliases: dict | None = None):
+    def __init__(self, items: dict, records: dict, values: list, conds: dict, files: list, indexes: list, aliases: dict | None = None,
+                 linkage: list | None = None, initial: bool = False):
         # items: name -> [record, offset, size, kind, usage, digits, scale, signed, sign, pic, dims, children, justified, blank_zero]
         self.items = items
         self.records = records  # record name -> size
@@ -126,6 +143,11 @@ class Program:
         self.file_defs = files  # [name, assign, organization, record, size, status]
         self.index_names = indexes  # index name -> (table item)
         self.aliases = aliases or {}
+        self.linkage = linkage or []  # LINKAGE records in PROCEDURE DIVISION USING order
+        self.initial = initial
+        self.registry: dict = {}
+        self._active = False
+        self._called = False
         self.io = IO()
         self.reset()
 
@@ -452,10 +474,21 @@ class Program:
     # ---------------------------------------------------------- files
     def open(self, name: str, mode: str) -> None:
         f = self.files[name]
+        if f.organization in ("indexed", "relative"):
+            return self._k_open(f, mode)
         f.mode = mode
+        f.last_pos = -1
+        f.at_end = False
         if mode in ("input", "io"):
             if f.assign not in self.io.inputs:
+                if f.extra.get("optional"):
+                    f.data, f.pos = b"", 0
+                    self._status(f, "05")
+                    if mode == "io":
+                        f.out = bytearray()
+                    return
                 self._status(f, "35")
+                f.mode = None
                 if not f.status:
                     raise CobolError(f"OPEN INPUT {name}: file {f.assign} does not exist")
                 return
@@ -466,7 +499,10 @@ class Program:
 
     def close(self, name: str) -> None:
         f = self.files[name]
-        if f.mode in ("output", "extend", "io"):
+        if f.organization in ("indexed", "relative"):
+            if f.mode in ("output", "extend", "io"):
+                self.io.outputs[f.assign] = self._k_dump(f)
+        elif f.mode in ("output", "extend", "io"):
             self.io.outputs[f.assign] = bytes(f.out)
         f.mode = None
         self._status(f, "00")
@@ -475,16 +511,39 @@ class Program:
         if f.status:
             self.move(code, f.status)
 
-    def read(self, name: str, into=None) -> bool:
-        """READ: True when a record was read, False at end of file."""
+    def read(self, name: str, into=None, key=None) -> bool:
+        """READ: True when a record was read, False at end of file (or INVALID KEY for a keyed READ)."""
         f = self.files[name]
+        if f.organization in ("indexed", "relative"):
+            ok = self._k_read(f, key)
+        else:
+            ok = self._seq_read(f)
+        if ok and into is not None:
+            self.move(Ref(f.record), into)
+        return ok
+
+    def read_next(self, name: str, into=None) -> bool:
+        f = self.files[name]
+        ok = self._k_next(f) if f.organization in ("indexed", "relative") else self._seq_read(f)
+        if ok and into is not None:
+            self.move(Ref(f.record), into)
+        return ok
+
+    def _seq_read(self, f: FileState) -> bool:
         if f.mode not in ("input", "io"):
             self._status(f, "47")
-            raise CobolError(f"READ {name}: the file is not open for input")
+            raise CobolError(f"READ {f.name}: the file is not open for input")
         buf = self.mem[f.record]
         if f.pos >= len(f.data):
+            if f.at_end:  # reading again after the end was reported (measured: status 46, fatal without FILE STATUS)
+                self._status(f, "46")
+                if not f.status:
+                    raise CobolError(f"READ after unsuccessful READ/START (status = 46) for file {f.name}")
+                return False
+            f.at_end = True
             self._status(f, "10")
             return False
+        f.last_pos = f.pos
         if f.organization == "line":
             end = f.data.find(b"\n", f.pos)
             line = f.data[f.pos:] if end < 0 else f.data[f.pos:end]
@@ -497,20 +556,23 @@ class Program:
             f.pos += f.size
             buf[0:len(chunk)] = chunk
             self._status(f, "00" if len(chunk) == f.size else "04")
-        if into is not None:
-            self.move(Ref(f.record), into)
         return True
 
-    def write(self, record: str, src=None, advancing=None) -> None:
-        """WRITE. advancing: None, ("before" | "after", n) or ("before" | "after", "page")."""
+    def _file_of(self, record: str) -> tuple[FileState, str]:
         key = self.resolve(record)
         buffer = self.items[key][0]
         f = next((x for x in self.files.values() if x.record == buffer), None)
         if f is None:
-            raise CobolError(f"WRITE {record}: no file has this record")
-        record = key
+            raise CobolError(f"{record}: no file has this record")
+        return f, key
+
+    def write(self, record: str, src=None, advancing=None) -> bool:
+        """WRITE. advancing: None, ("before" | "after", n) or ("before" | "after", "page"). False on INVALID KEY."""
+        f, record = self._file_of(record)
         if src is not None:
             self.move(src, record)
+        if f.organization in ("indexed", "relative"):
+            return self._k_write(f, record)
         if f.mode not in ("output", "extend", "io"):
             self._status(f, "48")
             raise CobolError(f"WRITE {record}: the file is not open for output")
@@ -531,6 +593,458 @@ class Program:
             post = nl
         f.out += pre + data + post
         self._status(f, "00")
+        return True
+
+    def rewrite(self, record: str, src=None) -> bool:
+        f, record = self._file_of(record)
+        if src is not None:
+            self.move(src, record)
+        if f.organization in ("indexed", "relative"):
+            return self._k_rewrite(f, record)
+        if f.mode != "io" or f.last_pos < 0:
+            self._status(f, "43" if f.mode == "io" else "49")
+            raise CobolError(f"REWRITE {record}: no record was read first, or the file is not open I-O")
+        data = bytes(self.mem[f.record][0:f.size])
+        if f.organization == "line":
+            old_end = f.out.find(b"\n", f.last_pos)
+            old_end = len(f.out) if old_end < 0 else old_end
+            f.out[f.last_pos:old_end] = data.rstrip(b" ")
+        else:
+            f.out[f.last_pos:f.last_pos + f.size] = data
+        f.last_pos = -1
+        self._status(f, "00")
+        return True
+
+    def delete(self, name: str) -> bool:
+        f = self.files[name]
+        if f.organization not in ("indexed", "relative"):
+            raise CobolError(f"DELETE {name}: only indexed and relative files can delete records")
+        return self._k_delete(f)
+
+    # -- indexed and relative files (an in-memory copy of what GnuCOBOL keeps in its file)
+    def _kspec(self, name):
+        spec = self.items[name]
+        return spec[1], spec[2]
+
+    def _kval(self, f: FileState, keyname: str, rec: bytes):
+        off, size = self._kspec(keyname)
+        return bytes(rec[off:off + size])
+
+    def _primary(self, f: FileState, rec: bytes):
+        if f.organization == "relative":
+            return int(self.n(f.extra["relkey"])) if f.extra.get("relkey") else 0
+        return self._kval(f, f.extra["key"], rec)
+
+    def _k_insert(self, f: FileState, rec: bytes, pk) -> str:
+        if pk in f.table:
+            return "22"
+        dup = False
+        for name, dups in f.extra.get("alt", []):
+            v = self._kval(f, name, rec)
+            same = any(self._kval(f, name, r) == v for _, r in f.table.values())
+            if same and not dups:
+                return "22"
+            dup = dup or same
+        f.seq += 1
+        f.table[pk] = [f.seq, bytes(rec)]
+        f.cache = None
+        return "02" if dup else "00"
+
+    def _k_open(self, f: FileState, mode: str) -> None:
+        f.mode, f.last, f.pending, f.cache = mode, None, None, None
+        f.keyref = f.extra.get("key")
+        f.table, f.seq, f.extent = {}, 0, 0
+        if mode in ("input", "io", "extend"):
+            if f.assign not in self.io.inputs:
+                if f.extra.get("optional") or mode == "extend":
+                    self._status(f, "05")
+                    return
+                f.mode = None
+                self._status(f, "35")
+                if not f.status:
+                    raise CobolError(f"OPEN {mode.upper()} {f.name}: file {f.assign} does not exist")
+                return
+            data = self.io.inputs[f.assign]
+            step = f.size + (9 if f.organization == "relative" else 0)
+            for i in range(0, len(data) - step + 1, step):
+                chunk = data[i:i + step]
+                if f.organization == "relative":
+                    slot, rec = int(chunk[:9] or b"0"), chunk[9:]
+                    if slot > 0:
+                        f.seq += 1
+                        f.table[slot] = [f.seq, bytes(rec)]
+                        f.extent = max(f.extent, slot)
+                else:
+                    self._k_insert(f, chunk, self._kval(f, f.extra["key"], chunk))
+        self._status(f, "00")
+
+    def _k_dump(self, f: FileState) -> bytes:
+        if f.organization == "relative":
+            return b"".join(b"%09d" % slot + f.table[slot][1] for slot in sorted(f.table))
+        return b"".join(f.table[k][1] for k in sorted(f.table))
+
+    def _positions(self, f: FileState) -> list:
+        """(position, primary key) in the order of the key of reference."""
+        if f.cache is None:
+            if f.organization == "relative":
+                f.cache = [((k,), k) for k in sorted(f.table)]
+            elif f.keyref == f.extra.get("key") or f.keyref is None:
+                f.cache = [((k,), k) for k in sorted(f.table)]
+            else:
+                f.cache = sorted(((self._kval(f, f.keyref, r), seq), k) for k, (seq, r) in f.table.items())
+        return f.cache
+
+    def _pos_of(self, f: FileState, pk) -> tuple:
+        if f.organization == "relative" or f.keyref in (None, f.extra.get("key")):
+            return (pk,)
+        seq, rec = f.table[pk]
+        return (self._kval(f, f.keyref, rec), seq)
+
+    def _deliver(self, f: FileState, pk) -> None:
+        rec = f.table[pk][1]
+        buf = self.mem[f.record]
+        buf[0:len(rec)] = rec
+        if f.organization == "relative" and f.extra.get("relkey"):
+            self.move(Decimal(pk), f.extra["relkey"])
+        f.last = self._pos_of(f, pk)
+
+    def _k_next(self, f: FileState) -> bool:
+        if f.mode not in ("input", "io"):
+            self._status(f, "47")
+            raise CobolError(f"READ {f.name}: the file is not open for input")
+        import bisect
+
+        order = self._positions(f)
+        keys = [p for p, _ in order]
+        if f.pending is not None:
+            pos, inclusive = f.pending
+            i = bisect.bisect_left(keys, pos) if inclusive else bisect.bisect_right(keys, pos)
+            f.pending = None
+        elif f.last is None:
+            i = 0
+        else:
+            i = bisect.bisect_right(keys, f.last)
+        if i >= len(order):
+            self._status(f, "10")
+            return False
+        pk = order[i][1]
+        self._deliver(f, pk)
+        self._status(f, "00")  # GnuCOBOL (BDB) reports 00 even when more records share the alternate key (measured)
+        return True
+
+    def _k_read(self, f: FileState, key=None) -> bool:
+        """A READ of a keyed file: by key when access is RANDOM, or DYNAMIC without NEXT."""
+        if f.extra.get("access", "sequential") == "sequential":
+            return self._k_next(f)
+        if f.mode not in ("input", "io"):
+            self._status(f, "47")
+            raise CobolError(f"READ {f.name}: the file is not open for input")
+        if key is not None:
+            f.keyref, f.cache = self.resolve(key), None
+        rec = bytes(self.mem[f.record][0:f.size])
+        if f.organization == "relative":
+            pk = self._primary(f, rec)
+            found = pk if pk in f.table else None
+        elif f.keyref in (None, f.extra.get("key")):
+            pk = self._kval(f, f.extra["key"], rec)
+            found = pk if pk in f.table else None
+        else:
+            v = self._kval(f, f.keyref, rec)
+            found = next((k for (p, k) in self._positions(f) if p[0] == v), None)
+        if found is None:
+            self._status(f, "23")
+            return False
+        self._deliver(f, found)
+        self._status(f, "00")
+        return True
+
+    def _k_write(self, f: FileState, record: str) -> bool:
+        if f.mode not in ("output", "extend", "io"):
+            self._status(f, "48")
+            raise CobolError(f"WRITE {record}: the file is not open for output")
+        rec = bytes(self.mem[f.record][0:f.size])
+        seq_access = f.extra.get("access", "sequential") == "sequential"
+        if f.organization == "relative":
+            if seq_access and f.mode in ("output", "extend"):
+                pk = (max(f.table) if f.table else 0) + 1
+                if f.extra.get("relkey"):
+                    self.move(Decimal(pk), f.extra["relkey"])
+            else:
+                pk = self._primary(f, rec)
+                if pk < 1:
+                    self._status(f, "24")
+                    return False
+            if pk in f.table:
+                self._status(f, "22")
+                return False
+            f.seq += 1
+            f.table[pk] = [f.seq, rec]
+            f.extent = max(f.extent, pk)
+            f.cache = None
+            self._status(f, "00")
+            return True
+        pk = self._kval(f, f.extra["key"], rec)
+        if seq_access and f.mode in ("output", "extend") and f.table and pk <= max(f.table):
+            self._status(f, "21")  # sequential access must write in ascending key order
+            return False
+        code = self._k_insert(f, rec, pk)
+        self._status(f, code)
+        return code in ("00", "02")
+
+    def _k_rewrite(self, f: FileState, record: str) -> bool:
+        if f.mode != "io":
+            self._status(f, "49")
+            raise CobolError(f"REWRITE {record}: the file is not open I-O")
+        rec = bytes(self.mem[f.record][0:f.size])
+        pk = self._primary(f, rec)
+        if f.extra.get("access", "sequential") == "sequential":
+            if f.last is None or self._pos_of(f, pk) != f.last if pk in f.table else True:
+                self._status(f, "21")
+                return False
+        if pk not in f.table:
+            self._status(f, "23")
+            return False
+        dup = False
+        for name, dups in f.extra.get("alt", []):
+            v = self._kval(f, name, rec)
+            clash = any(k != pk and self._kval(f, name, r) == v for k, (_, r) in f.table.items())
+            if clash and not dups:
+                self._status(f, "22")
+                return False
+            dup = dup or clash
+        f.table[pk][1] = rec
+        f.cache = None
+        self._status(f, "02" if dup else "00")
+        return True
+
+    def _k_delete(self, f: FileState) -> bool:
+        if f.mode != "io":
+            self._status(f, "49")
+            raise CobolError(f"DELETE {f.name}: the file is not open I-O")
+        if f.extra.get("access", "sequential") == "sequential":
+            if f.last is None:
+                self._status(f, "43")
+                return False
+            pk = next((k for p, k in self._positions(f) if p == f.last), None)
+        else:
+            pk = self._primary(f, bytes(self.mem[f.record][0:f.size]))
+            if f.organization == "relative" and pk < 1:
+                self._status(f, "24")  # slot 0 is outside the file (measured)
+                return False
+            if f.organization == "relative" and pk not in f.table and pk <= f.extent:
+                self._status(f, "00")  # an empty slot inside the file deletes without complaint (measured)
+                return True
+        if pk is None or pk not in f.table:
+            self._status(f, "23")
+            return False
+        del f.table[pk]
+        f.cache = None
+        self._status(f, "00")
+        return True
+
+    def start(self, name: str, op: str = ">=", key=None) -> bool:
+        """START: position the file so the next READ NEXT returns the first record whose key satisfies op."""
+        f = self.files[name]
+        if f.mode not in ("input", "io"):
+            self._status(f, "47")
+            raise CobolError(f"START {name}: the file is not open for input")
+        if op == "first":
+            f.keyref, f.cache, f.last, f.pending = f.extra.get("key"), None, None, None
+            self._status(f, "00" if f.table else "23")
+            return bool(f.table)
+        rec = bytes(self.mem[f.record][0:f.size])
+        if f.organization == "relative":
+            f.keyref = None
+            target = (self._primary(f, rec),)
+            width = None
+        else:
+            keyname = self.resolve(key) if key is not None else f.extra["key"]
+            off, width = self._kspec(keyname)
+            # a START on a leading part of a key (a group or field at the key's offset) compares that many bytes
+            ref = next((k for k in [f.extra["key"]] + [a for a, _ in f.extra.get("alt", [])] if self._kspec(k)[0] == off), f.extra["key"])
+            if self._kspec(ref)[1] < width:
+                ref = keyname
+            f.keyref, f.cache = ref, None
+            target = (rec[off:off + width],)
+        order = self._positions(f)
+
+        def part(p):
+            return p[0] if width is None else p[0][:width]
+
+        tv = target[0]
+        tests = {"=": lambda v: v == tv, ">": lambda v: v > tv, ">=": lambda v: v >= tv, "<": lambda v: v < tv, "<=": lambda v: v <= tv}
+        hits = [i for i, (p, _) in enumerate(order) if tests[op](part(p))]
+        if not hits:
+            f.pending = None
+            self._status(f, "23")
+            return False
+        i = hits[-1] if op in ("<", "<=") else hits[0]
+        f.pending, f.last = (order[i][0], True), None
+        self._status(f, "00")
+        return True
+
+    # ---------------------------------------------------------- SORT and MERGE
+    def _sort_cmp(self, keys):
+        def value(name, rec):
+            spec = self.items[name]
+            raw = rec[spec[1]:spec[1] + spec[2]]
+            return decode(self._cspec(spec), raw) if spec[3] == "num" else raw
+
+        def cmp(a, b):
+            for ascending, name in keys:
+                x, y = value(name, a), value(name, b)
+                if x != y:
+                    return (-1 if x < y else 1) * (1 if ascending else -1)
+            return 0
+        return cmp
+
+    def sort(self, sd: str, keys: list, using=None, giving=None, input_proc=None, output_proc=None) -> None:
+        """SORT or MERGE: keys is [(ascending, item)]. GnuCOBOL's sort is stable (measured)."""
+        from functools import cmp_to_key
+
+        f = self.files[sd]
+        if using:
+            records = []
+            for name in using:
+                uf = self.files[name]
+                self.open(name, "input")
+                while uf.mode and self.read_next(name):
+                    rec = bytes(self.mem[uf.record][0:uf.size])
+                    records.append(rec[:f.size].ljust(f.size, b" "))
+                self.close(name)
+        else:
+            f.released = []
+            self.perform(*input_proc)
+            records = f.released
+        records = sorted(records, key=cmp_to_key(self._sort_cmp(keys)))
+        if giving:
+            for name in giving:
+                gf = self.files[name]
+                self.open(name, "output")
+                for rec in records:
+                    self.mem[gf.record][0:gf.size] = rec[:gf.size].ljust(gf.size, b" ")
+                    self.write(gf.record)
+                self.close(name)
+        else:
+            f.returning = list(records)
+            self.perform(*output_proc)
+        if "SORT-RETURN" in self.items:
+            self.move(Decimal(0), "SORT-RETURN")
+
+    def sort_table(self, table: str, keys: list) -> None:
+        """SORT of an OCCURS table in storage: reorder its occurrences by the keys (stable)."""
+        from functools import cmp_to_key
+
+        spec = self.items[self.resolve(table)]
+        if not spec[10]:
+            raise CobolError(f"SORT {table}: it is not a table")
+        count, stride = spec[10][-1]
+        rec, base = spec[0], spec[1]
+        buf = self.mem[rec]
+        rows = [bytes(buf[base + k * stride: base + (k + 1) * stride]) for k in range(count)]
+        shifted = [(asc, name) for asc, name in keys]
+
+        def value(name, row):
+            ks = self.items[name]
+            off = ks[1] - base
+            raw = row[off:off + ks[2]]
+            return decode(self._cspec(ks), raw) if ks[3] == "num" else raw
+
+        def cmp(a, b):
+            for ascending, name in shifted:
+                x, y = value(name, a), value(name, b)
+                if x != y:
+                    return (-1 if x < y else 1) * (1 if ascending else -1)
+            return 0
+        import sys
+
+        if sys.platform == "win32":
+            crt_qsort(rows, cmp)
+        else:  # glibc's qsort is a merge sort for tables this size: stable
+            rows.sort(key=cmp_to_key(cmp))
+        buf[base:base + count * stride] = b"".join(rows)
+
+    def release(self, record: str, src=None) -> None:
+        f, record = self._file_of(record)
+        if src is not None:
+            self.move(src, record)
+        f.released.append(bytes(self.mem[f.record][0:f.size]))
+
+    def return_(self, sd: str, into=None) -> bool:
+        f = self.files[sd]
+        if not f.returning:
+            return False
+        rec = f.returning.pop(0)
+        self.mem[f.record][0:f.size] = rec
+        if into is not None:
+            self.move(Ref(f.record), into)
+        return True
+
+    # ---------------------------------------------------------- CALL
+    def link(self, programs: dict) -> None:
+        """Make the called programs of this run reachable by CALL (name -> (Program, paragraphs, sections))."""
+        self.registry = programs
+        for sub, _, _ in programs.values():
+            sub.registry = programs
+
+    def call(self, name, args: list, on_exception: bool = False) -> bool:
+        """CALL name USING args. args: [("reference" | "content" | "value", operand)]. False when not found."""
+        target = (name if isinstance(name, str) else self._text(name)).strip().upper()
+        entry = getattr(self, "registry", {}).get(target)
+        if entry is None:
+            if on_exception:
+                return False
+            raise CobolError(f"CALL {target}: module '{target}' not found")
+        sub, paras, secs = entry
+        if not sub._active or sub.initial:
+            sub.io = self.io
+            sub.reset()
+            sub._active = True
+        sub.io = self.io
+        for (mode, arg), lname in zip(args, sub.linkage):
+            size = sub.records[lname]
+            if mode == "reference" and isinstance(arg, (Ref, str)):
+                rec, off, _, _ = self._addr(arg)
+                buf = self.mem[rec]
+                if len(buf) - off >= size:
+                    sub.mem[lname] = memoryview(buf)[off:off + size]
+                else:  # the linkage record is longer than what was passed: give it the rest, padded
+                    sub.mem[lname] = memoryview(buf)[off:]
+                    if len(sub.mem[lname]) < size:
+                        sub.mem[lname] = bytearray(bytes(buf[off:]).ljust(size, b"\x00"))
+            else:
+                data = self._bytes(arg) if isinstance(arg, (Ref, str)) else self._text(arg).encode(ENC)
+                sub.mem[lname] = bytearray(data[:size].ljust(size, b" "))
+        if "RETURN-CODE" in sub.items:
+            sub.move(Decimal(0), "RETURN-CODE")
+        sub._enter(paras, secs)
+        if "RETURN-CODE" in self.items and "RETURN-CODE" in sub.items:
+            # an IS INITIAL program hands back RETURN-CODE 0 whatever it set (measured on GnuCOBOL 3.1.2)
+            self.move(Decimal(0) if sub.initial else sub.n("RETURN-CODE"), "RETURN-CODE")
+        return True
+
+    def cancel(self, name) -> None:
+        target = (name if isinstance(name, str) else self._text(name)).strip().upper()
+        entry = getattr(self, "registry", {}).get(target)
+        if entry:
+            entry[0]._active = False
+
+    def _enter(self, paras, secs) -> None:
+        saved = (getattr(self, "_paras", None), getattr(self, "_index", None), getattr(self, "_sections", None))
+        self._paras, self._index, self._sections = paras, {n: i for i, (n, _) in enumerate(paras)}, secs
+        self._called = True
+        try:
+            self._execute(0, len(paras) - 1)
+        except GoBack:
+            pass
+        finally:
+            if saved[0] is not None:
+                self._paras, self._index, self._sections = saved
+
+    def exit_program(self) -> None:
+        """EXIT PROGRAM: return to the caller; in the main program it does nothing."""
+        if getattr(self, "_called", False):
+            raise GoBack()
 
     @staticmethod
     def unsupported(where: str) -> None:
@@ -725,6 +1239,8 @@ class Program:
         """Run the whole program: start at the first paragraph and fall through, like COBOL."""
         self.io = io
         self.reset()
+        for sub, _, _ in self.registry.values():
+            sub._active = False
         self._paras = paragraphs
         self._index = {name: i for i, (name, _) in enumerate(paragraphs)}
         self._sections = sections
@@ -733,9 +1249,10 @@ class Program:
         except StopRun:
             pass
         finally:
-            for f in self.files.values():  # files left open are closed, as the runtime does at exit, even after an error
-                if f.mode:
-                    self.close(f.name)
+            for prog in [self] + [sub for sub, _, _ in self.registry.values()]:
+                for f in prog.files.values():  # files left open are closed, as the runtime does at exit, even after an error
+                    if f.mode and f.organization != "sort":
+                        prog.close(f.name)
         rc = self.items.get("RETURN-CODE")
         io.return_code = int(self.n("RETURN-CODE")) if rc else 0
         return io
@@ -771,6 +1288,84 @@ class Program:
 
 
 # ------------------------------------------------------------------- helpers
+
+_CUTOFF = 8
+
+
+def _shortsort(a, lo, hi, cmp):
+    while hi > lo:
+        mx = lo
+        for p in range(lo + 1, hi + 1):
+            if cmp(a[p], a[mx]) > 0:
+                mx = p
+        a[mx], a[hi] = a[hi], a[mx]
+        hi -= 1
+
+
+def crt_qsort(a: list, cmp) -> None:
+    """The C runtime's qsort, step for step (Microsoft CRT, which the Windows GnuCOBOL build uses for SORT of a
+    table). It is not stable, so records with equal keys come out in this exact order; measured against GnuCOBOL."""
+    n = len(a)
+    if n < 2:
+        return
+    stack = []
+    lo, hi = 0, n - 1
+    while True:
+        size = hi - lo + 1
+        if size <= _CUTOFF:
+            _shortsort(a, lo, hi, cmp)
+        else:
+            mid = lo + size // 2
+            if cmp(a[lo], a[mid]) > 0:
+                a[lo], a[mid] = a[mid], a[lo]
+            if cmp(a[lo], a[hi]) > 0:
+                a[lo], a[hi] = a[hi], a[lo]
+            if cmp(a[mid], a[hi]) > 0:
+                a[mid], a[hi] = a[hi], a[mid]
+            loguy, higuy = lo, hi
+            while True:
+                if mid > loguy:
+                    loguy += 1
+                    while loguy < mid and cmp(a[loguy], a[mid]) <= 0:
+                        loguy += 1
+                if mid <= loguy:
+                    loguy += 1
+                    while loguy <= hi and cmp(a[loguy], a[mid]) <= 0:
+                        loguy += 1
+                higuy -= 1
+                while higuy > mid and cmp(a[higuy], a[mid]) > 0:
+                    higuy -= 1
+                if higuy < loguy:
+                    break
+                a[loguy], a[higuy] = a[higuy], a[loguy]
+                if mid == higuy:
+                    mid = loguy
+            higuy += 1
+            if mid < higuy:
+                higuy -= 1
+                while higuy > mid and cmp(a[higuy], a[mid]) == 0:
+                    higuy -= 1
+            if mid >= higuy:
+                higuy -= 1
+                while higuy > lo and cmp(a[higuy], a[mid]) == 0:
+                    higuy -= 1
+            if higuy - lo >= hi - loguy:
+                if lo < higuy:
+                    stack.append((lo, higuy))
+                if loguy < hi:
+                    lo = loguy
+                    continue
+            else:
+                if loguy < hi:
+                    stack.append((loguy, hi))
+                if lo < higuy:
+                    hi = higuy
+                    continue
+        if not stack:
+            return
+        lo, hi = stack.pop()
+
+
 
 def _lit_text(d: Decimal) -> str:
     """A numeric literal as written: 12.50 stays 12.50, -3 stays -3."""

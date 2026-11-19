@@ -164,8 +164,8 @@ def program_info(name: str, root: Path = ROOT) -> dict:
             "format": "fixed" if model.fixed else "free",
             "purpose": _purpose(model),
             "files": [{"name": f.name, "assign": f.assign, "role": "input" if f.is_input and not f.is_output else ("output" if f.is_output and not f.is_input else "both"),
-                       "lines": f.organization == "line", "record": f.record.name if f.record else None, "size": f.size} for f in model.files],
-            "console_input": model.accepts,
+                       "lines": f.organization == "line", "record": f.record.name if f.record else None, "size": f.size} for f in model.all_files],
+            "console_input": model.all_accepts,
             "io": model.describe_io(),
             "unsupported": model.unsupported,
             "notes": model.notes,
@@ -202,7 +202,7 @@ def validate_name(name: str) -> None:
 
 
 def _stub(name: str, model) -> str:
-    files = "\n".join(f"    {f.assign}: {'reads' if f.is_input else 'writes'} {f.record.name if f.record else ''} ({f.size} bytes)" for f in model.files)
+    files = "\n".join(f"    {f.assign}: {'reads' if f.is_input else 'writes'} {f.record.name if f.record else ''} ({f.size} bytes)" for f in model.all_files)
     return f'''"""Migration of legacy/{name}/{name}.cbl. Read docs/specs/{name}.md first.
 
 Files:
@@ -254,19 +254,22 @@ def delete_program(name: str, root: Path = ROOT) -> None:
         _rm(p)
 
 
-def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = None, root: Path = ROOT) -> dict:
+def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = None, root: Path = ROOT,
+                   programs: dict[str, str] | None = None) -> dict:
+    """programs: other COBOL programs this one CALLs (file stem -> source), compiled and translated with it."""
     """Add a program, then analyze, compile, record, describe and draft the Python. Cleans up on failure."""
     copybooks = copybooks or {}
+    programs = programs or {}
     name = (name or "").strip() or suggest_name(cobol)
     if not (name or "").strip():
         name = suggest_name(cobol)
     validate_name(name)
     if not cobol.strip():
         raise ProgramError("The COBOL source is empty.")
-    total = len(cobol.encode("utf-8")) + sum(len(t.encode("utf-8")) for t in copybooks.values())
+    total = len(cobol.encode("utf-8")) + sum(len(t.encode("utf-8")) for t in [*copybooks.values(), *programs.values()])
     if total > MAX_SOURCE_BYTES:
         raise ProgramError(f"The source is larger than {MAX_SOURCE_BYTES // 1000} KB.")
-    for cb_name in copybooks:
+    for cb_name in [*copybooks, *programs]:
         if not COPYBOOK_RE.fullmatch(cb_name):
             raise ProgramError(f"Copybook name {cb_name!r} must be letters, digits, '-' or '_'.")
     if name in program_names(root) or (root / "legacy" / name).exists():
@@ -281,6 +284,10 @@ def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = Non
         (src / f"{name}.cbl").write_text(cobol, encoding="utf-8")
         for cb_name, cb_text in copybooks.items():
             (src / f"{cb_name}.cpy").write_text(cb_text, encoding="utf-8")
+        for sub_name, sub_text in programs.items():
+            if sub_name.lower() == name.lower():
+                raise ProgramError(f"A called program cannot have the same file name as the main program ({sub_name}).")
+            (src / f"{sub_name.lower()}.cbl").write_text(sub_text, encoding="utf-8")
         (src / USER_MARKER).write_text("added through the UI\n", encoding="utf-8")
         try:
             model = load_model(name, root)

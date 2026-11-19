@@ -1,6 +1,6 @@
 """Python translation of legacy/add_amounts/add_amounts.cbl (PROGRAM-ID ADDAMT).
 
-Written by the Séance translator on 2026-11-18. The program reads console input.
+Written by the Séance translator on 2026-11-19. The program reads console input.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).
 Each line ends with # Lnn, the COBOL line it came from. Data is kept byte for byte as COBOL lays it out.
 Every statement was translated.
@@ -9,7 +9,7 @@ This file is yours now: edit it, then run the check.
 
 from decimal import Decimal as D
 
-from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, Program, StopRun, run_cli
+from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, NextSentence, Program, StopRun, run_cli
 
 ITEMS = {
     "KEYED-INPUT": ['KEYED-INPUT', 0, 30, 'group', 'display', 0, 0, False, 'none', '', [], ['CUST-NO-IN', 'AMT1-IN', 'AMT2-IN', 'AMT3-IN'], False, False],
@@ -23,9 +23,10 @@ ITEMS = {
     "MORE-DATA": ['MORE-DATA', 0, 3, 'alpha', 'display', 0, 0, False, 'none', 'XXX', [], [], False, False],
     "RETURN-CODE": ['_SPECIAL', 0, 4, 'num', 'native', 9, 0, True, 'none', '', [], [], False, False],
     "TALLY": ['_SPECIAL', 4, 2, 'num', 'native', 5, 0, False, 'none', '', [], [], False, False],
+    "SORT-RETURN": ['_SPECIAL', 6, 4, 'num', 'binary', 9, 0, True, 'none', '', [], [], False, False],
 }
 
-RECORDS = {'KEYED-INPUT': 30, 'DISPLAYED-OUTPUT': 21, 'MORE-DATA': 3, '_SPECIAL': 6}
+RECORDS = {'KEYED-INPUT': 30, 'DISPLAYED-OUTPUT': 21, 'MORE-DATA': 3, '_SPECIAL': 10}
 
 VALUES = [
     ("MORE-DATA", 'YES', False),
@@ -41,7 +42,7 @@ FILES = [
 
 INDEXES = []
 
-S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES)
+S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage=[])
 
 
 def p_100_main():  # paragraph 100-MAIN (line 23)
@@ -62,7 +63,7 @@ def p_100_main():  # paragraph 100-MAIN (line 23)
         S.display('MORE INPUT DATA (YES/NO)?')  # L37
         S.accept("MORE-DATA", "console")  # L38
         S.inspect_convert(S.r("MORE-DATA"), 'noyes', 'NOYES', None, None)  # L39
-    raise StopRun()  # L41
+    raise GoBack()  # L41
 
 
 PARAGRAPHS = [
@@ -71,10 +72,13 @@ PARAGRAPHS = [
 SECTIONS = {}
 
 
+RUN_FILES = []  # every file the run touches, in this program and the programs it calls
+
+
 def main(io=None):
     """Run the whole program, like the COBOL batch job. io holds the input files and console input."""
     return S.run(io if io is not None else IO(), PARAGRAPHS, SECTIONS)
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_cli(main, FILES))
+    raise SystemExit(run_cli(main, RUN_FILES))

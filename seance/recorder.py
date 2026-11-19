@@ -53,28 +53,38 @@ def get_model(program: str, root: Path = ROOT) -> ProgramModel:
         raise LegacyRuntimeError(str(exc)) from exc
 
 
+def _cobc(args: list[str], what: str) -> None:
+    proc = subprocess.run([cobc_path(), *args], capture_output=True, text=True, env=cobol_env())
+    if proc.returncode != 0:
+        msgs = [l for l in proc.stderr.splitlines() if "error" in l.lower()][:6]
+        raise LegacyRuntimeError(f"cobc could not compile {what}:\n"
+                                 + "\n".join(m.split(": ", 1)[-1] if ": " in m else m for m in msgs or proc.stderr.splitlines()[:6]))
+
+
+def _prepare(model: ProgramModel, out_dir: Path) -> Path:
+    """A copy with the reported dialect fixes (the original is never changed; line numbers stay the same)."""
+    fixed_text, _ = source_fixes(model.path.read_text(encoding="utf-8", errors="replace"), model.fixed)
+    prepared = out_dir / "src" / model.path.name
+    prepared.parent.mkdir(parents=True, exist_ok=True)
+    prepared.write_text(fixed_text, encoding="utf-8")
+    return prepared
+
+
 def compile_legacy(program: str, root: Path = ROOT) -> Path:
+    """Compile the program, and every program it CALLs as a module next to it (found through COB_LIBRARY_PATH)."""
     model = get_model(program, root)
     src_dir = root / "legacy" / program
     exe = root / "build" / program / f"{program}{'.exe' if os.name == 'nt' else ''}"
     exe.parent.mkdir(parents=True, exist_ok=True)
     newest = max(p.stat().st_mtime for p in src_dir.glob("*") if p.is_file())
-    if exe.exists() and exe.stat().st_mtime >= newest:
+    subs = model._every()[1:]
+    module_ext = ".dll" if os.name == "nt" else ".so"
+    modules = [exe.parent / f"{m.program_id}{module_ext}" for m in subs]
+    if all(t.exists() and t.stat().st_mtime >= newest for t in [exe, *modules]):
         return exe
     if not cobc_available():
         raise LegacyRuntimeError("cobc not found. Put GnuCOBOL in tools\\gnucobol or on PATH.")
-    # Compile a copy with the reported dialect fixes (the original is never changed; line numbers stay the same).
-    fixed_text, _ = source_fixes(model.path.read_text(encoding="utf-8", errors="replace"), model.fixed)
-    prepared = exe.parent / "src" / model.path.name
-    prepared.parent.mkdir(parents=True, exist_ok=True)
-    prepared.write_text(fixed_text, encoding="utf-8")
-    proc = subprocess.run(
-        [cobc_path(), "-x", *model.compile_flags, "-I", str(src_dir), "-o", str(exe), str(prepared)],
-        capture_output=True,
-        text=True,
-        env=cobol_env(),
-    )
-    if proc.returncode != 0:
-        msgs = [l for l in proc.stderr.splitlines() if "error" in l.lower()][:6]
-        raise LegacyRuntimeError("cobc could not compile it:\n" + "\n".join(m.split(": ", 1)[-1] if ": " in m else m for m in msgs or proc.stderr.splitlines()[:6]))
+    for m, target in zip(subs, modules):
+        _cobc(["-m", *m.compile_flags, "-I", str(src_dir), "-o", str(target), str(_prepare(m, exe.parent))], f"{m.path.name}")
+    _cobc(["-x", *model.compile_flags, "-I", str(src_dir), "-o", str(exe), str(_prepare(model, exe.parent))], "it")
     return exe

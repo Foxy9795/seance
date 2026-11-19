@@ -69,7 +69,7 @@ def describe_layout(program: str) -> str:
 
     model = _model(program)
     out = [f"{'fixed' if model.fixed else 'free'}-format source; {model.describe_io()}"]
-    for f in model.files:
+    for f in model.all_files:
         out.append(f"{f.assign} ({'text lines' if f.organization == 'line' else 'fixed records'}, {', '.join(sorted(f.modes))}): "
                    f"record {f.record.name if f.record else '?'}, {f.size} bytes")
         for lf in leaves(f.record) if f.record else []:
@@ -77,8 +77,8 @@ def describe_layout(program: str) -> str:
             kind = {"alpha": f"text({it.size})", "edited": f"edited picture {it.pic}"}.get(
                 it.kind, f"number digits={it.digits} decimals={it.scale} signed={it.signed} storage={it.usage}")
             out.append(f"  {lf.name:<22} bytes {lf.offset + 1}-{lf.offset + lf.width}  {kind}")
-    if model.accepts:
-        out.append("Console input (ACCEPT): " + ", ".join(model.accepts))
+    if model.all_accepts:
+        out.append("Console input (ACCEPT): " + ", ".join(model.all_accepts))
     for item in model.unsupported:
         out.append(f"Not runnable yet: {item}")
     return "\n".join(out)
@@ -116,7 +116,7 @@ def run_legacy_program(program: str, input_lines: list[str] | None = None, input
         raise ValueError(str(exc)) from exc
     out = []
     for name, data in result.outputs.items():
-        f = next((x for x in model.files if x.assign == name), None)
+        f = next((x for x in model.all_files if x.assign == name), None)
         out.append(f"== {name}")
         out += [show(u) for u in _units(f, data)]
     out.append("== console")

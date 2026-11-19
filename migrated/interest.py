@@ -1,6 +1,6 @@
 """Python translation of legacy/interest/interest.cbl (PROGRAM-ID INTEREST).
 
-Written by the Séance translator on 2026-11-18. The program reads INPUT.DAT, writes OUTPUT.DAT.
+Written by the Séance translator on 2026-11-19. The program reads INPUT.DAT, writes OUTPUT.DAT.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).
 Each line ends with # Lnn, the COBOL line it came from. Data is kept byte for byte as COBOL lays it out.
 Every statement was translated.
@@ -9,7 +9,7 @@ This file is yours now: edit it, then run the check.
 
 from decimal import Decimal as D
 
-from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, Program, StopRun, run_cli
+from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, NextSentence, Program, StopRun, run_cli
 
 ITEMS = {
     "IN-REC": ['IN-REC', 0, 28, 'group', 'display', 0, 0, False, 'none', '', [], ['IN-ACCT-ID', 'IN-BALANCE', 'IN-RATE', 'IN-DAYS'], False, False],
@@ -26,9 +26,10 @@ ITEMS = {
     "WS-INT": ['WS-INT', 0, 11, 'num', 'display', 11, 2, True, 'trailing_over', 'S999999999V99', [], [], False, False],
     "RETURN-CODE": ['_SPECIAL', 0, 4, 'num', 'native', 9, 0, True, 'none', '', [], [], False, False],
     "TALLY": ['_SPECIAL', 4, 2, 'num', 'native', 5, 0, False, 'none', '', [], [], False, False],
+    "SORT-RETURN": ['_SPECIAL', 6, 4, 'num', 'binary', 9, 0, True, 'none', '', [], [], False, False],
 }
 
-RECORDS = {'IN-REC': 28, 'OUT-REC': 33, 'WS-EOF': 1, 'WS-INT': 11, '_SPECIAL': 6}
+RECORDS = {'IN-REC': 28, 'OUT-REC': 33, 'WS-EOF': 1, 'WS-INT': 11, '_SPECIAL': 10}
 
 VALUES = [
     ("WS-EOF", 'N', False),
@@ -39,13 +40,13 @@ CONDITIONS = {
 }
 
 FILES = [
-    ["IN-FILE", "INPUT.DAT", "line", "IN-REC", 28, None],
-    ["OUT-FILE", "OUTPUT.DAT", "line", "OUT-REC", 33, None],
+    ["IN-FILE", "INPUT.DAT", "line", "IN-REC", 28, None, {'access': 'sequential'}],
+    ["OUT-FILE", "OUTPUT.DAT", "line", "OUT-REC", 33, None, {'access': 'sequential'}],
 ]
 
 INDEXES = []
 
-S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES)
+S = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage=[])
 
 
 def p_main_para():  # paragraph MAIN-PARA (line 19)
@@ -86,10 +87,13 @@ PARAGRAPHS = [
 SECTIONS = {}
 
 
+RUN_FILES = [['IN-FILE', 'INPUT.DAT'], ['OUT-FILE', 'OUTPUT.DAT']]  # every file the run touches, in this program and the programs it calls
+
+
 def main(io=None):
     """Run the whole program, like the COBOL batch job. io holds the input files and console input."""
     return S.run(io if io is not None else IO(), PARAGRAPHS, SECTIONS)
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_cli(main, FILES))
+    raise SystemExit(run_cli(main, RUN_FILES))

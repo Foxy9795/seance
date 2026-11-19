@@ -27,16 +27,26 @@ def _lit(text: str):
 
 
 def value_hints(model: ProgramModel) -> dict[str, list]:
+    """Hints from the main program and every program it calls, merged."""
+    out: dict[str, list] = {}
+    for m in model._every():
+        for k, values in _hints(model, m).items():
+            out.setdefault(k, [])
+            out[k] += [v for v in values if v not in out[k]]
+    return out
+
+
+def _hints(model: ProgramModel, unit: ProgramModel) -> dict[str, list]:
     from .translate import ENDERS, VERBS, build_names
 
-    names, _ = build_names(model)
+    names, _ = build_names(unit)
     targets = {}
     for f in model.inputs:
         if f.record is not None:
             for lf in leaves(f.record):
                 if lf.name != "FILLER":
                     targets[lf.item.name] = lf.item
-    for name in model.accepts:
+    for name in unit.accepts:
         if name in names.by_name:
             targets[name] = names.by_name[name][0]
     hints: dict[str, list] = {n: [] for n in targets}
@@ -47,7 +57,7 @@ def value_hints(model: ProgramModel) -> dict[str, list]:
                     if isinstance(v, (str, Decimal)) and v not in ("SPACE", "ZERO", "HIGH", "LOW", "QUOTE"):
                         hints[n].append(v)
 
-    proc = " ".join(t for _, t in model.proc_items)
+    proc = " ".join(t for _, t in unit.proc_items)
     aliases: dict[str, set[str]] = {n: {n} for n in targets}
     words = proc.upper().split()
     for i, w in enumerate(words):

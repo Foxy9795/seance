@@ -53,7 +53,7 @@ def bundle(program: str, implementation: str | None = None, root: Path = ROOT) -
     folder = f"{program}_python"
     inputs = ", ".join(f.assign for f in model.inputs) or "none"
     outputs = ", ".join(f.assign for f in model.outputs) or "none"
-    files = [[f.name, f.assign] for f in model.files]
+    files = [[f.name, f.assign] for f in model.all_files]
     readme = f"""# {model.program_id.title()} in Python
 
 Migrated from `{model.path.name}` with Séance on {date.today().isoformat()}.
@@ -66,8 +66,8 @@ python run.py
 ```
 
 It reads {inputs} and writes {outputs} in the current folder, byte for byte the way the COBOL did.
-{"It also reads console input (ACCEPT), one value per line on stdin." if model.accepts else ""}
-Set `DD_<NAME>` to point a file elsewhere, for example `DD_{(model.files[0].assign if model.files else 'INPUT')}=data/today.dat`.
+{"It also reads console input (ACCEPT), one value per line on stdin." if model.all_accepts else ""}
+Set `DD_<NAME>` to point a file elsewhere, for example `DD_{(model.all_files[0].assign if model.all_files else 'INPUT')}=data/today.dat`.
 Python 3.10 or newer, no other packages.
 
 ## Files

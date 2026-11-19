@@ -156,6 +156,10 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
         for r in f.records:
             for it in walk(r):
                 names.add(it, buffer)
+    for r in model.linkage_records:  # storage that belongs to the caller; CALL points it at the caller's data
+        records[r.name] = max(r.size, 1)
+        for it in walk(r):
+            names.add(it, r.name)
     for r in model.ws_records:
         buffer = r.name
         if r.redefines and r.redefines in records:  # 01 B REDEFINES A: B is another view of A's storage
@@ -166,10 +170,12 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
         for it in walk(r):
             names.add(it, buffer)
     special = Item("RETURN-CODE", 1, kind="num", usage="native", digits=9, signed=True, size=4)
-    records["_SPECIAL"] = 6
+    records["_SPECIAL"] = 10
     names.add(special, "_SPECIAL")
     tally = Item("TALLY", 1, kind="num", usage="native", digits=5, signed=False, size=2, offset=4)
     names.add(tally, "_SPECIAL")
+    sort_return = Item("SORT-RETURN", 1, kind="num", usage="binary", digits=9, signed=True, size=4, offset=6)
+    names.add(sort_return, "_SPECIAL")
     names.finish()
     for it in names.items.values():
         k = names.key[id(it)]
@@ -823,8 +829,6 @@ class Parser:
     def s_IF(self, line, stop):
         cond = self.condition()
         self.accept("THEN")
-        if self.word() == "NEXT" and self.word(1) == "SENTENCE":
-            raise Unsupported("NEXT SENTENCE is not supported yet")
         then = self.block(stop | {"ELSE", "END-IF"})
         other: list[Node] = []
         if self.accept("ELSE"):
@@ -958,7 +962,11 @@ class Parser:
         raise Unsupported("STOP with a literal is not supported")
 
     def s_GOBACK(self, line, stop):
-        return Node("stop", line)
+        return Node("goback", line)
+
+    def s_NEXT(self, line, stop):
+        self.expect("SENTENCE")
+        return Node("next_sentence", line)
 
     def s_EXIT(self, line, stop):
         if self.accept("PARAGRAPH"):
@@ -966,7 +974,7 @@ class Parser:
         if self.accept("SECTION"):
             return Node("exit_section", line)
         if self.accept("PROGRAM"):
-            return Node("stop", line)
+            return self.code(line, "S.exit_program()  # EXIT PROGRAM")
         if self.accept("PERFORM"):
             if self.accept("CYCLE"):
                 return Node("continue", line)
@@ -1003,7 +1011,9 @@ class Parser:
         file = self.take().value
         if file not in self.names.files:
             raise Unsupported(f"READ of unknown file {file}")
-        self.accept("NEXT")
+        nxt = bool(self.accept("NEXT"))
+        if self.word() == "PREVIOUS":
+            raise Unsupported("READ PREVIOUS is not supported yet")
         self.accept("RECORD")
         into = None
         if self.accept("INTO"):
@@ -1019,10 +1029,224 @@ class Parser:
             self.accept("AT")
             self.expect("END")
             not_at_end = self.block(inner)
-        if self.word() in ("INVALID", "KEY"):
-            raise Unsupported("READ ... INVALID KEY is for indexed files, which are not supported")
+        key = None
+        if self.word() == "KEY":
+            self.i += 1
+            self.accept("IS")
+            key = self.ref().key
+        inv, not_inv = self.key_phrases(stop, "END-READ")
+        if at_end is None and not_at_end is None and self.word() in ("AT", "END") and self.word() != "END-READ":
+            self.accept("AT")
+            self.expect("END")
+            at_end = self.block(inner)
+            if self.word() == "NOT" and self.word(1) in ("AT", "END"):
+                self.i += 1
+                self.accept("AT")
+                self.expect("END")
+                not_at_end = self.block(inner)
         self.accept("END-READ")
-        call = f'S.read("{file}"' + (f", {into}" if into else "") + ")"
+        args = f'"{file}"' + (f", {into}" if into else (", None" if key else "")) + (f', key="{key}"' if key else "")
+        call = (f"S.read_next({args})" if nxt else f"S.read({args})")
+        fail, ok = (at_end or []) + (inv or []), (not_at_end or []) + (not_inv or [])
+        if at_end is None and not_at_end is None and inv is None and not_inv is None:
+            return self.code(line, call)
+        return Node("if", line, {"cond": call, "then": ok, "else": fail})
+
+    def key_phrases(self, stop, end_word):
+        """[INVALID KEY statements] [NOT INVALID KEY statements]."""
+        inv = not_inv = None
+        inner = stop | {"NOT", end_word}
+        if self.word() == "INVALID":
+            self.i += 1
+            self.accept("KEY")
+            inv = self.block(inner)
+        if self.word() == "NOT" and self.word(1) == "INVALID":
+            self.i += 2
+            self.accept("KEY")
+            not_inv = self.block(inner)
+        return inv, not_inv
+
+    def keyed(self, line, call, stop, end_word) -> Node:
+        inv, not_inv = self.key_phrases(stop, end_word)
+        self.accept(end_word)
+        return self.guarded(line, call, inv, not_inv)
+
+    def s_REWRITE(self, line, stop):
+        rec = self.ref()
+        src = self.value() if self.accept("FROM") else None
+        return self.keyed(line, f'S.rewrite("{rec.key}", {src or "None"})', stop, "END-REWRITE")
+
+    def s_DELETE(self, line, stop):
+        file = self.take().value
+        if file not in self.names.files:
+            raise Unsupported(f"DELETE of unknown file {file}")
+        self.accept("RECORD")
+        return self.keyed(line, f'S.delete("{file}")', stop, "END-DELETE")
+
+    _START_OPS = [(("=",), "="), (("EQUAL", "TO"), "="), (("EQUAL",), "="), ((">=",), ">="), ((">", "="), ">="),
+                  (("GREATER", "THAN", "OR", "EQUAL", "TO"), ">="), (("GREATER", "OR", "EQUAL"), ">="), (("NOT", "<"), ">="),
+                  (("NOT", "LESS", "THAN"), ">="), (("NOT", "LESS"), ">="), ((">",), ">"), (("GREATER", "THAN"), ">"),
+                  (("GREATER",), ">"), (("<=",), "<="), (("LESS", "THAN", "OR", "EQUAL", "TO"), "<="), (("LESS", "OR", "EQUAL"), "<="),
+                  (("NOT", ">"), "<="), (("NOT", "GREATER", "THAN"), "<="), (("NOT", "GREATER"), "<="), (("<",), "<"),
+                  (("LESS", "THAN"), "<"), (("LESS",), "<")]
+
+    def s_START(self, line, stop):
+        file = self.take().value
+        if file not in self.names.files:
+            raise Unsupported(f"START of unknown file {file}")
+        op, key = ">=", None
+        if self.accept("FIRST"):
+            op = "first"
+        elif self.accept("LAST"):
+            raise Unsupported("START LAST is not supported yet")
+        elif self.accept("KEY"):
+            self.accept("IS")
+            for words, sym in self._START_OPS:
+                if all(self.peek(k).value == w for k, w in enumerate(words)):
+                    self.i += len(words)
+                    op = sym
+                    break
+            else:
+                raise Unsupported("START: cannot read the comparison")
+            key = self.ref().key
+        call = f'S.start("{file}", "{op}"' + (f', "{key}"' if key else "") + ")"
+        if op == "first":
+            call = f'S.start("{file}", "first")'
+        return self.keyed(line, call, stop, "END-START")
+
+    # CALL -------------------------------------------------------------------
+    def s_CALL(self, line, stop):
+        tok = self.peek()
+        if tok.kind == "str":
+            self.i += 1
+            target = repr(tok.value.strip().upper())
+        elif self.is_data():
+            target = self.ref().py
+        else:
+            raise Unsupported("CALL needs a program name")
+        args, mode = [], "reference"
+        if self.accept("USING"):
+            while True:
+                if self.accept("BY"):
+                    mode = {"REFERENCE": "reference", "CONTENT": "content", "VALUE": "value"}.get(self.take().value, "reference")
+                    continue
+                if self.word() in ("REFERENCE", "CONTENT", "VALUE") and self.peek(1).kind != "end":
+                    mode = self.take().value.lower()
+                    continue
+                if self.word() in ("ADDRESS", "OMITTED", "LENGTH"):
+                    raise Unsupported(f"CALL ... {self.word()} is not supported yet")
+                lit = self.literal()
+                if lit is not None:
+                    args.append(f'("content", {lit})')
+                    continue
+                if self.is_data():
+                    args.append(f'("{mode}", {self.ref().py})')
+                    continue
+                break
+        if self.accept("RETURNING") or self.accept("GIVING"):
+            raise Unsupported("CALL ... RETURNING is not supported yet")
+        exc = not_exc = None
+        inner = stop | {"NOT", "END-CALL"}
+        if self.word() in ("ON", "EXCEPTION", "OVERFLOW") and (self.word() != "ON" or self.word(1) in ("EXCEPTION", "OVERFLOW")):
+            self.accept("ON")
+            self.take()
+            exc = self.block(inner)
+        if self.word() == "NOT" and self.word(1) in ("ON", "EXCEPTION", "OVERFLOW"):
+            self.i += 1
+            self.accept("ON")
+            self.take()
+            not_exc = self.block(inner)
+        self.accept("END-CALL")
+        call = f"S.call({target}, [{', '.join(args)}]" + (", on_exception=True)" if exc is not None or not_exc is not None else ")")
+        return self.guarded(line, call, exc, not_exc)
+
+    def s_CANCEL(self, line, stop):
+        calls = []
+        while self.peek().kind == "str" or self.is_data():
+            calls.append(f"S.cancel({repr(self.take().value.upper()) if self.peek().kind == 'str' else self.ref().py})")
+        return self.code(line, "; ".join(calls) or "pass")
+
+    # SORT / MERGE --------------------------------------------------------------
+    def _proc_range(self):
+        self.accept("PROCEDURE")
+        self.accept("IS")
+        first = self.take().value
+        last = None
+        if self.accept("THRU") or self.accept("THROUGH"):
+            last = self.take().value
+        for name in (first, last):
+            if name and name not in self.paras:
+                raise Unsupported(f"unknown procedure {name}")
+        return f'("{first}", {repr(last)})'
+
+    def s_SORT(self, line, stop, merge=False):
+        target = self.take().value
+        keys = []
+        while self.word() in ("ON", "ASCENDING", "DESCENDING"):
+            self.accept("ON")
+            asc = self.take().value == "ASCENDING"
+            self.accept("KEY")
+            self.accept("IS")
+            while self.is_data():
+                keys.append(f'({asc}, "{self.ref().key}")')
+        if self.accept("WITH") or self.word() == "DUPLICATES":
+            self.accept("DUPLICATES")
+            self.accept("IN")
+            self.accept("ORDER")
+        if self.accept("COLLATING"):
+            raise Unsupported("SORT ... COLLATING SEQUENCE is not supported yet")
+        if target not in self.names.files:
+            if target in self.names.by_name:  # SORT of a table in WORKING-STORAGE
+                key = self.names.key[id(self.names.resolve(target, []))]
+                return self.code(line, f'S.sort_table("{key}", [{", ".join(keys)}])')
+            raise Unsupported(f"SORT of unknown file {target}")
+        using = giving = inp = outp = None
+        if self.accept("USING"):
+            using = []
+            while self.word() in self.names.files:
+                using.append(self.take().value)
+        elif self.accept("INPUT"):
+            inp = self._proc_range()
+        if self.accept("GIVING"):
+            giving = []
+            while self.word() in self.names.files:
+                giving.append(self.take().value)
+        elif self.accept("OUTPUT"):
+            outp = self._proc_range()
+        if (using is None and inp is None) or (giving is None and outp is None):
+            raise Unsupported("SORT needs USING or INPUT PROCEDURE, and GIVING or OUTPUT PROCEDURE")
+        parts = [f'"{target}"', f'[{", ".join(keys)}]']
+        parts.append(f"using={using!r}" if using is not None else f"input_proc={inp}")
+        parts.append(f"giving={giving!r}" if giving is not None else f"output_proc={outp}")
+        return self.code(line, f"S.sort({', '.join(parts)})" + ("  # MERGE" if merge else ""))
+
+    def s_MERGE(self, line, stop):
+        return self.s_SORT(line, stop, merge=True)
+
+    def s_RELEASE(self, line, stop):
+        rec = self.ref()
+        src = self.value() if self.accept("FROM") else None
+        return self.code(line, f'S.release("{rec.key}", {src or "None"})')
+
+    def s_RETURN(self, line, stop):
+        file = self.take().value
+        if file not in self.names.files:
+            raise Unsupported(f"RETURN of unknown sort file {file}")
+        self.accept("RECORD")
+        into = self.ref().target if self.accept("INTO") else None
+        at_end = not_at_end = None
+        inner = stop | {"NOT", "END-RETURN"}
+        if self.word() in ("AT", "END") and self.word() != "END-RETURN":
+            self.accept("AT")
+            self.expect("END")
+            at_end = self.block(inner)
+        if self.word() == "NOT" and self.word(1) in ("AT", "END"):
+            self.i += 1
+            self.accept("AT")
+            self.expect("END")
+            not_at_end = self.block(inner)
+        self.accept("END-RETURN")
+        call = f'S.return_("{file}"' + (f", {into}" if into else "") + ")"
         if at_end is None and not_at_end is None:
             return self.code(line, call)
         return Node("if", line, {"cond": call, "then": not_at_end or [], "else": at_end or []})
@@ -1047,8 +1271,7 @@ class Parser:
                 adv = f'("{when}", "page")'
         if self.word() in ("AT", "END-OF-PAGE", "EOP") or (self.word() == "NOT" and self.word(1) in ("AT", "END-OF-PAGE", "EOP")):
             raise Unsupported("WRITE ... AT END-OF-PAGE (LINAGE) is not supported yet")
-        self.accept("END-WRITE")
-        return self.code(line, f'S.write("{rec.key}", {src or "None"}, {adv})')
+        return self.keyed(line, f'S.write("{rec.key}", {src or "None"}, {adv})', stop, "END-WRITE")
 
     def s_DISPLAY(self, line, stop):
         parts = []
@@ -1238,8 +1461,6 @@ class Parser:
         whens = []
         while self.accept("WHEN"):
             cond = self.condition()
-            if self.word() == "NEXT" and self.word(1) == "SENTENCE":
-                raise Unsupported("NEXT SENTENCE is not supported yet")
             whens.append((cond, self.block(stop | {"WHEN", "END-SEARCH"})))
         self.accept("END-SEARCH")
         return Node("search", line, {"index": index, "count": table.item.occurs, "at_end": at_end or [], "whens": whens, "binary": binary,
@@ -1306,9 +1527,10 @@ class Translation:
 
 
 class Emitter:
-    def __init__(self):
+    def __init__(self, tag: str = "L"):
         self.unsupported: list[dict] = []
         self.count = 0
+        self.tag = tag  # "L" for the main program; "HELLO L" for a called one, so its lines never pose as main-program lines
 
     @staticmethod
     def fname(p: str) -> str:
@@ -1319,7 +1541,7 @@ class Emitter:
         out: list[str] = []
         for n in nodes:
             k, d = n.kind, n.data
-            tag = f"  # L{n.line}"
+            tag = f"  # {self.tag}{n.line}"
             self.count += 1
             if k == "code":
                 out.append(f"{pad}{d['py']}{tag}")
@@ -1380,6 +1602,15 @@ class Emitter:
                     out.append(f'{pad}return "{d["targets"][0]}"{tag}  # GO TO')
             elif k == "stop":
                 out.append(f"{pad}raise StopRun(){tag}")
+            elif k == "goback":
+                out.append(f"{pad}raise GoBack(){tag}")
+            elif k == "next_sentence":
+                out.append(f"{pad}raise NextSentence(){tag}  # NEXT SENTENCE")
+            elif k == "sentence":
+                out.append(f"{pad}try:  # a sentence with NEXT SENTENCE in it")
+                out += self.lines(d["body"], ind + 1) or [pad + "    pass"]
+                out.append(f"{pad}except NextSentence:")
+                out.append(f"{pad}    pass")
             elif k == "return":
                 out.append(f"{pad}return None{tag}  # EXIT PARAGRAPH")
             elif k == "exit_section":
@@ -1467,7 +1698,18 @@ def _data_literals(names: Names, records: dict[str, int], model: ProgramModel) -
         if not f.records:
             continue
         status = names.key[id(names.resolve(f.status, []))] if f.status and f.status in names.by_name else None
-        files.append(f'    ["{f.name}", "{f.assign}", "{"line" if f.organization == "line" else "sequential"}", "{f.records[0].name}", {f.size}, {status!r}],')
+
+        def key_of(n):
+            return names.key[id(names.resolve(n, []))] if n and n in names.by_name else None
+        extra = {"access": f.access}
+        if f.optional:
+            extra["optional"] = True
+        if f.organization == "indexed":
+            extra["key"] = key_of(f.record_key)
+            extra["alt"] = [[key_of(k), d] for k, d in f.alt_keys]
+        if f.organization == "relative" and f.relative_key:
+            extra["relkey"] = key_of(f.relative_key)
+        files.append(f'    ["{f.name}", "{f.assign}", "{f.organization}", "{f.records[0].name}", {f.size}, {status!r}, {extra!r}],')
     return ("ITEMS = {\n" + "\n".join(items) + "\n}\n\n"
             + f"RECORDS = {records!r}\n\n"
             + "VALUES = [\n" + "\n".join(values) + "\n]\n\n"
@@ -1476,19 +1718,34 @@ def _data_literals(names: Names, records: dict[str, int], model: ProgramModel) -
             + f"INDEXES = {sorted(names.indexes)!r}\n")
 
 
-def translate(program: str, root: Path = ROOT) -> Translation:
-    try:
-        model = load_model(program, root)
-    except ModelError as exc:
-        raise Unsupported(str(exc)) from exc
+def _has(nodes, kind) -> bool:
+    for n in nodes:
+        if n.kind == kind:
+            return True
+        for v in n.data.values() if isinstance(n.data, dict) else []:
+            if isinstance(v, list):
+                if any(isinstance(x, Node) for x in v) and _has([x for x in v if isinstance(x, Node)], kind):
+                    return True
+                for x in v:
+                    if isinstance(x, tuple) and any(isinstance(y, list) and _has([z for z in y if isinstance(z, Node)], kind) for y in x):
+                        return True
+    return False
+
+
+def _unit(model: ProgramModel, tag: str) -> dict:
+    """Translate one program (the main one or a called one) into its data literals and paragraph functions."""
     names, records = build_names(model)
     src_lines = normalize(model.path.read_text(encoding="utf-8", errors="replace"), model.fixed)
     start = next((i for i, l in enumerate(src_lines) if not l.comment and re.match(r"^\s*PROCEDURE\s+DIVISION", l.text, re.I)), None)
     if start is None:
         raise Unsupported("no PROCEDURE DIVISION")
-    proc_lines = src_lines[start + 1:]
-    # PROCEDURE DIVISION header may continue onto the next line (USING ...); copybooks there are rare
-    toks = tokenize_lines(proc_lines)
+    toks = tokenize_lines(src_lines[start:])
+    first_end = next(i for i, t in enumerate(toks) if t.kind == "end")
+    toks = toks[first_end + 1:]  # skip the PROCEDURE DIVISION header, even when USING runs onto more lines
+    for i in range(len(toks) - 1):
+        if toks[i].value == "END" and toks[i + 1].value == "PROGRAM":
+            toks = toks[:i]
+            break
     order, ptoks, sections, plines = split_paragraphs(toks)
     known = set(order) | set(sections)
     parsed: dict[str, list[Node]] = {}
@@ -1496,24 +1753,60 @@ def translate(program: str, root: Path = ROOT) -> Translation:
         parser = Parser(ptoks[p], names, known)
         nodes: list[Node] = []
         while parser.i < len(parser.t):
-            nodes += parser.block(set())
+            sentence = parser.block(set())
+            if _has(sentence, "next_sentence"):
+                sentence = [Node("sentence", sentence[0].line if sentence else 0, {"body": sentence})]
+            nodes += sentence
             if parser.peek().kind == "end":
                 parser.i += 1
             elif parser.i < len(parser.t):
                 tok = parser.take()
                 nodes.append(Node("unsupported", tok.line, {"text": tok.value, "why": f"unexpected {tok.value}"}))
         parsed[p] = nodes
-
-    em = Emitter()
+    em = Emitter(tag)
     funcs = []
     for p in order:
         body = em.lines(parsed[p], 1)
         label = "statements before the first paragraph" if p == "(start)" else f"{'section' if p in sections else 'paragraph'} {p}"
         funcs.append(f"def {em.fname(p)}():  # {label} (line {plines.get(p, 0)})\n" + "\n".join(body or ["    pass"]) + "\n")
-    gaps = em.unsupported
-    for why in model.unsupported:
-        if not any(why.split()[0].upper() in g["text"].upper() for g in gaps):
-            pass
+    para_list = ",\n".join(f'    ("{p}", {em.fname(p)})' for p in order)
+    linkage = [names.key[id(r)] for r in model.linkage_records if r.name in model.using]
+    linkage.sort(key=lambda k: model.using.index(names.items[k].name))
+    return {"data": _data_literals(names, records, model), "funcs": funcs, "paras": para_list, "sections": sections,
+            "gaps": em.unsupported, "count": em.count, "linkage": linkage}
+
+
+def _indent(text: str, n: int = 1) -> str:
+    pad = "    " * n
+    return "\n".join(pad + line if line.strip() else line for line in text.split("\n"))
+
+
+def translate(program: str, root: Path = ROOT) -> Translation:
+    try:
+        model = load_model(program, root)
+    except ModelError as exc:
+        raise Unsupported(str(exc)) from exc
+    main = _unit(model, "L")
+    gaps = list(main["gaps"])
+    count = main["count"]
+    subs_code = []
+    called = [m for m in model._every()[1:]]
+    for sub in called:
+        u = _unit(sub, f"{sub.program_id} L")
+        for g in u["gaps"]:
+            gaps.append({**g, "text": f"{sub.program_id}: {g['text']}"})
+        count += u["count"]
+        fn = "_program_" + re.sub(r"[^a-z0-9_]", "_", sub.program_id.lower())
+        body = (u["data"]
+                + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={u['linkage']!r}, initial={sub.initial})\n\n\n"
+                + "\n\n".join(u["funcs"])
+                + "\n\nPARAGRAPHS = [\n" + u["paras"] + ",\n]\n"
+                + f"SECTIONS = {u['sections']!r}\n"
+                + "return S, PARAGRAPHS, SECTIONS\n")
+        subs_code.append(f"def {fn}():\n"
+                         f'    """Called program {sub.program_id} (legacy/{program}/{sub.path.name}). Lines end with # {sub.program_id} Lnn."""\n'
+                         + _indent(body) + "\n")
+    registry = "{" + ", ".join(f'"{m.program_id}": _program_{re.sub(r"[^a-z0-9_]", "_", m.program_id.lower())}()' for m in called) + "}"
     io_note = model.describe_io()
     header = (
         f'"""Python translation of legacy/{program}/{program}.cbl (PROGRAM-ID {model.program_id}).\n\n'
@@ -1525,24 +1818,26 @@ def translate(program: str, root: Path = ROOT) -> Translation:
            if gaps else "Every statement was translated.\n")
         + 'This file is yours now: edit it, then run the check.\n"""\n'
     )
-    para_list = ",\n".join(f'    ("{p}", {em.fname(p)})' for p in order)
+    all_files = [[f.name, f.assign] for f in model.all_files]
     code = (
         header
         + "\nfrom decimal import Decimal as D\n\n"
-        + "from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, Program, StopRun, run_cli\n\n"
-        + _data_literals(names, records, model)
-        + "\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES)\n\n\n"
-        + "\n\n".join(funcs)
-        + "\n\nPARAGRAPHS = [\n" + para_list + ",\n]\n"
-        + f"SECTIONS = {sections!r}\n\n\n"
+        + "from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, NextSentence, Program, StopRun, run_cli\n\n"
+        + main["data"]
+        + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={main['linkage']!r})\n\n\n"
+        + "\n\n".join(main["funcs"])
+        + "\n\nPARAGRAPHS = [\n" + main["paras"] + ",\n]\n"
+        + f"SECTIONS = {main['sections']!r}\n\n\n"
+        + ("\n\n".join(subs_code) + f"\n\nS.link({registry})\n\n\n" if subs_code else "")
+        + f"RUN_FILES = {all_files!r}  # every file the run touches, in this program and the programs it calls\n\n\n"
         + "def main(io=None):\n"
         + '    """Run the whole program, like the COBOL batch job. io holds the input files and console input."""\n'
         + "    return S.run(io if io is not None else IO(), PARAGRAPHS, SECTIONS)\n\n\n"
         + 'if __name__ == "__main__":\n'
-        + "    raise SystemExit(run_cli(main, FILES))\n"
+        + "    raise SystemExit(run_cli(main, RUN_FILES))\n"
     )
     compile(code, f"migrated/{program}.py", "exec")  # never hand over a draft that does not parse
-    return Translation(program, code, em.count, gaps, "")
+    return Translation(program, code, count, gaps, "")
 
 
 def write_draft(program: str, root: Path = ROOT, overwrite: bool = False) -> tuple[Path, Translation]:
