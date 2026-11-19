@@ -275,6 +275,8 @@ def load_file(path: Path, program: str) -> ProgramModel:
                 unsupported.append(f"{section} SECTION")
             continue
         if re.match(r"^PROCEDURE\s+DIVISION", up):
+            if re.search(r"\bRETURNING\b", up):
+                unsupported.append("PROCEDURE DIVISION RETURNING (GnuCOBOL 3.1.2 does not implement it, so there is no original to compare with)")
             um = re.search(r"\bUSING\s+(.*?)(?:\bRETURNING\b.*)?$", up)
             if um:
                 using = [w for w in re.findall(r"[A-Z0-9-]+", um.group(1)) if w not in ("BY", "REFERENCE", "VALUE", "CONTENT", "OPTIONAL")]

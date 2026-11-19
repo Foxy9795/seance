@@ -987,7 +987,7 @@ class Program:
         for sub, _, _ in programs.values():
             sub.registry = programs
 
-    def call(self, name, args: list, on_exception: bool = False) -> bool:
+    def call(self, name, args: list, on_exception: bool = False, returning=None) -> bool:
         """CALL name USING args. args: [("reference" | "content" | "value", operand)]. False when not found."""
         target = (name if isinstance(name, str) else self._text(name)).strip().upper()
         entry = getattr(self, "registry", {}).get(target)
@@ -1018,9 +1018,12 @@ class Program:
         if "RETURN-CODE" in sub.items:
             sub.move(Decimal(0), "RETURN-CODE")
         sub._enter(paras, secs)
-        if "RETURN-CODE" in self.items and "RETURN-CODE" in sub.items:
+        rc = Decimal(0) if sub.initial or "RETURN-CODE" not in sub.items else sub.n("RETURN-CODE")
+        if returning is not None:  # CALL ... RETURNING x: x gets the RETURN-CODE; the caller's own stays as it was (measured)
+            self.move(rc, returning)
+        elif "RETURN-CODE" in self.items:
             # an IS INITIAL program hands back RETURN-CODE 0 whatever it set (measured on GnuCOBOL 3.1.2)
-            self.move(Decimal(0) if sub.initial else sub.n("RETURN-CODE"), "RETURN-CODE")
+            self.move(rc, "RETURN-CODE")
         return True
 
     def cancel(self, name) -> None:

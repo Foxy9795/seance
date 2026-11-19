@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import struct
 from decimal import Decimal
 
 from .cobol_num import NEG_DIGITS, format_edited, format_numeric, store
@@ -28,6 +30,8 @@ def encode(spec, value) -> bytes:
         return format_edited(Decimal(value), pic).encode(ENC)[:size].ljust(size, b" ")
     value = Decimal(value)
     negative = value.is_signed() and signed
+    if usage in ("float", "double"):
+        return struct.pack("<f" if usage == "float" else "<d", to_float(value, usage))
     if usage == "display":
         return format_numeric(value, digits, scale, signed, sign if signed else "none").encode(ENC)
     if usage == "packed":
@@ -78,6 +82,8 @@ def decode(spec, data: bytes):
         return data.decode(ENC)
     if usage == "display":
         return _lenient_display(data.decode(ENC), digits, scale, signed, sign if signed else "none")
+    if usage in ("float", "double"):
+        return Decimal(struct.unpack("<f" if usage == "float" else "<d", bytes(data))[0])
     if usage == "packed":
         h = data.hex()
         body, sgn = h[:-1], h[-1:]
@@ -109,11 +115,17 @@ def display_text(spec, data: bytes) -> str:
     kind, usage, digits, scale, signed, size = spec[0], spec[1], spec[2], spec[3], spec[4], spec[7]
     if kind != "num":
         return data.decode(ENC)
+    if usage in ("float", "double"):
+        return float_text(struct.unpack("<f" if usage == "float" else "<d", bytes(data))[0], usage)
     v = decode(spec, data)
     n = _scaled(v, scale)
     width = NATIVE_DIGITS.get(size, digits) if usage in ("native", "index") else digits
     text = str(n % (10**width)).zfill(width)
-    if scale:
+    if scale < 0:  # PIC 999PP: the P positions print as zeros
+        text = text + "0" * -scale
+    elif scale > width:  # PIC VPP99
+        text = "." + text.zfill(scale)
+    elif scale:
         text = text[:-scale] + "." + text[-scale:]
     if signed:
         negative = v.is_signed() if usage == "display" else v < 0
@@ -127,6 +139,8 @@ def store_into(spec, value: Decimal, rounded: bool = False, move: bool = False) 
     COMP-5 and INDEX items keep whatever fits in their bytes (they wrap at the storage size, not the PIC's digits).
     """
     kind, usage, digits, scale, signed, size = spec[0], spec[1], spec[2], spec[3], spec[4], spec[7]
+    if usage in ("float", "double"):
+        return decode(spec, encode(spec, value))
     if usage in ("native", "index"):
         n = _scaled(store(value, 38, scale, signed, rounded, move), scale)
         if signed and store(value, 38, scale, signed, rounded, move).is_signed():
@@ -135,3 +149,26 @@ def store_into(spec, value: Decimal, rounded: bool = False, move: bool = False) 
         n = ((n + (1 << (bits - 1))) % (1 << bits)) - (1 << (bits - 1)) if signed else n % (1 << bits)
         return Decimal(n).scaleb(-scale)
     return store(value, digits, scale, signed, rounded, move)
+
+
+def to_float(value: Decimal, usage: str = "double") -> float:
+    """A decimal value as GnuCOBOL stores it in COMP-2: the exact value cut toward zero to a double (it converts
+    through GMP's mpf_get_d, which truncates; measured: 0.0001 becomes 9.999999999999999E-5). COMP-1 then rounds
+    that double to single precision, as a C cast does."""
+    if value == 0:
+        return 0.0
+    f = float(value)
+    if math.isfinite(f) and abs(Decimal(f)) > abs(value):
+        f = math.nextafter(f, 0.0)
+    if usage == "float":
+        f = struct.unpack("<f", struct.pack("<f", f))[0]
+    return f
+
+
+def float_text(f: float, usage: str) -> str:
+    """DISPLAY of COMP-1 / COMP-2: %G with 8 or 16 significant digits, exponent without leading zeros (measured)."""
+    text = ("%.8G" if usage == "float" else "%.16G") % f
+    if "E" in text:
+        mant, exp = text.split("E")
+        text = mant + "E" + exp[0] + (exp[1:].lstrip("0") or "0")
+    return text

@@ -103,14 +103,21 @@ def parse_literal(tok: str):
 
 
 def _numeric_from_pic(item: Item, p: str, tail: str) -> None:
-    m = re.fullmatch(r"(S?)(9*)(P*)(?:V(9*))?", p) if "P" not in p[:1] else None
-    if not m and re.fullmatch(r"S?V?P+9+|S?9+P+", p):
-        raise LayoutError(f"{item.name}: scaling positions (P in the picture) are not supported yet.")
-    if not m:
+    lead = re.fullmatch(r"(S?)V?(P+)(9+)", p)  # PPP99: the digits sit below the decimal point, after P zeros
+    trail = re.fullmatch(r"(S?)(9+)(P+)V?", p)  # 999PP: the digits sit above P zeros
+    m = re.fullmatch(r"(S?)(9*)(?:V(9*))?", p)
+    if lead:
+        item.signed = bool(lead.group(1))
+        item.kind, item.digits, item.scale = "num", len(lead.group(3)), len(lead.group(2)) + len(lead.group(3))
+    elif trail:
+        item.signed = bool(trail.group(1))
+        item.kind, item.digits, item.scale = "num", len(trail.group(2)), -len(trail.group(3))
+    elif m:
+        item.signed = bool(m.group(1))
+        ints, decs = len(m.group(2)), len(m.group(3) or "")
+        item.kind, item.digits, item.scale = "num", ints + decs, decs
+    else:
         raise LayoutError(f"{item.name}: the picture {p} is not supported yet.")
-    item.signed = bool(m.group(1))
-    ints, decs = len(m.group(2)), len(m.group(4) or "")
-    item.kind, item.digits, item.scale = "num", ints + decs, decs
     if item.signed and item.usage == "display":
         sm = re.search(r"SIGN\s+(?:IS\s+)?(LEADING|TRAILING)(\s+SEPARATE(?:\s+CHARACTER)?)?", tail, re.I)
         item.sign = "trailing_over" if not sm else f"{sm.group(1).lower()}_{'sep' if sm.group(2) else 'over'}"
@@ -182,8 +189,10 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             it.usage = "packed"
         elif re.search(r"\bCOMP(?:UTATIONAL)?-5\b", upper):
             it.usage = "native"
-        elif re.search(r"\bCOMP(?:UTATIONAL)?-[12]\b|\bFLOAT-", upper):
-            raise LayoutError(f"{name}: floating-point fields (COMP-1, COMP-2) are not supported yet.")
+        elif re.search(r"\bCOMP(?:UTATIONAL)?-1\b|\bFLOAT-SHORT\b", upper):
+            it.usage, it.kind, it.size, it.digits, it.scale, it.signed = "float", "num", 4, 16, 4, True
+        elif re.search(r"\bCOMP(?:UTATIONAL)?-2\b|\bFLOAT-LONG\b", upper):
+            it.usage, it.kind, it.size, it.digits, it.scale, it.signed = "double", "num", 8, 18, 6, True
         elif re.search(r"\bUSAGE\s+(?:IS\s+)?INDEX\b|(?<![A-Z-])INDEX(?![A-Z-])", upper) and "INDEXED" not in upper:
             it.usage, it.kind, it.size, it.digits = "index", "num", 4, 9
         elif re.search(r"\bPOINTER\b", upper):
@@ -204,7 +213,7 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
                 it.kind, it.size, it.pic = "alpha", len(p), p
             elif re.fullmatch(r"N+", p):
                 raise LayoutError(f"{name}: national (PIC N) fields are not supported yet.")
-            elif re.fullmatch(r"S?9*P*V?9*P*", p) and "9" in p:
+            elif re.fullmatch(r"S?[9PV]+", p) and "9" in p and p.count("V") <= 1:
                 it.pic = p
                 _numeric_from_pic(it, p, tail)
             elif edited_supported(p):
@@ -215,6 +224,8 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
                 raise LayoutError(f"{name}: the picture {pm.group(1)} is not supported yet.")
             if it.kind == "num" and it.usage == "display" and it.digits > 38:
                 raise LayoutError(f"{name}: more than 38 digits.")
+        elif it.usage in ("float", "double"):
+            pass  # floating point has no PIC
         elif it.usage in ("packed", "binary", "native") and not pm:
             raise LayoutError(f"{name}: a {it.usage} item needs a PIC clause.")
 

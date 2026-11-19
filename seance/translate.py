@@ -62,7 +62,7 @@ _TOKEN = re.compile(
     r"""(?P<ws>[\s,;]+)
       | (?P<hex>[xX](?:"[0-9A-Fa-f]*"|'[0-9A-Fa-f]*'))
       | (?P<str>"(?:[^"]|"")*"|'(?:[^']|'')*')
-      | (?P<num>\d+\.\d+|\.\d+|\d+(?![A-Za-z0-9_-]))
+      | (?P<num>(?:\d+\.\d+|\.\d+|\d+)E[+-]?\d+(?![A-Za-z0-9_-])|\d+\.\d+|\.\d+|\d+(?![A-Za-z0-9_-]))
       | (?P<op>\*\*|>=|<=|<>|[()+\-*/=<>:&])
       | (?P<word>[A-Za-z0-9][A-Za-z0-9_-]*[A-Za-z0-9]|[A-Za-z0-9])
     """,
@@ -169,7 +169,7 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
         records[buffer] = max(records.get(buffer, 0), r.size, 1)
         for it in walk(r):
             names.add(it, buffer)
-    special = Item("RETURN-CODE", 1, kind="num", usage="native", digits=9, signed=True, size=4)
+    special = Item("RETURN-CODE", 1, kind="num", usage="binary", digits=9, signed=True, size=4)
     records["_SPECIAL"] = 10
     names.add(special, "_SPECIAL")
     tally = Item("TALLY", 1, kind="num", usage="native", digits=5, signed=False, size=2, offset=4)
@@ -1143,8 +1143,10 @@ class Parser:
                     args.append(f'("{mode}", {self.ref().py})')
                     continue
                 break
+        returning = None
         if self.accept("RETURNING") or self.accept("GIVING"):
-            raise Unsupported("CALL ... RETURNING is not supported yet")
+            self.accept("INTO")
+            returning = self.ref().target
         exc = not_exc = None
         inner = stop | {"NOT", "END-CALL"}
         if self.word() in ("ON", "EXCEPTION", "OVERFLOW") and (self.word() != "ON" or self.word(1) in ("EXCEPTION", "OVERFLOW")):
@@ -1157,7 +1159,8 @@ class Parser:
             self.take()
             not_exc = self.block(inner)
         self.accept("END-CALL")
-        call = f"S.call({target}, [{', '.join(args)}]" + (", on_exception=True)" if exc is not None or not_exc is not None else ")")
+        call = (f"S.call({target}, [{', '.join(args)}]" + (", on_exception=True" if exc is not None or not_exc is not None else "")
+                + (f", returning={returning}" if returning else "") + ")")
         return self.guarded(line, call, exc, not_exc)
 
     def s_CANCEL(self, line, stop):

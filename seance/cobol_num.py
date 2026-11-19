@@ -43,7 +43,7 @@ def store(
     quantum = Decimal(1).scaleb(-scale)
     mode = ROUND_HALF_UP if rounded else ROUND_DOWN
     q = d.quantize(quantum, rounding=mode)
-    scaled = int((abs(q) * 10**scale).to_integral_value()) % 10**digits
+    scaled = int(abs(q).scaleb(scale).to_integral_value()) % 10**digits  # scale < 0 for P scaling (PIC 99PPP)
     result = Decimal(scaled).scaleb(-scale)
     negative = signed and (q < 0 or (move and (d < 0 or (d.is_zero() and d.is_signed()))))
     return result.copy_negate() if negative else result  # copy_negate keeps -0; unary minus would drop it
