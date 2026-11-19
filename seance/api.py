@@ -543,6 +543,15 @@ async def run_mutate(req: MutateRequest):
     return await run_in_threadpool(_run_cli, ["mutate", req.program, "--impl", req.implementation, "--json"], config.VERIFY_TIMEOUT)
 
 
+@app.post("/api/gapfill")
+async def run_gapfill(req: MutateRequest):
+    """Search for inputs that catch the planted bugs the saved records missed, and save them as test sets."""
+    _require(req.program, req.implementation)
+    if not cobc_available():
+        raise HTTPException(503, "GnuCOBOL runtime not found")
+    return await run_in_threadpool(_run_cli, ["fill-gaps", req.program, "--impl", req.implementation, "--json"], config.VERIFY_TIMEOUT * 2)
+
+
 @app.post("/api/try")
 async def try_input(req: TryRequest):
     _require(req.program, req.implementation)

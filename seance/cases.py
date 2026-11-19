@@ -708,7 +708,7 @@ def record_sets(program: str, root: Path = ROOT) -> dict[str, int]:
     base = root / "fixtures" / program
     if base.exists():
         for p in base.iterdir():  # keep uploaded data and mainframe outputs; regenerate the rest
-            if p.is_dir() and not p.name.startswith(("yours-", "golden-")):
+            if p.is_dir() and not p.name.startswith(("yours-", "golden-", "gap-")):
                 shutil.rmtree(p)
             elif p.is_file():
                 p.unlink()
@@ -718,7 +718,7 @@ def record_sets(program: str, root: Path = ROOT) -> dict[str, int]:
         save_set(program, name, case, result, DEFAULT_LABELS.get(name, name), root)
         counts[name] = sum(len(v) for v in case.records.values()) or 1
     for name in set_names(program, root):  # uploaded data: refresh the COBOL's answers too
-        if name.startswith("yours-"):
+        if name.startswith(("yours-", "gap-")):
             case, _, meta = load_set(program, name, root)
             save_set(program, name, case, run_cobol(exe, model, case), meta["label"], root)
     return counts
@@ -853,7 +853,7 @@ def add_golden(program: str, filename: str, inputs: dict[str, bytes], outputs: d
 
 
 def remove_uploaded(program: str, name: str, root: Path = ROOT) -> None:
-    if not re.fullmatch(r"(yours|golden)-[a-z0-9-]{1,40}", name):
+    if not re.fullmatch(r"(yours|golden|gap)-[a-z0-9-]{1,40}", name):
         raise ValueError("Only test data you uploaded can be removed.")
     d = set_dir(program, name, root)
     if d.exists():
@@ -865,8 +865,8 @@ def describe_sets(program: str, root: Path = ROOT) -> list[dict]:
     for name in set_names(program, root):
         _, result, meta = load_set(program, name, root)
         out.append({"set": name, "label": meta["label"], "records": meta.get("records", 0), "console_lines": meta.get("console_lines", 0),
-                    "removable": name.startswith(("yours-", "golden-")),
-                    "golden": bool(meta.get("golden")), "cobol_agrees": meta.get("cobol_agrees"), "cobol_differences": meta.get("cobol_differences", 0),
+                    "removable": name.startswith(("yours-", "golden-", "gap-")),
+                    "gap": name.startswith("gap-"), "golden": bool(meta.get("golden")), "cobol_agrees": meta.get("cobol_agrees"), "cobol_differences": meta.get("cobol_differences", 0),
                     "filled_from_cobol": meta.get("filled_from_cobol", []),
                     "cobol_error": meta.get("error")})
     return out

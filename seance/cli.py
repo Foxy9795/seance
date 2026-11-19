@@ -12,7 +12,7 @@ from .recorder import ROOT, compile_legacy, get_model
 from .report import to_dict, to_markdown, write_reports
 from .spec import write_spec
 
-COMMANDS = ["analyze", "spec", "record", "translate", "verify", "mutate", "try", "export", "all"]
+COMMANDS = ["analyze", "spec", "record", "translate", "verify", "mutate", "fill-gaps", "try", "export", "all"]
 TRY_LIMIT = 200  # input lines per file in one try
 
 
@@ -242,6 +242,22 @@ def main(argv=None) -> int:
             else:
                 print(f"could not translate: {result.get('reason')}")
             return 0
+        if a.command == "fill-gaps":
+            from .gapfill import fill_gaps
+            result = fill_gaps(a.program, implementation)
+            if a.json:
+                _emit(result)
+            elif "error" in result:
+                print(result["error"])
+            else:
+                print(f"test strength: {result['before']['caught']} of {result['before']['total']} caught before, "
+                      f"{result['after']['caught']} of {result['after']['total']} after ({result['after']['equivalent']} judged equivalent)")
+                for r in result["results"]:
+                    print(f"  {r['status'].upper():<10} line {r['cobol_line'] or r['line']}: {r['change']}")
+                    print(f"             {r['note']}")
+                for name in result["saved"]:
+                    print(f"  saved test set {name}")
+            return 0 if "error" not in result else 2
         if a.command == "mutate":
             from .mutate import run_mutants
 
@@ -251,9 +267,11 @@ def main(argv=None) -> int:
             elif "error" in result:
                 print(result["error"])
             else:
-                print(f"caught {result['caught']} of {result['total']} planted bugs using {result['records']} saved records")
+                extra = f" ({result['equivalent']} judged equivalent)" if result.get("equivalent") else ""
+                print(f"caught {result['caught']} of {result['total']} planted bugs using {result['records']} saved records{extra}")
                 for m in result["mutants"]:
-                    print(f"  {'caught  ' if m['caught'] else 'SURVIVED'} line {m['cobol_line'] or m['line']}: {m['change']}")
+                    tag = "caught  " if m["caught"] else ("EQUIVALENT" if m.get("verdict") == "equivalent" else "SURVIVED")
+                    print(f"  {tag} line {m['cobol_line'] or m['line']}: {m['change']}")
             return 0 if "error" not in result else 2
         if a.command == "try":
             _emit(try_input(a.program, implementation, json.loads(sys.stdin.read() or "{}")))

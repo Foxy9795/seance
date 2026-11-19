@@ -13,7 +13,20 @@ Sign storage in DISPLAY fields (GnuCOBOL, ASCII):
 from __future__ import annotations
 
 import re
-from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, getcontext
+from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_FLOOR, ROUND_HALF_DOWN, ROUND_HALF_EVEN, ROUND_HALF_UP, ROUND_UP, Decimal, getcontext
+
+# ROUNDED MODE: ROUNDED alone is NEAREST-AWAY-FROM-ZERO; no ROUNDED truncates
+ROUND_MODES = {
+    "NEAREST-AWAY-FROM-ZERO": ROUND_HALF_UP, "AWAY-FROM-ZERO": ROUND_UP, "NEAREST-EVEN": ROUND_HALF_EVEN,
+    "NEAREST-TOWARD-ZERO": ROUND_HALF_DOWN, "TOWARD-GREATER": ROUND_CEILING, "TOWARD-LESSER": ROUND_FLOOR, "TRUNCATION": ROUND_DOWN,
+}
+
+
+def rounding_of(rounded: bool | str):
+    """The Decimal rounding mode for a ROUNDED flag: False, True, or the name given after ROUNDED MODE."""
+    if isinstance(rounded, str):
+        return ROUND_MODES[rounded]
+    return ROUND_HALF_UP if rounded else ROUND_DOWN
 
 # Wide enough that intermediate results behave like COBOL's arbitrary-precision
 # intermediates for the program sizes we handle.
@@ -27,7 +40,7 @@ def store(
     digits: int,
     scale: int,
     signed: bool = True,
-    rounded: bool = False,
+    rounded: bool | str = False,
     move: bool = False,
 ) -> Decimal:
     """Return `value` as it would be after being stored in PIC S9(digits-scale)V9(scale).
@@ -41,7 +54,7 @@ def store(
     """
     d = Decimal(value)
     quantum = Decimal(1).scaleb(-scale)
-    mode = ROUND_HALF_UP if rounded else ROUND_DOWN
+    mode = rounding_of(rounded)
     q = d.quantize(quantum, rounding=mode)
     scaled = int(abs(q).scaleb(scale).to_integral_value()) % 10**digits  # scale < 0 for P scaling (PIC 99PPP)
     result = Decimal(scaled).scaleb(-scale)
@@ -61,7 +74,7 @@ def size_error(
     The check happens after rounding, so 99999.995 into PIC 9(5)V99 ROUNDED overflows.
     """
     d = Decimal(value)
-    mode = ROUND_HALF_UP if rounded else ROUND_DOWN
+    mode = rounding_of(rounded)
     q = d.quantize(Decimal(1).scaleb(-scale), rounding=mode)
     # A negative value stored into an unsigned field is not a size error: COBOL stores its absolute value.
     return abs(q) >= Decimal(10) ** (digits - scale)

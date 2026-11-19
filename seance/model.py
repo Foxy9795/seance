@@ -234,6 +234,26 @@ def _modes(proc_text: str, files: dict[str, FileDef]) -> None:
 SOURCE_EXTENSIONS = (".cbl", ".cob", ".cobol")
 
 
+LIMITS = (
+    (r"\bDECIMAL-POINT\s+IS\s+COMMA\b", "DECIMAL-POINT IS COMMA: the COBOL prints and reads numbers with a comma. The translator does not do this yet, "
+     "so the check will show differences wherever a number with decimals is printed."),
+    (r"(?:^|\s)>>\s*(?:IF|DEFINE|EVALUATE|ELSE|END-IF)\b", "Compiler directives (>>IF, >>DEFINE) are not evaluated by the translator. "
+     "GnuCOBOL compiles one branch; the Python reads both."),
+    (r"^REPLACE\s+==", "REPLACE changes the program text before it is compiled. The translator does not apply it, so check the Python against the COBOL."),
+)
+
+
+def limit_notes(items: list[tuple[int, str]]) -> list[str]:
+    """Constructs the translator is known not to handle, found in the source sentences. Each is said once."""
+    out = []
+    for pattern, why in LIMITS:
+        if any(re.search(pattern, s.strip(), re.I) for _, s in items):
+            out.append(why)
+    if sum(bool(re.match(r"PROGRAM-ID\b", s.strip(), re.I)) for _, s in items) > 1:
+        out.append("The file holds more than one program. Only the first is translated; a CALL to the others needs their source in the program's folder.")
+    return out
+
+
 def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     """The program in legacy/<program>/<program>.cbl, plus any other programs in that folder it CALLs."""
     path = root / "legacy" / program / f"{program}.cbl"
@@ -421,6 +441,7 @@ def load_file(path: Path, program: str, shown: Path | None = None) -> ProgramMod
     if missing:
         raise ModelError(f"PROCEDURE DIVISION USING names {', '.join(missing)}, which is not a 01 or 77 item in the LINKAGE SECTION.")
     model.notes += source_fixes(text, fixed)[1]
+    model.notes += limit_notes(items)
     for f in model.files:
         if f.organization == "line" and any(lf.item.usage != "display" for r in f.records for lf in leaves(r)):
             model.notes.append(f"{f.name} is a text (LINE SEQUENTIAL) file but its record has binary or packed fields.")

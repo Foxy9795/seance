@@ -220,10 +220,31 @@ def measure_test_strength(program: str, implementation: str = "") -> str:
     r = run_mutants(program, implementation or None)
     if "error" in r:
         raise ValueError(r["error"])
-    out = [f"Caught {r['caught']} of {r['total']} planted bugs with {r['records']} saved records."]
+    extra = f" ({r['equivalent']} judged equivalent)" if r.get("equivalent") else ""
+    out = [f"Caught {r['caught']} of {r['total']} planted bugs with {r['records']} saved records{extra}."]
     for m in r["mutants"]:
         where = f"COBOL line {m['cobol_line']}" if m["cobol_line"] else f"Python line {m['line']}"
-        out.append(f"  {'caught  ' if m['caught'] else 'SURVIVED'} {where}: {m['change']}")
+        tag = "caught  " if m["caught"] else ("EQUIVALENT" if m.get("verdict") == "equivalent" else "SURVIVED")
+        out.append(f"  {tag} {where}: {m['change']}")
+    return "\n".join(out)
+
+
+@mcp.tool()
+def fill_test_gaps(program: str, implementation: str = "") -> str:
+    """For every planted bug the saved tests missed, search for an input that tells it apart from the original Python.
+    Each input found is checked against the real COBOL and, when the COBOL agrees, saved as a new test set (gap-...).
+    If the COBOL disagrees, that is a real bug in the Python and it is reported, not saved. A change that never alters
+    the output at its edge is reported as equivalent; anything else unresolved is marked needs human review."""
+    _check(program)
+    from .gapfill import fill_gaps
+    r = fill_gaps(program, implementation or None)
+    if "error" in r:
+        raise ValueError(r["error"])
+    out = [f"Test strength {r['before']['caught']} of {r['before']['total']} before, {r['after']['caught']} of {r['after']['total']} after "
+           f"({r['after']['equivalent']} judged equivalent)."]
+    for x in r["results"]:
+        out.append(f"  {x['status'].upper()} COBOL line {x['cobol_line'] or x['line']}: {x['change']}. {x['note']}")
+    out += [f"  saved test set {n}" for n in r["saved"]]
     return "\n".join(out)
 
 

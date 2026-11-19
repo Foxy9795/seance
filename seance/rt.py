@@ -454,6 +454,9 @@ class Program:
             if spec[4] == "display":
                 text = raw.decode(ENC)
                 return all(c.isdigit() or c in "+-pqrstuvwxy" for c in text)
+            if spec[4] == "packed":  # every digit nibble 0-9; the sign nibble is C or D when signed, F when not
+                nibbles = raw.hex()
+                return all(c in "0123456789" for c in nibbles[:-1]) and nibbles[-1] in ("cd" if spec[7] else "f")
             return True
         return val != "" and val.isdigit()
 
@@ -1429,9 +1432,10 @@ def _digits_text(value: Decimal, spec) -> str:
     """A numeric item moved to text: its digits (no sign, no point), zero-padded to the PIC's digits."""
     digits, scale = spec[5], spec[6]
     n = int((abs(value) * (Decimal(10) ** scale)).to_integral_value())
-    if spec[4] in ("native", "index"):
+    if spec[4] == "index":
         return str(n)
-    return str(n % (10**digits)).zfill(digits)
+    text = str(n).zfill(digits) if spec[4] == "native" else str(n % (10**digits)).zfill(digits)  # COMP-5 keeps what fits in its bytes
+    return text + "0" * -scale if scale < 0 else text  # PIC 9(4)PP: the P positions are zeros in the text
 
 
 def _alpha_to_number(text: str, lenient_sign: bool = False) -> Decimal:

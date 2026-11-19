@@ -47,7 +47,9 @@ def normalize(text: str, fixed: bool | None = None) -> list[Line]:
             elif indicator in "dD":
                 continue  # debugging line
             elif body.strip():
-                out.append(Line(i, body.rstrip()))
+                code = _strip_inline_comment(body)  # GnuCOBOL accepts *> after column 7 in fixed format too
+                if code.strip():
+                    out.append(Line(i, code.rstrip()))
         else:
             stripped = raw.strip()
             if stripped.startswith("*>"):

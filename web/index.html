@@ -145,8 +145,9 @@
   .side-foot button:hover { background: var(--hover); color: var(--text); } .side-foot button:focus-visible { outline: 2px solid var(--good); outline-offset: -2px; }
   .scrim { display: none; }
   main { min-width: 0; padding: 22px 28px 90px; outline: none; }
-  .view { max-width: 1240px; margin: 0 auto; }
-  .view.enter { animation: rise .16s ease-out; }
+  .view { max-width: 1560px; margin: 0 auto; }
+  .view.enter { animation: fade .22s ease-out; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
   @media (max-width: 900px) {
     .shell, body[data-side=off] .shell { grid-template-columns: minmax(0, 1fr); }
@@ -214,9 +215,10 @@
   .pbar { position: sticky; top: var(--top); z-index: 20; display: flex; align-items: flex-end; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; margin: 16px -28px 18px; padding: 0 28px; background: rgba(14,12,16,.96); border-bottom: 1px solid var(--line); }
   @supports (backdrop-filter: blur(4px)) { .pbar { background: rgba(14,12,16,.86); backdrop-filter: blur(8px); } }
   @media (max-width: 900px) { .pbar { margin: 14px -14px 16px; padding: 0 14px; } }
-  .tabs { display: flex; gap: 2px; overflow-x: auto; min-width: 0; }
+  .tabs { display: flex; gap: 2px; overflow-x: auto; min-width: 0; position: relative; }
   .tabs button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 7px; padding: 11px 13px 10px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-weight: 500; }
-  .tabs button:hover { color: var(--text); } .tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--amber); }
+  .tabs button:hover { color: var(--text); } .tabs button[aria-selected=true] { color: var(--text); }
+  .tabs .ink { position: absolute; left: 0; bottom: 0; height: 2px; width: var(--w, 0); transform: translateX(var(--x, 0)); background: var(--amber); border-radius: 2px 2px 0 0; pointer-events: none; box-shadow: 0 0 10px rgba(242,166,90,.55); transition: transform .34s cubic-bezier(.3,1.1,.4,1), width .3s cubic-bezier(.2,.9,.3,1); }
   .tabs button:focus-visible { outline: 2px solid var(--good); outline-offset: -2px; }
   .tabs .count { font-size: .72rem; font-weight: 700; padding: 0 6px; min-width: 18px; text-align: center; border-radius: 9px; background: var(--bad); color: #2a0d08; }
   .pact { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
@@ -272,8 +274,12 @@
 
   /* dialogs */
   dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line2); border-radius: 12px; padding: 0; width: min(860px, 94vw); max-height: 92vh; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
-  dialog[open] { display: flex; flex-direction: column; animation: rise .14s ease-out; }
-  dialog::backdrop { background: rgba(5,4,7,.74); }
+  dialog { opacity: 0; transform: translateY(14px) scale(.975); transition: opacity .2s ease, transform .28s cubic-bezier(.2,.9,.25,1), display .28s allow-discrete, overlay .28s allow-discrete; }
+  dialog[open] { display: flex; flex-direction: column; opacity: 1; transform: none; }
+  @starting-style { dialog[open] { opacity: 0; transform: translateY(14px) scale(.975); } }
+  dialog::backdrop { background: rgba(5,4,7,0); backdrop-filter: blur(0); transition: background .26s ease, backdrop-filter .26s ease, display .26s allow-discrete, overlay .26s allow-discrete; }
+  dialog[open]::backdrop { background: rgba(5,4,7,.72); backdrop-filter: blur(2px); }
+  @starting-style { dialog[open]::backdrop { background: rgba(5,4,7,0); backdrop-filter: blur(0); } }
   dialog.narrow { width: min(540px, 94vw); } dialog.wide { width: min(1040px, 96vw); }
   .dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex: none; }
   .dlg-body { padding: 16px 18px; overflow: auto; display: grid; gap: 14px; flex: 1; min-height: 0; align-content: start; }
@@ -324,10 +330,18 @@
   .fname { color: var(--muted); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* palette */
-  dialog#palDlg { margin-top: 11vh; width: min(640px, 94vw); max-height: 70vh; overflow: hidden; }
-  .pal-in { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--faint); }
-  .pal-in input { flex: 1; height: 30px; background: transparent; border: 0; font-size: 1.05rem; padding: 0; } .pal-in input:focus-visible { outline: 0; }
-  .pal-list { overflow: auto; padding: 6px; max-height: calc(70vh - 110px); }
+  dialog#palDlg { --prow: 36px; inset: auto; margin: 0; left: var(--pl, 50%); top: var(--pt, 11vh); width: var(--pw, min(640px, 94vw)); max-height: min(70vh, calc(100vh - var(--pt, 11vh) - 14px)); overflow: hidden; border-radius: 12px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.55); background: var(--panel); transform: none; opacity: 0; clip-path: inset(0 0 calc(100% - var(--prow)) 0 round 8px);
+    transition: opacity .12s ease .08s, clip-path .12s cubic-bezier(.4,0,1,1), display .24s allow-discrete, overlay .24s allow-discrete; }
+  dialog#palDlg[open] { opacity: 1; clip-path: inset(-70px -70px -90px -70px round 12px); transition: opacity .12s ease, clip-path .34s cubic-bezier(.16,1,.3,1), display .24s allow-discrete, overlay .24s allow-discrete; }
+  @starting-style { dialog#palDlg[open] { opacity: 0; clip-path: inset(0 0 calc(100% - var(--prow)) 0 round 8px); } }
+  dialog#palDlg::backdrop { background: rgba(5,4,7,0); backdrop-filter: none; } dialog#palDlg[open]::backdrop { background: rgba(5,4,7,.5); backdrop-filter: blur(1.5px); }
+  @starting-style { dialog#palDlg[open]::backdrop { background: rgba(5,4,7,0); backdrop-filter: none; } }
+  .pal-in { display: flex; align-items: center; gap: 9px; height: var(--prow); padding: 0 8px 0 11px; border-bottom: 1px solid var(--line); color: var(--faint); flex: none; background: var(--sunk); }
+  .pal-in input { flex: 1; height: 30px; background: transparent; border: 0; font-size: 1rem; padding: 0; } .pal-in input:focus-visible { outline: 0; }
+  .pal-list { overflow: auto; padding: 6px; max-height: min(58vh, calc(100vh - var(--pt, 11vh) - var(--prow) - 64px)); }
+  .pal-list.fresh .pal-item { animation: palIn .26s cubic-bezier(.2,.9,.3,1) backwards; animation-delay: calc(var(--n, 0) * 16ms + 60ms); }
+  @keyframes palIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
   .pal-group { padding: 8px 10px 3px; color: var(--faint); font-size: .76rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
   .pal-item { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 6px; cursor: pointer; } .pal-item[aria-selected=true] { background: var(--hover); }
   .pal-item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pal-item small { color: var(--faint); }
@@ -335,7 +349,9 @@
 
   /* toasts and tour */
   #toasts { position: fixed; z-index: 120; bottom: 18px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; width: min(560px, 94vw); pointer-events: none; }
-  .toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; background: var(--panel2); border: 1px solid var(--line2); border-left-width: 3px; border-radius: 8px; box-shadow: 0 14px 34px rgba(0,0,0,.55); animation: rise .16s ease-out; white-space: pre-line; }
+  .toast { transition: opacity .18s ease, transform .22s ease; pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; background: var(--panel2); border: 1px solid var(--line2); border-left-width: 3px; border-radius: 8px; box-shadow: 0 14px 34px rgba(0,0,0,.55); animation: toastIn .34s cubic-bezier(.2,1.1,.3,1); white-space: pre-line; }
+  .toast.out { opacity: 0; transform: translateY(10px) scale(.97); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: none; } }
   .toast.error { border-color: var(--bad); } .toast.ok { border-color: var(--good); } .toast .tmsg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   #tour { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
   .spot { position: absolute; border-radius: 8px; box-shadow: 0 0 0 2px var(--amber), 0 0 0 9999px rgba(6,5,8,.62); transition: top .22s ease, left .22s ease, width .22s ease, height .22s ease; }
@@ -354,6 +370,39 @@
   body[data-motion=reduce] .spin, body[data-motion=reduce] .dot.run { animation: sp 1.6s linear infinite !important; }
   @media (prefers-reduced-motion: reduce) { body[data-motion=system] *, body[data-motion=system] *::before { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition: none !important; } body[data-motion=system] .spin, body[data-motion=system] .dot.run { animation: sp 1.6s linear infinite !important; } }
   @media (max-width: 700px) { .hide-sm { display: none !important; } .stats > div { min-width: 46%; } }
+.gaps { border-top: 1px solid var(--line); } .gaps h3 { font-size: 1rem; margin: 0 0 8px; }
+.gap { padding: 10px 12px; border: 1px solid var(--line2); border-left-width: 3px; border-radius: 6px; background: var(--panel2); margin-bottom: 8px; }
+.gap.closed { border-left-color: var(--good); } .gap.mismatch { border-left-color: var(--bad); } .gap.equivalent, .gap.open, .gap.unreached { border-left-color: var(--amber-text); }
+.gaphead { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; } .gaphead .tag { margin-left: auto; }
+.gapin { margin: 6px 0; padding: 8px 10px; background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; font-size: var(--code-fs); overflow-x: auto; }
+/* motion */
+  .btn, .icon-btn, .searchbtn, .pill, .chipbtn, .seg button { transition: background-color .16s ease, border-color .16s ease, color .16s ease, transform .12s ease, box-shadow .2s ease; }
+  .btn:active:not(:disabled):not([aria-disabled=true]), .icon-btn:active, .pill:active, .chipbtn:active { transform: translateY(1px) scale(.97); }
+  .btn.primary:hover:not(:disabled) { box-shadow: 0 0 0 3px rgba(242,166,90,.18), 0 6px 18px rgba(242,166,90,.16); }
+  .searchbtn:hover { box-shadow: 0 0 0 3px rgba(242,166,90,.10); }
+  .card { transition: transform .2s cubic-bezier(.2,.9,.3,1), border-color .16s ease, background-color .16s ease, box-shadow .24s ease; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,.4), 0 0 0 1px rgba(242,166,90,.14); }
+  .card:active { transform: translateY(0) scale(.995); }
+  .enter > .panel, .enter > .stats, .enter > .note, .enter .cards > .card, .enter > .sect { animation: rise .42s cubic-bezier(.2,.9,.3,1) backwards; }
+  .enter > :nth-child(2), .enter .cards > :nth-child(2) { animation-delay: .045s; } .enter > :nth-child(3), .enter .cards > :nth-child(3) { animation-delay: .09s; }
+  .enter > :nth-child(4), .enter .cards > :nth-child(4) { animation-delay: .135s; } .enter > :nth-child(5), .enter .cards > :nth-child(5) { animation-delay: .18s; }
+  .enter > :nth-child(6), .enter .cards > :nth-child(6) { animation-delay: .22s; } .enter .cards > :nth-child(n+7) { animation-delay: .26s; }
+  .menu.floating, .dd { animation: pop .18s cubic-bezier(.2,.9,.3,1.15); transform-origin: top left; }
+  .menu:not([hidden]):not(.floating) { animation: pop .18s cubic-bezier(.2,.9,.3,1.15); transform-origin: top right; }
+  @keyframes pop { from { opacity: 0; transform: translateY(-5px) scale(.95); } to { opacity: 1; transform: none; } }
+  .sumicon.stamp { animation: stamp .62s cubic-bezier(.2,1.4,.35,1) backwards; position: relative; }
+  .sumicon.stamp::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid currentColor; animation: ring .9s ease-out .3s backwards; pointer-events: none; }
+  @keyframes stamp { 0% { opacity: 0; transform: scale(2.1) rotate(-16deg); } 55% { opacity: 1; transform: scale(.9) rotate(3deg); } 100% { transform: none; } }
+  @keyframes ring { from { opacity: .7; transform: scale(1); } to { opacity: 0; transform: scale(1.9); } }
+  .sumicon.stamp ~ div .word { animation: wordIn .5s ease-out .22s backwards; } @keyframes wordIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+  .ed:not(.goto):not(.handler) { stroke-dasharray: 100; animation: draw .9s ease-out backwards; } @keyframes draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+  .ed.goto, .ed.handler { animation: fade .9s ease-out backwards; }
+  .gn { animation: fade .5s ease-out backwards; } /* opacity only: nodes are placed with a transform attribute that a CSS transform would override */
+  body { background-image: radial-gradient(1100px 480px at 58% -140px, rgba(242,166,90,.055), transparent 70%); background-repeat: no-repeat; background-attachment: fixed; }
+  .brand svg { animation: flicker 5.5s ease-in-out infinite; } @keyframes flicker { 0%, 100% { filter: drop-shadow(0 0 3px rgba(242,166,90,.25)); } 45% { filter: drop-shadow(0 0 6px rgba(242,166,90,.5)); } 62% { filter: drop-shadow(0 0 4px rgba(242,166,90,.3)); } }
+  body[data-motion=reduce] dialog::backdrop { transition: none !important; backdrop-filter: none !important; } body[data-motion=reduce] .brand svg { animation: none; }
+  @media (prefers-reduced-motion: reduce) { body[data-motion=system] dialog::backdrop { transition: none !important; backdrop-filter: none !important; } body[data-motion=system] .brand svg { animation: none; } }
+  @media (max-width: 720px) { dialog#palDlg { border-radius: 10px; } }
 </style>
 </head>
 <body data-density="comfortable" data-motion="system" data-side="on">
@@ -441,6 +490,7 @@
           <button role="tab" data-tab="check" id="tab-check" aria-controls="pCheck">Check</button>
           <button role="tab" data-tab="try" id="tab-try" aria-controls="pTry">Try Input</button>
           <button role="tab" data-tab="data" id="tab-data" aria-controls="pData">Test Data</button>
+          <i class="ink" id="tabInk" aria-hidden="true"></i>
         </div>
         <div class="pact">
           <label class="inline" id="implWrap" for="implSel" hidden>Python <select id="implSel"></select></label>
@@ -643,7 +693,7 @@ function say(msg, kind = '', opts = {}) {
   const box = $('toasts'); const el = document.createElement('div');
   el.className = 'toast ' + kind; el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   el.innerHTML = `<div class="tmsg">${esc(msg)}</div>${opts.action ? '<button class="btn sm" data-a>' + esc(opts.action.label) + '</button>' : ''}<button class="icon-btn sm" aria-label="Dismiss">${ic('x', 14)}</button>`;
-  const kill = () => el.remove();
+  const kill = () => { if (el.classList.contains('out')) return; el.classList.add('out'); setTimeout(() => el.remove(), 220); };
   el.querySelector('.icon-btn').onclick = kill;
   if (opts.action) el.querySelector('[data-a]').onclick = () => { kill(); opts.action.run(); };
   box.appendChild(el); while (box.children.length > 3) box.firstChild.remove();
@@ -871,7 +921,17 @@ function paletteItems() {
   S.programs.forEach((x) => items.push({ g: 'Programs', t: x.title, sub: statusOf(x).text, icon: 'file', run: () => goTo(x.name) }));
   return items.filter((i) => !i.skip);
 }
-function openPalette() { pal.items = paletteItems(); $('palInput').value = ''; filterPalette(); $('palDlg').showModal(); $('palInput').focus(); }
+function placePalette() {
+  const d = $('palDlg'), r = $('palOpen').getBoundingClientRect(); const set = (k, v) => d.style.setProperty(k, v);
+  if (!(r.width > 0)) { const w = Math.min(640, innerWidth - 16); set('--pl', (innerWidth - w) / 2 + 'px'); set('--pt', '11vh'); set('--pw', w + 'px'); set('--prow', '40px'); return; }
+  if (innerWidth < 720) { set('--pl', '8px'); set('--pt', Math.max(4, r.top - 1) + 'px'); set('--pw', innerWidth - 16 + 'px'); set('--prow', r.height + 2 + 'px'); return; }
+  const w = Math.min(Math.max(r.width, 620), innerWidth - 16); set('--pl', Math.min(Math.max(8, r.left - 1), innerWidth - w - 8) + 'px'); set('--pt', r.top - 1 + 'px'); set('--pw', w + 'px'); set('--prow', r.height + 2 + 'px');
+}
+function openPalette() {
+  pal.items = paletteItems(); $('palInput').value = ''; placePalette(); filterPalette();
+  const list = $('palList'); list.classList.add('fresh'); clearTimeout(openPalette.t); openPalette.t = setTimeout(() => list.classList.remove('fresh'), 700);
+  $('palDlg').showModal(); $('palInput').focus();
+}
 function filterPalette() {
   const toks = $('palInput').value.toLowerCase().split(/\s+/).filter(Boolean);
   const score = (i) => { const s = (i.t + ' ' + i.g).toLowerCase(); if (!toks.every((t) => s.includes(t))) return -1; return (i.t.toLowerCase().startsWith(toks[0] || '') ? 2 : 0) + (i.g === 'Programs' ? 0 : 1); };
@@ -882,13 +942,14 @@ function renderPalette() {
   let last = '';
   $('palList').innerHTML = pal.shown.map((i, n) => {
     const head = i.g !== last ? `<div class="pal-group" role="presentation">${esc(i.g)}</div>` : ''; last = i.g;
-    return `${head}<div class="pal-item" role="option" id="po${n}" data-n="${n}" aria-selected="${n === pal.sel}">${ic(i.icon || 'file', 16)}<span class="t">${esc(i.t)}${i.sub ? ` <small>· ${esc(i.sub)}</small>` : ''}</span>${i.k ? `<span>${i.k.split(' ').map((k) => `<kbd>${esc(k)}</kbd>`).join(' ')}</span>` : ''}</div>`;
+    return `${head}<div class="pal-item" role="option" id="po${n}" data-n="${n}" style="--n:${Math.min(n, 9)}" aria-selected="${n === pal.sel}">${ic(i.icon || 'file', 16)}<span class="t">${esc(i.t)}${i.sub ? ` <small>· ${esc(i.sub)}</small>` : ''}</span>${i.k ? `<span>${i.k.split(' ').map((k) => `<kbd>${esc(k)}</kbd>`).join(' ')}</span>` : ''}</div>`;
   }).join('') || '<div class="empty-state">Nothing matches.</div>';
   $('palInput').setAttribute('aria-activedescendant', 'po' + pal.sel);
   $('palList').querySelector('[aria-selected=true]')?.scrollIntoView({ block: 'nearest' });
 }
 function runPalette(n) { const it = pal.shown[n]; if (!it) return; $('palDlg').close(); setTimeout(() => it.run(), 30); }
-$('palInput').addEventListener('input', filterPalette);
+$('palInput').addEventListener('input', () => { $('palList').classList.remove('fresh'); filterPalette(); });
+window.addEventListener('resize', () => { if ($('palDlg').open) placePalette(); });
 $('palInput').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); pal.sel = Math.min(pal.sel + 1, pal.shown.length - 1); renderPalette(); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); pal.sel = Math.max(pal.sel - 1, 0); renderPalette(); }
@@ -1096,7 +1157,7 @@ function renderProgHeader() {
   $('tab-try').hidden = job;
   const bad = c && !c.matched && c.current ? (c.differing || 1) : 0;
   $('tab-check').innerHTML = 'Check' + (bad ? `<span class="count" title="Lines that differ">${bad > 99 ? '99+' : bad}</span>` : '');
-  $('statusLine').innerHTML = running ? `<span class="spin"></span><b>${running.kind === 'mutate' ? 'Running the mutation test…' : 'Checking…'}</b>`
+  $('statusLine').innerHTML = running ? `<span class="spin"></span><b>${running.kind === 'mutate' ? 'Running the mutation test…' : running.kind === 'gaps' ? 'Searching for inputs…' : 'Checking…'}</b>`
     : `${dot(st)}<b>${esc(st.text)}</b>${c ? `<span class="hide-sm">· ${c.compared != null ? c.compared.toLocaleString() + ' lines' : ''}${c.coverage != null ? ' · ' + c.coverage + '% reached' : ''}${c.checked_at ? ' · ' + esc(ago(c.checked_at)) : ''}</span>` : '<span class="hide-sm">· run a check to see the evidence</span>'}`;
   $('statusLine').title = 'Show the last check'; $('runBtn').disabled = !!running || !!p.error;
   $('runBtn').querySelector('span').textContent = running ? 'Running…' : 'Run Check';
@@ -1144,9 +1205,17 @@ $$('#tabs [role=tab]').forEach((b) => {
 const PANELS = { overview: 'pOverview', code: 'pCode', analysis: 'pAnalysis', check: 'pCheck', try: 'pTry', data: 'pData' };
 const RENDER = { overview: () => renderOverview(), code: () => renderCode(), analysis: () => renderAnalysis(), check: () => renderCheck(), try: () => renderTry(), data: () => renderData() };
 const scrollMem = new Map();
+function moveInk(instant) {
+  const ink = $('tabInk'), on = document.querySelector('#tabs [aria-selected=true]'); if (!ink || !on || !on.offsetWidth) return;
+  if (instant) ink.style.transition = 'none';
+  ink.style.setProperty('--x', on.offsetLeft + 'px'); ink.style.setProperty('--w', on.offsetWidth + 'px');
+  if (instant) { void ink.offsetWidth; ink.style.transition = ''; }
+}
+if (window.ResizeObserver) { const ro = new ResizeObserver(() => moveInk(true)); document.querySelectorAll('#tabs [role=tab]').forEach((b) => ro.observe(b)); }
 function showTab(tab, fresh) {
   const prev = S.shownTab; if (prev && S.shownName) scrollMem.set(S.shownName + '|' + prev, window.scrollY);
   $$('#tabs [role=tab]').forEach((b) => { const on = b.dataset.tab === tab; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+  moveInk(!S.shownName || S.view !== 'prog' || S.shownName !== S.name);
   TABS.forEach((t) => ($(PANELS[t]).hidden = t !== tab));
   const el = $(PANELS[tab]);
   if (fresh || S.shownTab !== tab || S.shownName !== S.name) enter(el);
@@ -1269,7 +1338,7 @@ async function renderCode() {
 function jumpToCobol(prog_, line) { S.jump = { prog: prog_, line }; goTo(S.name, 'code'); }
 
 /* ================================================================ running checks */
-S.errors = new Map(); S.mutants = new Map();
+S.errors = new Map(); S.mutants = new Map(); S.gaps = new Map();
 async function startCheck(name, opts = {}) {
   const p = prog(name); if (!p) return;
   if (S.running.has(name)) { say(`${p.title} is already running.`); return; }
@@ -1280,7 +1349,7 @@ async function startCheck(name, opts = {}) {
   try {
     const r = await send('/api/verify', { program: name, implementation: impl, rounds }, 'POST', 900000);
     S.cache.report.set(name + '|' + impl, Promise.resolve({ report: r, status: { current: true } })); forget(name, ['history']);
-    S.running.delete(name); await refreshProgram(name); afterRunChange(name);
+    S.stamp = { name, t: Date.now() }; S.running.delete(name); await refreshProgram(name); afterRunChange(name);
     if (!opts.quiet && !here(name, 'check')) say(`${p.title}: ${r.matched ? 'Spirit matched' : 'Spirit restless'}`, r.matched ? 'ok' : 'error', { action: { label: 'View', run: () => goTo(name, 'check') } });
     return r;
   } catch (e) {
@@ -1313,7 +1382,34 @@ async function startMutate(name) {
   S.running.delete(name); afterRunChange(name);
 }
 
+async function startGaps(name) {
+  const p = prog(name); const impl = curImpl(p).module; if (S.running.has(name)) return;
+  S.running.set(name, { kind: 'gaps', impl, t: Date.now() }); afterRunChange(name);
+  try {
+    const r = await send('/api/gapfill', { program: name, implementation: impl }, 'POST', 1800000);
+    S.gaps.set(name + '|' + impl, r); if (r.strength) S.mutants.set(name + '|' + impl, r.strength);
+    if (r.saved.length) { forget(name, ['sets']); await refreshProgram(name); }
+    const n = (s) => r.results.filter((x) => x.status === s).length;
+    say(`${r.saved.length ? plural(r.saved.length, 'new test set') + ' saved. ' : ''}${n('equivalent') ? n('equivalent') + ' judged equivalent. ' : ''}${n('mismatch') ? n('mismatch') + ' real mismatch, needs human review. ' : ''}${n('open') + n('unreached') ? n('open') + n('unreached') + ' still open.' : ''}`.trim() || 'Nothing to fill.', n('mismatch') ? 'error' : 'ok');
+  } catch (e) { say(e.message, 'error'); }
+  S.running.delete(name); afterRunChange(name);
+}
 /* ================================================================ check tab */
+const GAP_TAG = { closed: ['good', 'Closed'], equivalent: ['amber', 'Likely equivalent'], mismatch: ['bad', 'Needs human review'], open: ['amber', 'Needs human review'], unreached: ['amber', 'Needs human review'] };
+function gapHtml(g) {
+  const inputLines = (r) => Object.entries(r.inputs.inputs || {}).map(([f, rows]) => `${esc(f)}\n${rows.map((x) => '  ' + esc(x)).join('\n')}`).concat((r.inputs.stdin || []).length ? ['console\n' + r.inputs.stdin.map((x) => '  ' + esc(x)).join('\n')] : []).join('\n');
+  return `<div class="body gaps"><h3>What the search found</h3>${g.results.map((r, i) => {
+    const [cls, word] = GAP_TAG[r.status] || GAP_TAG.open;
+    const d = r.difference ? charDiff(r.difference.expected, r.difference.actual) : null;
+    return `<div class="gap ${esc(r.status)}"><div class="gaphead"><b>${r.cobol_line ? `<a href="#" data-line="${r.cobol_line}">COBOL line ${r.cobol_line}</a>` : `Python line ${r.line}`}</b><span>${esc(r.change)}</span><span class="tag ${cls}">${word}</span></div>
+      <p class="sm muted">${esc(r.note)}${r.error ? ` (${esc(r.error)})` : ''}</p>
+      ${r.inputs ? `<pre class="gapin">${inputLines(r)}</pre>` : ''}
+      ${d ? `<div class="pair"><span>Original</span><code>${d[0]}</code><span>Changed</span><code>${d[1]}</code></div>` : ''}
+      ${r.diffs && r.diffs.length ? diffBlock(r.diffs[0], 'COBOL and the original Python disagree here') : ''}
+      ${r.status === 'mismatch' ? `<div class="row" style="margin-top:8px"><button class="btn sm" data-trygap="${i}">Try this input</button></div>` : ''}
+      ${r.set ? `<p class="faint sm" style="margin-top:6px">Saved as a test set. The next check replays it (Data tab).</p>` : ''}</div>`;
+  }).join('')}</div>`;
+}
 function diffBlock(d, title) {
   const where = d.index < 0 ? (d.stream === 'run' ? 'How the run ended' : `File ${esc(d.stream)}`) : `${d.stream === 'console' ? 'Console' : esc(d.stream)} line ${d.index + 1}`;
   const [a, b] = charDiff(d.expected, d.actual); const bad = (d.fields || []).filter((f) => !f.same);
@@ -1329,7 +1425,7 @@ function reportHtml(r, status, p) {
     : naive ? 'This is the deliberately buggy hand-written port: its money math uses floats, so amounts drift by a cent and overflow differently. Below is exactly where.'
     : "The Python does not behave like the COBOL yet. The COBOL's output is the expected answer.";
   const cls = stale ? 'warn' : good ? 'good' : 'bad';
-  let html = `<div class="sumhead sumbox"><div class="sumicon ${cls}">${ic(good ? 'check' : 'alert', 26)}</div><div>
+  let html = `<div class="sumhead sumbox"><div class="sumicon ${cls}${S.stamp && p && S.stamp.name === p.name && Date.now() - S.stamp.t < 3000 ? ' stamp' : ''}">${ic(good ? 'check' : 'alert', 26)}</div><div>
       <div class="word ${good ? 'good' : 'bad'}">${good ? 'Spirit matched' : 'Spirit restless'}${good ? '' : `<small>${differing ? plural(differing, 'line') + ' differ' : 'the run ends differently'}${f ? ', and a random run fails' : ''}</small>`}</div>
       <p class="muted" style="margin-top:4px">${why}${stale ? ' <b class="warn">The code changed after this check. Run it again.</b>' : ''}</p>
       <div class="metrics"><div><b>${compared.toLocaleString()}</b><span>Lines compared</span></div><div><b class="${differing ? 'bad' : ''}">${differing}</b><span>Lines differ</span></div><div><b>${r.random_runs}</b><span>Random runs</span></div>${cov ? `<div><b>${cov.percent}%</b><span>COBOL statements reached</span></div>` : ''}</div></div></div>`;
@@ -1363,11 +1459,16 @@ async function renderCheck() {
   else if (err) result = `<div class="body"><div class="note bad"><b>The check could not run.</b><br>${esc(err)}</div></div>`;
   else if (rep) result = reportHtml(rep, status, p);
   else result = `<div class="empty-state"><p><b>No check yet for ${naive ? 'this hand-written port' : 'this Python'}.</b></p><p style="margin:6px 0 14px">A check replays every recorded run of the real COBOL through the Python, then runs both on fresh random input.</p><button class="btn primary" id="runInline" ${S.runtime ? '' : 'disabled'}>${ic('play')}Run Check</button></div>`;
-  const mut = S.mutants.get(name + '|' + impl.module); const mrun = running && running.kind === 'mutate';
-  const surv = mut ? mut.mutants.filter((m) => !m.caught) : [];
-  const strength = job ? '' : `<div class="panel"><div class="head"><div><h2>Test strength</h2><p class="muted sm">Breaks the Python on purpose in small ways (a &gt; becomes &gt;=, a ROUNDED goes away, a constant changes) and checks that the saved runs notice each one.</p></div><button class="btn" id="runStrength" ${running ? 'disabled' : ''}>${mrun ? '<span class="spin"></span>Measuring…' : ic('flask') + 'Run Mutation Test'}</button></div>
-    ${mut ? (mut.error ? `<div class="body"><div class="note bad">${esc(mut.error)}</div></div>` : `<div class="body"><div class="note ${surv.length ? 'bad' : 'good'}"><b>${surv.length ? `${plural(surv.length, 'bug')} slipped through.` : 'Every planted bug was caught.'}</b> ${mut.caught} of ${mut.total} caught by ${mut.records} saved records.</div></div>
-      <table><thead><tr><th>Where</th><th>Planted bug</th><th>Result</th></tr></thead><tbody>${mut.mutants.map((m) => `<tr><td>${m.cobol_line ? `<a href="#" data-line="${m.cobol_line}">COBOL line ${m.cobol_line}</a>` : `Python line ${m.line}`}</td><td>${esc(m.change)}</td><td class="${m.caught ? 'good' : 'bad'}">${m.caught ? 'Caught' : 'Slipped through'}</td></tr>`).join('')}</tbody></table>`) : ''}</div>`;
+  const key = name + '|' + impl.module; const mut = S.mutants.get(key); const gaps = S.gaps.get(key);
+  const mrun = running && running.kind === 'mutate'; const grun = running && running.kind === 'gaps';
+  const live = mut && !mut.error ? mut.mutants : [];
+  const surv = live.filter((m) => !m.caught && m.verdict !== 'equivalent'); const same = live.filter((m) => !m.caught && m.verdict === 'equivalent');
+  const rowResult = (m) => (m.caught ? '<td class="good">Caught</td>' : m.verdict === 'equivalent' ? '<td><span class="tag amber">Likely equivalent</span></td>' : '<td class="bad">Slipped through</td>');
+  const strength = job ? '' : `<div class="panel" id="strengthPanel"><div class="head"><div><h2>Test strength</h2><p class="muted sm">Breaks the Python on purpose in small ways (a &gt; becomes &gt;=, a ROUNDED goes away, a constant changes) and checks that the saved runs notice each one. Anything that slips through can be hunted down: the search looks for an input that tells the two apart, checks it against the real COBOL and saves it as a test set.</p></div>
+      <div class="row">${surv.length ? `<button class="btn primary" id="runGaps" ${running ? 'disabled' : ''}>${grun ? '<span class="spin"></span>Searching…' : ic('flask') + 'Find Inputs That Catch These'}</button>` : ''}<button class="btn" id="runStrength" ${running ? 'disabled' : ''}>${mrun ? '<span class="spin"></span>Measuring…' : ic('flask') + 'Run Mutation Test'}</button></div></div>
+    ${mut ? (mut.error ? `<div class="body"><div class="note bad">${esc(mut.error)}</div></div>` : `<div class="body"><div class="note ${surv.length ? 'bad' : 'good'}"><b>${surv.length ? `${plural(surv.length, 'bug')} slipped through.` : same.length ? 'Nothing is left that a test could catch.' : 'Every planted bug was caught.'}</b> ${mut.caught} of ${mut.total} caught by ${mut.records} saved records.${same.length ? ` ${same.length} judged equivalent: the output did not change when the code was tested at its edge, so the change most likely makes no difference.` : ''}</div></div>
+      <table><thead><tr><th>Where</th><th>Planted bug</th><th>Result</th></tr></thead><tbody>${mut.mutants.map((m) => `<tr><td>${m.cobol_line ? `<a href="#" data-line="${m.cobol_line}">COBOL line ${m.cobol_line}</a>` : `Python line ${m.line}`}</td><td>${esc(m.change)}</td>${rowResult(m)}</tr>`).join('')}</tbody></table>`) : ''}
+    ${gaps ? gapHtml(gaps) : ''}</div>`;
   const hist = await historyHtml(name, impl.module);
   if (!here(name, 'check') || curImpl(p).module !== impl.module) return;
   el.innerHTML = `<div class="panel" id="resultPanel"><div class="head"><p class="muted sm" style="max-width:74ch">Replays every saved run of the COBOL through the Python and compares each output byte, then runs both programs on fresh random input.</p>
@@ -1376,6 +1477,8 @@ async function renderCheck() {
 $('pCheck').addEventListener('click', (e) => {
   if (e.target.closest('#runInline')) { startCheck(S.name); return; }
   if (e.target.closest('#runStrength')) { startMutate(S.name); return; }
+  if (e.target.closest('#runGaps')) { startGaps(S.name); return; }
+  const tg = e.target.closest('[data-trygap]'); if (tg) { const g = S.gaps.get(S.name + '|' + curImpl(prog(S.name)).module); const r = g && g.results[+tg.dataset.trygap]; if (r && r.inputs) { S.preset = { name: S.name, files: r.inputs.inputs, stdin: r.inputs.stdin }; goTo(S.name, 'try'); } return; }
   if (e.target.closest('#tryShrunk')) { getReport(S.name, curImpl(prog(S.name)).module).then((r) => { const f = r.report.random_failure; S.preset = { name: S.name, files: f.inputs, stdin: f.stdin }; goTo(S.name, 'try'); }); return; }
   const m = e.target.closest('[data-miss]'); if (m) { e.preventDefault(); jumpToCobol(m.dataset.prog, +m.dataset.miss); return; }
   const l = e.target.closest('[data-line]'); if (l) { e.preventDefault(); jumpToCobol('', +l.dataset.line); }
@@ -1461,7 +1564,7 @@ async function renderData() {
   const targets = job ? [] : lay.files.filter((f) => f.input).map((f) => `<option value="file:${esc(f.assign)}">${esc(PSEUDO[f.assign] || f.assign)}</option>`);
   if (lay?.console_input?.length) targets.push('<option value="console">Console input</option>');
   el.innerHTML = `<div class="panel"><div class="head"><div><h2>Saved test sets</h2><p class="muted sm">The real COBOL's output for each set is the expected answer.</p></div><button class="btn" id="recordAgain" title="Run the real COBOL again on the generated data and save its answers">${ic('refresh')}Record Again</button></div>
-      <div class="body flush"><table><thead><tr><th>Set</th><th class="num">Input</th><th></th></tr></thead><tbody>${sets.map((s) => `<tr><td>${esc(s.label)}${s.golden ? ` <span class="tag amber">Mainframe</span> <span class="tag ${s.cobol_agrees ? 'good' : 'bad'}">${s.cobol_agrees ? 'GnuCOBOL agrees' : 'GnuCOBOL differs'}</span>${s.filled_from_cobol?.length ? `<br><span class="faint sm">${esc(s.filled_from_cobol.join(', '))} taken from the GnuCOBOL run</span>` : ''}` : ''}${s.cobol_error ? `<br><span class="faint sm">The COBOL stopped: ${esc(s.cobol_error)}</span>` : ''}</td><td class="num muted">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num">${s.removable ? `<button class="btn danger sm" data-rm="${esc(s.set)}">Remove</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No sets yet. Use Record Again.</td></tr>'}</tbody></table></div></div>
+      <div class="body flush"><table><thead><tr><th>Set</th><th class="num">Input</th><th></th></tr></thead><tbody>${sets.map((s) => `<tr><td>${esc(s.label)}${s.gap ? ' <span class="tag">Gap filler</span>' : ''}${s.golden ? ` <span class="tag amber">Mainframe</span> <span class="tag ${s.cobol_agrees ? 'good' : 'bad'}">${s.cobol_agrees ? 'GnuCOBOL agrees' : 'GnuCOBOL differs'}</span>${s.filled_from_cobol?.length ? `<br><span class="faint sm">${esc(s.filled_from_cobol.join(', '))} taken from the GnuCOBOL run</span>` : ''}` : ''}${s.cobol_error ? `<br><span class="faint sm">The COBOL stopped: ${esc(s.cobol_error)}</span>` : ''}</td><td class="num muted">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num">${s.removable ? `<button class="btn danger sm" data-rm="${esc(s.set)}">Remove</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No sets yet. Use Record Again.</td></tr>'}</tbody></table></div></div>
     ${targets.length ? `<div class="panel"><div class="head"><div><h2>Add your own data</h2><p class="muted sm">A real input file makes the strongest test. The COBOL runs on it first; other inputs come from the first saved set.</p></div></div>
       <div class="body"><div class="drop" id="dataDrop"><p style="margin-bottom:10px">Drop a data file here, or choose one</p><div class="row" style="justify-content:center;align-items:flex-end;gap:14px">
         <label class="block" style="text-align:left">For <select id="uploadTarget">${targets.join('')}</select></label>
@@ -1558,7 +1661,7 @@ function graphHtml(nodes, edges, { dead = new Set(), entry = new Set() } = {}) {
     const back = b.x <= a.x;
     const d = back ? `M ${a.x + a.w / 2} ${a.y + a.h} C ${a.x + a.w / 2} ${a.y + a.h + 34}, ${b.x + b.w / 2} ${b.y + b.h + 34}, ${b.x + b.w / 2} ${b.y + b.h + 2}`
       : `M ${x1} ${y1} C ${x1 + GX / 2} ${y1}, ${x2 - GX / 2} ${y2}, ${x2 - 3} ${y2}`;
-    return `<path class="ed ${e.kind}" d="${d}" marker-end="url(#ah-${e.kind})"><title>${esc(st[0])}: ${esc(byId.get(e.from).label)} to ${esc(byId.get(e.to).label)}${e.line ? ' (line ' + e.line + ')' : ''}</title></path>`;
+    return `<path class="ed ${e.kind}" pathLength="100" d="${d}" marker-end="url(#ah-${e.kind})"><title>${esc(st[0])}: ${esc(byId.get(e.from).label)} to ${esc(byId.get(e.to).label)}${e.line ? ' (line ' + e.line + ')' : ''}</title></path>`;
   }).join('');
   const kinds = [...new Set(es.map((e) => e.kind))];
   const markers = kinds.map((k) => `<marker id="ah-${k}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9z" style="fill:${(EDGE_STYLE[k] || EDGE_STYLE.perform)[1]}"/></marker>`).join('');
@@ -1965,11 +2068,31 @@ function positionTour() {
   Object.assign(spot.style, { top: r.top - pad + 'px', left: r.left - pad + 'px', width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px', boxShadow: '' });
   let top, left;
   if (place === 'right' && r.right + cw + 24 < innerWidth) { left = r.right + 18; top = r.top; }
-  else { left = r.left; top = r.bottom + 16; if (top + ch > innerHeight - 10) top = r.top - ch - 16; if (top < 10) { top = innerHeight - ch - 16; left = innerWidth - cw - 16; } }
+  else {
+    left = r.left; top = r.bottom + 16; if (top + ch > innerHeight - 10) top = r.top - ch - 16;
+    if (top < 10) { // neither above nor below fits: beside the target, or centred in the window
+      if (r.right + cw + 24 < innerWidth) { left = r.right + 18; top = r.top; } else if (r.left - cw - 24 > 0) { left = r.left - cw - 18; top = r.top; } else { left = (innerWidth - cw) / 2; top = (innerHeight - ch) / 2; }
+    }
+  }
   card.style.left = clamp(left, 10, innerWidth - cw - 10) + 'px'; card.style.top = clamp(top, 10, innerHeight - ch - 10) + 'px';
 }
 window.addEventListener('resize', positionTour); window.addEventListener('scroll', positionTour, { passive: true });
 
+/* ================================================================ motion helpers */
+const counted = new Set();
+function motionOn() { const m = document.body.dataset.motion; return !(m === 'reduce' || (m === 'system' && matchMedia('(prefers-reduced-motion: reduce)').matches) || navigator.webdriver); }
+function countUp(root) {
+  if (!motionOn() || !root) return;
+  root.querySelectorAll('.stats b, .metrics b').forEach((b) => {
+    const t = b.textContent.trim(); if (b.dataset.cu || !/^\d[\d,]*$/.test(t)) return; b.dataset.cu = '1';
+    const key = location.hash + '|' + (b.nextElementSibling ? b.nextElementSibling.textContent : '') + '|' + t; if (counted.has(key)) return; counted.add(key);
+    const to = +t.replace(/,/g, ''); if (to < 3) return;
+    const t0 = performance.now(), dur = Math.min(950, 320 + Math.log10(to + 1) * 150);
+    const tick = (now) => { const k = Math.min(1, (now - t0) / dur); if (k < 1 && b.isConnected) { b.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))).toLocaleString(); requestAnimationFrame(tick); } else b.textContent = t; };
+    requestAnimationFrame(tick);
+  });
+}
+if (window.MutationObserver) new MutationObserver((ms) => { if (ms.every((m) => m.target.closest && m.target.closest('[data-cu]'))) return; clearTimeout(countUp.t); countUp.t = setTimeout(() => countUp(document.querySelector('main')), 40); }).observe(document.querySelector('main'), { childList: true, subtree: true });
 /* ================================================================ start */
 async function init() {
   applyPrefs(); syncSide(); hydrateIcons(); $('logo').innerHTML = WISP('calm', 22);

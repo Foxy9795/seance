@@ -160,6 +160,11 @@ CBLDB23. The other 6 cannot be checked: five are lab exercises with deliberate c
 - **Coverage:** the saved runs are replayed under a line tracer; COBOL statements no run reaches are listed as
   needing review, because a difference there would go unseen.
 - **Mutation test:** small bugs planted in the Python one at a time must each be caught by the saved runs.
+- **Gap filling:** for each planted bug that slips through, Séance searches for an input that tells it apart from the original
+  (it steers by the program's own comparison operands), runs that input through the real COBOL, and saves it as a test set
+  only if the COBOL agrees with the original Python. If the COBOL disagrees, the Python has a bug the saved sets missed, and it is
+  reported, not saved. A change that never alters the output when its edge is reached on several inputs is reported as
+  *likely equivalent*, with the evidence. Everything else unresolved is marked as needing human review.
 - **Receipt:** SHA-256 of the COBOL source, the Python and the test data, so a verdict cannot be reused for other code.
 - **Parallel runs:** a set whose expected output is what your mainframe wrote. The Python is checked against it, and GnuCOBOL
   is run on the same data so a difference between GnuCOBOL and your system shows up instead of hiding.
@@ -222,10 +227,12 @@ Séance compiles and runs code you give it, so treat it like a local dev server.
 
 - **MCP server** (`seance/mcp_server.py`, registered in `.kiro/settings/mcp.json`) with these tools: `list_programs`,
   `describe_program`, `describe_layout`, `run_legacy_program` (input files and console input), `record_legacy_fixtures`,
-  `draft_python`, `verify_migration`, `measure_test_strength`, `extract_business_rules`, `assess_workspace`, `list_samples`, `load_sample`.
+  `draft_python`, `verify_migration`, `measure_test_strength`, `fill_test_gaps`, `extract_business_rules`, `assess_workspace`, `list_samples`, `load_sample`
+  (13 tools; the ones that only read are auto-approved).
 - **Steering** (`.kiro/steering/`): product rules and COBOL-to-Python rules.
 - **Hook** (`.kiro/hooks/`): re-verifies when a file in `migrated/` is saved.
-- **Spec** (`.kiro/specs/seance/`): requirements.
+- **Spec** (`.kiro/specs/seance/`): requirements, design and tasks.
+- **Rules check** (`scripts/check_rules.py`, also run by the tests): the Kiroween submission rules and the steering rules, as code.
 
 The venv Python path in `.kiro/settings/mcp.json` is absolute. Edit it if you clone the repo elsewhere.
 
@@ -240,8 +247,11 @@ python -m seance analyze accounts         # what Séance understood about the pr
 python -m seance translate accounts       # write the Python draft
 python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
+python -m seance fill-gaps accounts       # find inputs that catch what the tests missed, and save them
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 145 tests, including differential tests against GnuCOBOL
+python -m pytest                          # 161 tests, including differential tests against GnuCOBOL
+python scripts\check_rules.py             # the submission and steering rules
+python scripts\stress_translate.py --fetch run_fundamental   # then: ... run_fundamental --workers 4  (see docs/STRESS.md)
 python scripts\ui_check.py                # 80 checks that drive the real UI in Edge (app must be running, workspace empty)
 python scripts\audit_ui.py                # scripted audit of every screen: contrast, names, tap targets, dropdowns, errors
 python scripts\shots.py                   # screenshots of every main screen into build\shots
@@ -262,6 +272,10 @@ The tests load the sample library into the workspace for the run and remove it a
 - The analysis is static. It reads the source and does not execute it, so a paragraph reached only through ALTER or a computed
   CALL is reported as unreferenced or dynamic, and lineage follows MOVE, COMPUTE, arithmetic, STRING, UNSTRING, READ INTO and
   WRITE FROM but not SQL or CICS data movement.
+- Gap filling does not cover SQL and CICS programs: their inputs are tables and screens, which the search cannot vary yet.
+- The translator does not do `DECIMAL-POINT IS COMMA`, compiler directives (`>>IF`), `REPLACE`, nested programs, or most intrinsic
+  functions' display formats. A program that uses them is accepted and says so in its notes; the check shows where it differs.
+  `docs/STRESS.md` measures this against GnuCOBOL's own test programs (142 of 465 usable ones matched; the suite is deliberately hostile).
 - IMS and the REPORT and SCREEN sections are the main things to add next.
 
 License: MIT.

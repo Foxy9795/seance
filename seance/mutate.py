@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import ast
 import copy
+import os
 import re
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -22,6 +24,7 @@ from .recorder import ROOT, cobol_env, get_model
 from .verify import load_implementation, replay_sets
 
 MUTANT_TIMEOUT = 10  # seconds per planted bug; a bug that makes the program hang is caught when this runs out
+WORKERS = max(1, min(4, (os.cpu_count() or 2) // 2))  # planted bugs replayed side by side
 
 WORKER = """
 import sys
@@ -56,6 +59,9 @@ class Mutant:
     change: str
     caught: bool
     failing: int
+    kind: str = ""
+    before: str = ""
+    after: str = ""
 
 
 def _bump(text: str) -> str | None:
@@ -238,7 +244,8 @@ def run_mutants(program: str, implementation: str | None = None, limit: int = 12
     env["PYTHONPATH"] = str(root)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     with tempfile.TemporaryDirectory(prefix="seance_mut_") as tmp:
-        for i, site in enumerate(sites):
+        def one(numbered: tuple[int, Site]) -> Mutant:
+            i, site = numbered
             name = f"seance_mutant_{i}"
             Path(tmp, f"{name}.py").write_text(ast.unparse(apply(tree, site)), encoding="utf-8")
             # Each planted bug runs in its own process with a time limit: a bug can make a loop endless.
@@ -252,14 +259,22 @@ def run_mutants(program: str, implementation: str | None = None, limit: int = 12
                 change = _describe(site)
             except subprocess.TimeoutExpired:
                 failing, change = -1, _describe(site) + " (it made the program hang)"
-            results.append(Mutant(site.line, _cobol_line(src_lines, site.line), change, failing != 0, max(failing, 0)))
+            return Mutant(site.line, _cobol_line(src_lines, site.line), change, failing != 0, max(failing, 0), site.kind, site.before, site.after)
+
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            results = list(pool.map(one, enumerate(sites)))
     caught = sum(m.caught for m in results)
+    mutants = [m.__dict__ for m in results]
+    from .gapfill import annotate  # remembered verdicts from the gap filler (imported here: it imports this module)
+
+    equivalent = annotate(program, source, mutants, root)
     return {
         "program": program,
         "implementation": implementation,
         "records": sum(v["records"] for v in baseline),
         "total": len(results),
         "caught": caught,
-        "mutants": [m.__dict__ for m in results],
+        "equivalent": equivalent,
+        "mutants": mutants,
     }
 

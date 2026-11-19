@@ -119,7 +119,7 @@ def _numeric_from_pic(item: Item, p: str, tail: str) -> None:
     else:
         raise LayoutError(f"{item.name}: the picture {p} is not supported yet.")
     if item.signed and item.usage == "display":
-        sm = re.search(r"SIGN\s+(?:IS\s+)?(LEADING|TRAILING)(\s+SEPARATE(?:\s+CHARACTER)?)?", tail, re.I)
+        sm = re.search(r"(?:SIGN\s+(?:IS\s+)?)?\b(LEADING|TRAILING)\b(\s+SEPARATE(?:\s+CHARACTER)?)?", tail, re.I)
         item.sign = "trailing_over" if not sm else f"{sm.group(1).lower()}_{'sep' if sm.group(2) else 'over'}"
     if item.usage == "display":
         item.size = item.digits + (1 if item.sign.endswith("_sep") else 0)
@@ -199,6 +199,7 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             raise LayoutError(f"{name}: POINTER items are not supported.")
         elif re.search(r"\b(?:COMP(?:UTATIONAL)?(?:-4)?|BINARY)\b", upper):
             it.usage = "binary"
+        bm = re.search(r"\b(?:BINARY|SIGNED|UNSIGNED)-(CHAR|SHORT|LONG|DOUBLE|INT)\b", upper)
         it.justified = bool(re.search(r"\bJUST(?:IFIED)?(?:\s+RIGHT)?\b", upper))
         it.blank_zero = bool(re.search(r"\bBLANK\s+(?:WHEN\s+)?ZERO(?:S|ES)?\b", upper))
         vm = re.search(r"\bVALUES?\s+(?:IS\s+)?(ALL\s+)?(\"(?:[^\"]|\"\")*\"|'(?:[^']|'')*'|[xX]['\"][0-9A-Fa-f]*['\"]|[^\s]+)", rest, re.I)
@@ -207,7 +208,7 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             it.value_all = bool(vm.group(1))
         pm = re.search(r"\bPIC(?:TURE)?\s+(?:IS\s+)?(\S+)", rest, re.I)
         if pm and it.usage != "index":
-            p = expand_pic(pm.group(1).rstrip("."))
+            p = expand_pic(pm.group(1).rstrip(".").rstrip(",;"))
             tail = rest[pm.end():]
             if re.fullmatch(r"[XA9]+", p) and re.search(r"[XA]", p):
                 it.kind, it.size, it.pic = "alpha", len(p), p
@@ -226,6 +227,11 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
                 raise LayoutError(f"{name}: more than 38 digits.")
         elif it.usage in ("float", "double"):
             pass  # floating point has no PIC
+        elif bm and not pm:  # BINARY-CHAR/SHORT/LONG/DOUBLE: a COMP-5 of fixed size, signed unless said otherwise
+            digits = {"CHAR": 2, "SHORT": 4, "LONG": 9, "INT": 9, "DOUBLE": 18}[bm.group(1)]
+            it.usage, it.kind, it.digits, it.scale = "native", "num", digits, 0
+            it.signed = not re.search(r"\bUNSIGNED(?:-[A-Z]+)?\b", upper)
+            it.size, it.pic = binary_size(digits), ("S" if it.signed else "") + "9" * digits
         elif it.usage in ("packed", "binary", "native") and not pm:
             raise LayoutError(f"{name}: a {it.usage} item needs a PIC clause.")
 

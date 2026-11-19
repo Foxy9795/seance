@@ -240,7 +240,7 @@ def record(job_name: str, root: Path = ROOT) -> dict[str, int]:
     base = root / "fixtures" / job_name
     if base.exists():
         for p in base.iterdir():
-            if p.is_dir() and not p.name.startswith("yours-"):
+            if p.is_dir() and not p.name.startswith(("yours-", "gap-")):
                 shutil.rmtree(p)
     counts = {}
     for name, case in generated(job, root).items():

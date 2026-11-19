@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
+from .cobol_num import ROUND_MODES
 from .cobol_src import normalize
 from .layout import Item, walk
 from .model import ROOT, ModelError, ProgramModel, load_model
@@ -70,6 +71,9 @@ _TOKEN = re.compile(
 )
 
 
+_NUMBER = re.compile(r"(?:\d+\.\d+|\.\d+|\d+)(?![A-Za-z0-9_-])")
+
+
 def tokenize_lines(lines) -> list[Tok]:
     """Tokens with their own source line. A period followed by a space or the end of a line ends a sentence."""
     out: list[Tok] = []
@@ -85,6 +89,13 @@ def tokenize_lines(lines) -> list[Tok]:
             m = _TOKEN.match(text, pos)
             if not m:
                 raise Unsupported(f"line {line}: cannot read {text[pos:pos + 20]!r}")
+            if m.lastgroup == "op" and m.group() in ("+", "-") and pos and text[pos - 1] in " \t" and out and (
+                    out[-1].kind in ("word", "num", "str") or (out[-1].kind == "op" and out[-1].value == ")")):
+                n = _NUMBER.match(text, pos + 1)  # `3 -14`: after an operand, a sign hugging a number belongs to the number
+                if n:
+                    out.append(Tok("num", ("-" if m.group() == "-" else "") + n.group(), line, m.group() + n.group()))
+                    pos = n.end()
+                    continue
             pos = m.end()
             kind = m.lastgroup
             if kind == "ws":
@@ -450,6 +461,9 @@ class Parser:
 
     def operand_num(self) -> str:
         tok = self.peek()
+        if tok.kind == "op" and tok.value in ("+", "-") and self.peek(1).kind == "num":  # a signed literal: BY -1
+            self.i += 2
+            return f'D("{tok.value if tok.value == "-" else ""}{self.t[self.i - 1].value}")'
         if tok.kind == "num":
             self.i += 1
             return f'D("{tok.value}")'
@@ -656,18 +670,24 @@ class Parser:
             return self.code(line, call)
         return Node("guarded", line, {"call": call, "on_err": on_err or [], "not_err": not_err or []})
 
-    def targets(self, allow_rounded=True) -> list[tuple[RefX, bool]]:
+    def targets(self, allow_rounded=True) -> list[tuple[RefX, bool | str]]:
         out = []
         while self.is_data():
             r = self.ref()
-            rounded = allow_rounded and self.accept("ROUNDED")
+            rounded: bool | str = allow_rounded and self.accept("ROUNDED")
+            if rounded and self.accept("MODE"):  # ROUNDED MODE [IS] AWAY-FROM-ZERO and the others
+                self.accept("IS")
+                mode = self.take().value
+                if mode not in ROUND_MODES:
+                    raise Unsupported(f"ROUNDED MODE {mode} is not supported yet")
+                rounded = mode
             out.append((r, rounded))
         if not out:
             raise Unsupported(f"expected a receiving field near {self.peek().value!r}")
         return out
 
     def specs(self, items) -> str:
-        return "[" + ", ".join(f"({r.target}, lambda: {e}, {rounded})" for r, e, rounded in items) + "]"
+        return "[" + ", ".join(f"({r.target}, lambda: {e}, {rounded!r})" for r, e, rounded in items) + "]"
 
     # MOVE / INITIALIZE / SET ------------------------------------------------
     def s_MOVE(self, line, stop):

@@ -33,6 +33,8 @@ def encode(spec, value) -> bytes:
     if usage in ("float", "double"):
         return struct.pack("<f" if usage == "float" else "<d", to_float(value, usage))
     if usage == "display":
+        if blank_zero and value == 0:  # BLANK WHEN ZERO on a plain numeric item: spaces
+            return b" " * size
         return format_numeric(value, digits, scale, signed, sign if signed else "none").encode(ENC)
     if usage == "packed":
         n = _scaled(value, scale) % (10**digits)
@@ -117,6 +119,8 @@ def display_text(spec, data: bytes) -> str:
         return data.decode(ENC)
     if usage in ("float", "double"):
         return float_text(struct.unpack("<f" if usage == "float" else "<d", bytes(data))[0], usage)
+    if usage == "display" and spec[9] and not bytes(data).strip():  # BLANK WHEN ZERO holding zero: DISPLAY shows the spaces
+        return data.decode(ENC)
     v = decode(spec, data)
     n = _scaled(v, scale)
     width = NATIVE_DIGITS.get(size, digits) if usage in ("native", "index") else digits
@@ -129,7 +133,8 @@ def display_text(spec, data: bytes) -> str:
         text = text[:-scale] + "." + text[-scale:]
     if signed:
         negative = v.is_signed() if usage == "display" else v < 0
-        text = ("-" if negative else "+") + text
+        mark = "-" if negative else "+"
+        text = text + mark if spec[5] == "trailing_sep" else mark + text  # an overpunched sign still prints in front
     return text
 
 
