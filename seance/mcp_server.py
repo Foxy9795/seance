@@ -54,6 +54,28 @@ def list_programs() -> str:
 
 
 @mcp.tool()
+def list_samples() -> str:
+    """List the sample programs that ship with Séance (not in the workspace until loaded), and which are already loaded."""
+    from .samples import catalog
+    lines = []
+    for s in catalog(ROOT)["samples"]:
+        lines.append(f"- {s['name']}{' (loaded)' if s['loaded'] else ''}: {s['summary']}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def load_sample(name: str) -> str:
+    """Copy a sample program (with its saved test data and Python) into the workspace so it can be described, checked and edited."""
+    from .programs import ProgramError
+    from .samples import install
+    try:
+        result = install(name, ROOT)
+    except ProgramError as exc:
+        raise ValueError(str(exc)) from exc
+    return f"loaded: {', '.join(result['added']) or 'nothing new'}" + (f" (already there: {', '.join(result['already'])})" if result["already"] else "")
+
+
+@mcp.tool()
 def describe_program(program: str) -> str:
     """Plain-English spec of a legacy program: record layouts, behavior by paragraph with line numbers,
     where values silently round or truncate, and any statements that need human review."""
@@ -143,10 +165,7 @@ def draft_python(program: str) -> str:
     Every line is tagged with its COBOL line. Statements it cannot translate raise NotImplementedError naming the
     line, and are listed in the result: replace those by hand, then call verify_migration."""
     _check(program)
-    from .programs import draft_python as _draft, is_user_program
-
-    if not is_user_program(program):
-        raise ValueError("The shipped examples keep their reference Python. Add your own program to draft one.")
+    from .programs import draft_python as _draft
     result = _draft(program, ROOT, overwrite=True)
     if not result["translated"]:
         return f"Could not translate: {result.get('reason')}. An empty starter was written instead."

@@ -349,7 +349,9 @@ def python_sha(job_name: str, root: Path = ROOT) -> str | None:
 def job_info(name: str, root: Path = ROOT) -> dict:
     from .programs import last_check
 
-    info = {"name": name, "kind": "job", "user_added": (root / "legacy" / name / ".user").exists(), "title": name.replace("_", " ").title(),
+    from .programs import is_sample
+
+    info = {"name": name, "kind": "job", "sample": is_sample(name, root), "kinds": ["jcl"], "title": name.replace("_", " ").title(),
             "implementations": [{"module": f"jobs.{name}", "label": "Job", "role": "job", "editable": False, "last_check": last_check(f"jobs.{name}", root)}],
             "files": [], "console_input": [], "calls": [], "unsupported": [], "notes": [], "format": "jcl", "error": None}
     try:
@@ -367,3 +369,46 @@ def job_info(name: str, root: Path = ROOT) -> dict:
     except Exception:
         info["sets"] = []
     return info
+
+
+def create_job(name: str, jcl: str, root: Path = ROOT) -> dict:
+    """Add a JCL job to the workspace and record what the real COBOL does for it. The programs it runs must already be
+    in the workspace (they are found by PROGRAM-ID). Cleans up on failure."""
+    from .jcl import JclError
+    from .programs import MAX_SOURCE_BYTES, ProgramError, _rm, program_names, validate_name
+
+    name = (name or "").strip() or _job_name(jcl)
+    validate_name(name)
+    if not jcl.strip():
+        raise ProgramError("The JCL is empty.")
+    if len(jcl.encode("utf-8")) > MAX_SOURCE_BYTES:
+        raise ProgramError(f"The JCL is larger than {MAX_SOURCE_BYTES // 1000} KB.")
+    if name in program_names(root) or (root / "legacy" / name).exists():
+        raise ProgramError(f"A program or job named '{name}' already exists. Pick another name or delete it first.")
+    folder = root / "legacy" / name
+    try:
+        folder.mkdir(parents=True)
+        (folder / f"{name}.jcl").write_text(jcl, encoding="utf-8")
+        try:
+            job = load_job(name, root)
+        except JclError as exc:
+            raise ProgramError(f"Séance cannot read this JCL: {exc}") from exc
+        problems = check_job(job, root)
+        if problems:
+            raise ProgramError("\n".join(problems))
+        try:
+            counts = record(name, root)
+        except Exception as exc:
+            raise ProgramError(f"The job could not be run on generated data:\n{exc}") from exc
+    except Exception:
+        _rm(folder)
+        _rm(root / "fixtures" / name)
+        raise
+    return {"name": name, "sets": counts, "job": describe(name, root)}
+
+
+def _job_name(jcl: str) -> str:
+    import re
+
+    m = re.match(r"//([A-Z0-9#@$]{1,8})\s+JOB\b", jcl.lstrip(), re.I)
+    return (m.group(1).lower() if m else "job")

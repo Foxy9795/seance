@@ -1,0 +1,14 @@
+{
+  "label": "Random Records",
+  "stdin": [],
+  "inputs": {
+    "ACCTREC": "in0.dat"
+  },
+  "outputs": {
+    "PRTLINE": "out0.dat"
+  },
+  "return_code": 0,
+  "error": null,
+  "records": 300,
+  "console_lines": 0
+}

@@ -12,6 +12,7 @@
                                       "disabled":  false,
                                       "autoApprove":  [
                                                           "list_programs",
+                                                          "list_samples",
                                                           "describe_program",
                                                           "describe_layout",
                                                           "run_legacy_program"

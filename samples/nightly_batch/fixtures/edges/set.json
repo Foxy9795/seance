@@ -1,0 +1,41 @@
+{
+  "label": "Edge Cases (zero, smallest and largest values, plus values the code tests for)",
+  "inputs": {
+    "PROD.ACCOUNTS": "in0.dat",
+    "PROD.CUSTOMER.MASTER": "in1.dat",
+    "PROD.DAILY.TRANS": "in2.dat"
+  },
+  "lrecl": {
+    "PROD.DAILY.TRANS": null,
+    "PROD.CUSTOMER.MASTER": 21,
+    "PROD.ACCOUNTS": 38
+  },
+  "outputs": {
+    "PROD.ACCOUNTS": "out0.dat",
+    "PROD.ACCOUNTS.BACKUP": "out1.dat",
+    "PROD.ACCOUNTS.NEW": "out2.dat",
+    "PROD.CUSTOMER.MASTER": "out3.dat",
+    "PROD.DAILY.TRANS": "out4.dat"
+  },
+  "sysout": {
+    "SORTTRAN": "SORT: 24 records written\n",
+    "UPDATE": "ADDED 000 CHANGED 000 DELETED 000 REJECTED 024\nAA AAAA  AAAA            0.00 00\nAA       AAAA            0.00 00\nAA ZZZZZ AAAA            0.00 00\n",
+    "MONTHEND": "",
+    "BACKUP": ""
+  },
+  "rcs": {
+    "SORTTRAN": 0,
+    "UPDATE": 0,
+    "MONTHEND": 0,
+    "BACKUP": 0
+  },
+  "out_lrecl": {
+    "PROD.DAILY.TRANS": null,
+    "PROD.CUSTOMER.MASTER": 21,
+    "PROD.ACCOUNTS": 38,
+    "PROD.ACCOUNTS.NEW": 53,
+    "PROD.ACCOUNTS.BACKUP": 53
+  },
+  "error": null,
+  "records": 97
+}

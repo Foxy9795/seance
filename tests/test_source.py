@@ -6,7 +6,7 @@ import pytest
 
 from seance.cobol_src import detect_fixed, normalize, sentences, source_fixes
 from seance.layout import LayoutError, leaves, parse_entries
-from seance.programs import TEMPLATE
+from sample_cobol import TEMPLATE
 
 
 def entries(text):

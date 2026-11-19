@@ -20,7 +20,7 @@ def test_planted_bugs_are_caught():
 
 
 def test_strength_needs_a_matching_python_first():
-    assert "error" in run_mutants("payroll", "examples.naive.payroll_naive", limit=2)
+    assert "error" in run_mutants("payroll", "migrated.payroll_naive", limit=2)
 
 
 @pytest.mark.parametrize("program", ["accounts", "add_amounts"])

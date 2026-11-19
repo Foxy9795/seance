@@ -11,5 +11,4 @@ if (-not (Get-Command cobc -ErrorAction SilentlyContinue)) {
     exit 1
 }
 Set-Location $root
-Start-Job { Start-Sleep 3; Start-Process 'http://127.0.0.1:8000' } | Out-Null
-& $py -m uvicorn seance.api:app --host 127.0.0.1 --port 8000
+& $py -m seance serve

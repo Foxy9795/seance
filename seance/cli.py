@@ -102,8 +102,61 @@ def _job_command(a) -> int:
         raise
 
 
+def _serve(argv: list[str]) -> int:
+    """Start the app on this machine only, and open it in the browser."""
+    import threading
+    import webbrowser
+
+    from . import config
+
+    p = argparse.ArgumentParser(prog="seance serve", description="Start the Séance app.")
+    p.add_argument("--port", type=int, default=config.PORT)
+    p.add_argument("--no-browser", action="store_true", help="do not open the browser")
+    a = p.parse_args(argv)
+    import uvicorn
+
+    url = f"http://127.0.0.1:{a.port}"
+    if not a.no_browser:
+        threading.Timer(1.5, webbrowser.open, args=[url]).start()
+    print(f"Séance is running at {url}  (Ctrl+C to stop)")
+    uvicorn.run("seance.api:app", host="127.0.0.1", port=a.port, log_level="warning")  # always local: it runs the code you give it
+    return 0
+
+
+def _samples(argv: list[str]) -> int:
+    from .programs import ProgramError
+    from .samples import catalog, install, remove_all
+
+    p = argparse.ArgumentParser(prog="seance samples", description="The sample library the guide loads from.")
+    p.add_argument("action", choices=["list", "load", "remove"])
+    p.add_argument("name", nargs="?")
+    a = p.parse_args(argv)
+    try:
+        if a.action == "list":
+            for s in catalog()["samples"]:
+                print(f"{'*' if s['loaded'] else ' '} {s['name']:<18} {s['summary']}")
+            print("\n* already in the workspace")
+        elif a.action == "load":
+            if not a.name:
+                p.error("load needs a sample name")
+            r = install(a.name)
+            print("loaded:", ", ".join(r["added"]) or "nothing new", f"(already there: {', '.join(r['already'])})" if r["already"] else "")
+        else:
+            gone = remove_all()
+            print("removed:", ", ".join(gone) or "nothing (no sample programs are loaded)")
+    except ProgramError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    return 0
+
+
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="seance")
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "serve":
+        return _serve(argv[1:])
+    if argv and argv[0] == "samples":
+        return _samples(argv[1:])
+    p = argparse.ArgumentParser(prog="seance", epilog="Also: 'seance serve' starts the app; 'seance samples list|load|remove' manages the sample library.")
     p.add_argument("command", choices=COMMANDS)
     p.add_argument("program")
     p.add_argument("--impl", help="python module to check (default migrated.<program>)")

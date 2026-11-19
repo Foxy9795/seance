@@ -1,0 +1,14 @@
+{
+  "label": "Random Records",
+  "stdin": [],
+  "inputs": {
+    "ORDERIN": "in0.dat"
+  },
+  "outputs": {
+    "PRICEOUT": "out0.dat"
+  },
+  "return_code": 0,
+  "error": null,
+  "records": 300,
+  "console_lines": 0
+}

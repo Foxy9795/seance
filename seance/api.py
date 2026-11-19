@@ -6,6 +6,7 @@ way: the editor saves Python that the checker then runs.
 
 from __future__ import annotations
 
+import functools
 import hmac
 import json
 import secrets
@@ -18,20 +19,18 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import config
+from . import __version__, config
 from .programs import (
     MAX_SOURCE_BYTES,
-    TEMPLATE,
     ProgramError,
     create_program,
     delete_program,
     draft_python,
     implementations,
-    is_user_program,
     program_info,
     program_names,
 )
-from .recorder import ROOT, LegacyRuntimeError, cobc_available, cobol_env
+from .recorder import ROOT, LegacyRuntimeError, cobc_available, cobc_path, cobol_env
 
 sys.path.insert(0, str(ROOT))
 
@@ -106,6 +105,11 @@ class NewProgram(BaseModel):
     programs: list[Copybook] = Field(default_factory=list, max_length=20)  # programs it CALLs
 
 
+class NewJob(BaseModel):
+    name: str = ""
+    jcl: str
+
+
 class VerifyRequest(BaseModel):
     program: str
     implementation: str
@@ -164,9 +168,21 @@ class TestData(BaseModel):
 
 # ---------------------------------------------------------------- endpoints
 
+@functools.lru_cache(maxsize=1)
+def _cobc_version() -> str:
+    try:
+        out = subprocess.run([cobc_path(), "--version"], capture_output=True, text=True, env=cobol_env(), timeout=20).stdout
+        return (out.splitlines() or [""])[0].strip()
+    except Exception:
+        return ""
+
+
 @app.get("/api/about")
 def about():
     return {
+        "version": __version__,
+        "workspace": str(ROOT),
+        "cobc": _cobc_version() if cobc_available() else "",
         "legacy_runtime": cobc_available(),
         "defaults": {"rounds": config.DEFAULT_ROUNDS, "max_rounds": config.MAX_ROUNDS, "max_data_records": config.MAX_DATA_RECORDS,
                      "random_records": config.RANDOM_RECORDS},
@@ -181,13 +197,46 @@ def programs():
 
     infos = [program_info(n) for n in program_names()] + [job_info(n) for n in job_names()]
     infos.sort(key=lambda p: p["title"])
-    demo = next((p["name"] for p in infos if any(i["role"] == "naive" for i in p["implementations"])), None)
-    return {"legacy_runtime": cobc_available(), "programs": infos, "demo": demo}
+    return {"legacy_runtime": cobc_available(), "programs": infos}
 
 
-@app.get("/api/template")
-def template():
-    return {"name": TEMPLATE["name"], "cobol": TEMPLATE["cobol"], "copybooks": TEMPLATE["copybooks"]}
+@app.get("/api/programs/{name}")
+def one_program(name: str):
+    """One program, as listed in the workspace. Cheaper than the whole list after a check or an edit."""
+    _require(name)
+    if _is_job(name):
+        from .jobs import job_info
+
+        return job_info(name)
+    return program_info(name)
+
+
+@app.get("/api/samples")
+def samples():
+    from .samples import catalog
+
+    return catalog()
+
+
+@app.post("/api/samples/{name}")
+async def load_sample(name: str):
+    from .samples import install
+
+    try:
+        result = await run_in_threadpool(install, name)
+    except ProgramError as exc:
+        raise HTTPException(400, str(exc))
+    return result
+
+
+@app.delete("/api/samples")
+def remove_samples():
+    from .samples import remove_all
+
+    try:
+        return {"removed": remove_all()}
+    except ProgramError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.post("/api/programs")
@@ -196,6 +245,32 @@ async def add_program(req: NewProgram):
         return await run_in_threadpool(create_program, req.name, req.cobol, {c.name: c.text for c in req.copybooks}, ROOT,
                                     {c.name: c.text for c in req.programs})
     except ProgramError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/jobs")
+async def add_job(req: NewJob):
+    from .jobs import create_job
+
+    try:
+        return await run_in_threadpool(create_job, req.name, req.jcl)
+    except ProgramError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/programs/{name}/record")
+async def re_record(name: str):
+    """Run the real COBOL again on the generated inputs and save its answers (after the COBOL or the data changed)."""
+    _require(name)
+    if _is_job(name):
+        from .jobs import record
+
+        return {"sets": await run_in_threadpool(record, name)}
+    from .cases import record_sets
+
+    try:
+        return {"sets": await run_in_threadpool(record_sets, name)}
+    except LegacyRuntimeError as exc:
         raise HTTPException(400, str(exc))
 
 
@@ -211,8 +286,8 @@ def remove_program(name: str):
 @app.post("/api/programs/{name}/draft")
 async def redraft(name: str):
     _require(name)
-    if not is_user_program(name):
-        raise HTTPException(403, "The shipped examples keep their reference Python. Add your own program to draft one.")
+    if _is_job(name):
+        raise HTTPException(400, "A job runs the Python of its programs. Translate those instead.")
     result = await run_in_threadpool(draft_python, name, ROOT, True)
     return result
 
@@ -233,8 +308,7 @@ def source(program: str, implementation: str):
         "called": {m.program_id: m.path.read_text(encoding="utf-8-sig", errors="replace") for m in _called(program)},
         "migrated": impl_path.read_text(encoding="utf-8-sig"),
         "spec": spec_path.read_text(encoding="utf-8") if spec_path.exists() else "",
-        # The shipped examples are reference solutions: read-only. Only programs you added can be edited here.
-        "editable": implementation == f"migrated.{program}" and is_user_program(program),
+        "editable": implementation == f"migrated.{program}",
     }
 
 
@@ -250,8 +324,8 @@ def _called(program: str):
 @app.put("/api/source")
 def save_source(req: SaveSource):
     _require(req.program)
-    if not is_user_program(req.program):
-        raise HTTPException(403, "The shipped examples are read-only. Add your own program to edit its Python.")
+    if _is_job(req.program):
+        raise HTTPException(400, "A job has no Python of its own.")
     if len(req.code.encode("utf-8")) > MAX_SOURCE_BYTES:
         raise HTTPException(400, "Code is too large.")
     try:
@@ -411,12 +485,18 @@ def download(program: str, what: str, implementation: str):
     if what == "python":
         text = (ROOT / (implementation.replace(".", "/") + ".py")).read_text(encoding="utf-8-sig")
         return Response(text, media_type="text/x-python", headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}.py"'})
+    if what == "json":
+        p = ROOT / "build" / "reports" / f"{implementation.replace('.', '_')}.json"
+        if not p.exists():
+            raise HTTPException(404, "No check has been run for this Python yet.")
+        return Response(p.read_text(encoding="utf-8"), media_type="application/json",
+                        headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}-report.json"'})
     if what == "report":
         text = report_markdown(program, implementation)
         if text is None:
             raise HTTPException(404, "No check has been run for this Python yet.")
         return Response(text, media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}-report.md"'})
-    raise HTTPException(400, "what must be bundle, python or report")
+    raise HTTPException(400, "what must be bundle, python, report or json")
 
 
 @app.get("/", response_class=HTMLResponse)

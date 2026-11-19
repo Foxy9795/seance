@@ -1,0 +1,24 @@
+ENTER NAME       (15 CHARACTERS)
+Enter amount of first purchase (5 digits)
+Enter amount of second purchase (5 digits)
+Enter amount of third purchase (5 digits)
+ZZZZZ          Total Amount = 019020
+MORE INPUT DATA (YES/NO)?
+ENTER NAME       (15 CHARACTERS)
+Enter amount of first purchase (5 digits)
+Enter amount of second purchase (5 digits)
+Enter amount of third purchase (5 digits)
+CCCCC          Total Amount = 012086
+MORE INPUT DATA (YES/NO)?
+ENTER NAME       (15 CHARACTERS)
+Enter amount of first purchase (5 digits)
+Enter amount of second purchase (5 digits)
+Enter amount of third purchase (5 digits)
+CCCCC          Total Amount = 021567
+MORE INPUT DATA (YES/NO)?
+ENTER NAME       (15 CHARACTERS)
+Enter amount of first purchase (5 digits)
+Enter amount of second purchase (5 digits)
+Enter amount of third purchase (5 digits)
+ZZZZZ          Total Amount = 019020
+MORE INPUT DATA (YES/NO)?

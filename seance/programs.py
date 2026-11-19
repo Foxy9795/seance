@@ -16,59 +16,7 @@ from .spec import write_spec
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,23}$")
 COPYBOOK_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 MAX_SOURCE_BYTES = 200_000
-USER_MARKER = ".user"
-
-# A fixed-format program with DD-style file names and an FD that holds the records, the way most real programs look.
-TEMPLATE = {
-    "name": "discount",
-    "cobol": """       IDENTIFICATION DIVISION.
-       PROGRAM-ID. DISCOUNT.
-      * Order pricing: a percentage off the amount, rounded to cents.
-      * A negative adjustment (a refund) keeps its sign.
-       ENVIRONMENT DIVISION.
-       INPUT-OUTPUT SECTION.
-       FILE-CONTROL.
-           SELECT ORDERS-IN  ASSIGN TO ORDERIN.
-           SELECT ORDERS-OUT ASSIGN TO ORDEROUT.
-       DATA DIVISION.
-       FILE SECTION.
-       FD  ORDERS-IN RECORDING MODE F.
-       01  IN-REC.
-           05  IN-ORDER-ID  PIC X(6).
-           05  IN-AMOUNT    PIC S9(5)V99.
-           05  IN-PCT       PIC 9(3)V99.
-           05  FILLER       PIC X(4).
-       FD  ORDERS-OUT RECORDING MODE F.
-       01  OUT-REC.
-           05  OUT-ORDER-ID  PIC X(6).
-           05  OUT-DISCOUNT  PIC S9(5)V99.
-           05  OUT-TOTAL     PIC S9(6)V99.
-           05  OUT-SHOWN     PIC $$,$$$,$$9.99-.
-       WORKING-STORAGE SECTION.
-       01  WS-FLAGS.
-           05  WS-EOF        PIC X VALUE 'N'.
-               88  AT-EOF    VALUE 'Y'.
-       PROCEDURE DIVISION.
-       MAIN-PARA.
-           OPEN INPUT ORDERS-IN OUTPUT ORDERS-OUT
-           PERFORM UNTIL AT-EOF
-               READ ORDERS-IN
-                   AT END MOVE 'Y' TO WS-EOF
-                   NOT AT END PERFORM PRICE-ORDER
-               END-READ
-           END-PERFORM
-           CLOSE ORDERS-IN ORDERS-OUT
-           STOP RUN.
-       PRICE-ORDER.
-           MOVE IN-ORDER-ID TO OUT-ORDER-ID
-           COMPUTE OUT-DISCOUNT ROUNDED = IN-AMOUNT * IN-PCT / 100
-           COMPUTE OUT-TOTAL = IN-AMOUNT - OUT-DISCOUNT
-           MOVE OUT-TOTAL TO OUT-SHOWN
-           WRITE OUT-REC.
-""",
-    "copybooks": [],
-}
-
+SAMPLE_MARKER = ".sample"  # in legacy/<name>/ of a program loaded from the sample library
 
 class ProgramError(ValueError):
     """A problem the user can fix (bad name, unsupported COBOL, COBOL does not compile)."""
@@ -89,24 +37,24 @@ def program_names(root: Path = ROOT) -> list[str]:
     return sorted(p.name for p in base.iterdir() if NAME_RE.fullmatch(p.name) and (p / f"{p.name}.cbl").exists())
 
 
-def is_user_program(name: str, root: Path = ROOT) -> bool:
-    return (root / "legacy" / name / USER_MARKER).exists()
+def is_sample(name: str, root: Path = ROOT) -> bool:
+    """True for a program loaded from the sample library (it is the user's copy, and can be removed in one step)."""
+    return (root / "legacy" / name / SAMPLE_MARKER).exists()
 
 
 def implementations(name: str, root: Path = ROOT) -> list[Implementation]:
     found = []
     if (root / "migrated" / f"{name}.py").exists():
-        mine = is_user_program(name, root)
-        found.append(Implementation(f"migrated.{name}", "Your Python" if mine else "Reference Python", "yours" if mine else "reference", mine))
-    if (root / "examples" / "naive" / f"{name}_naive.py").exists():
-        found.append(Implementation(f"examples.naive.{name}_naive", "Naive Draft (Floats)", "naive", False))
+        found.append(Implementation(f"migrated.{name}", "Your Python", "yours", True))
+    if is_sample(name, root) and (root / "migrated" / f"{name}_naive.py").exists():  # the sample's deliberately buggy port
+        found.append(Implementation(f"migrated.{name}_naive", "Hand-Written Port (Floats)", "naive", False))
     return found
 
 
 def _purpose(model) -> str:
     from .cobol_src import normalize
 
-    note = model.path.parent / "SOURCE.md"  # shipped examples describe themselves there
+    note = model.path.parent / "SOURCE.md"  # programs taken from a course or a book say what they are there
     if note.exists():
         paras = [p.strip() for p in note.read_text(encoding="utf-8").split("\n\n") if p.strip() and not p.startswith("#")]
         if paras:
@@ -157,6 +105,27 @@ def last_check(implementation: str, root: Path = ROOT) -> dict | None:
             "differing": sum(s.get("differing", 0) for s in r.get("sets", []))}
 
 
+def kinds_of(model) -> list[str]:
+    """What kind of program this is, for badges and filters: sql, cics, indexed, relative, sort, calls, console."""
+    orgs = {f.organization for f in model.all_files}
+    kinds = []
+    if "sqldb" in orgs or model.sql_tables:
+        kinds.append("sql")
+    if "cicsdb" in orgs or model.cics:
+        kinds.append("cics")
+    if "indexed" in orgs:
+        kinds.append("indexed")
+    if "relative" in orgs:
+        kinds.append("relative")
+    if "sort" in orgs:
+        kinds.append("sort")
+    if model._every()[1:]:
+        kinds.append("calls")
+    if model.all_accepts:
+        kinds.append("console")
+    return kinds
+
+
 def program_info(name: str, root: Path = ROOT) -> dict:
     """Everything the UI shows about a program, read from the program itself."""
     impls = []
@@ -164,7 +133,7 @@ def program_info(name: str, root: Path = ROOT) -> dict:
         d = dict(i.__dict__)
         d["last_check"] = last_check(i.module, root)
         impls.append(d)
-    info = {"name": name, "user_added": is_user_program(name, root), "implementations": impls}
+    info = {"name": name, "sample": is_sample(name, root), "implementations": impls, "kind": "program"}
     try:
         model = load_model(name, root)
         info.update({
@@ -179,10 +148,12 @@ def program_info(name: str, root: Path = ROOT) -> dict:
             "io": model.describe_io(),
             "unsupported": model.unsupported,
             "notes": model.notes,
+            "kinds": kinds_of(model),
             "error": None,
         })
     except ModelError as exc:
-        info.update({"title": name.replace("_", " ").title(), "error": str(exc), "files": [], "console_input": [], "unsupported": [], "notes": [], "purpose": ""})
+        info.update({"title": name.replace("_", " ").title(), "error": str(exc), "files": [], "console_input": [], "unsupported": [], "notes": [], "purpose": "",
+                     "kinds": []})
     try:
         info["sets"] = describe_sets(name, root)
     except Exception:
@@ -249,25 +220,35 @@ def _rm(path: Path) -> None:
         path.unlink()
 
 
-def delete_program(name: str, root: Path = ROOT) -> None:
+def clear_reports(name: str, root: Path = ROOT) -> None:
+    """Remove the saved check reports of a program (its Python, its hand-written port, or a job of that name)."""
+    for stem in (f"migrated_{name}", f"migrated_{name}_naive", f"jobs_{name}"):
+        for ext in (".json", ".md"):
+            _rm(root / "build" / "reports" / f"{stem}{ext}")
+
+
+def delete_program(name: str, root: Path = ROOT, keep_build: bool = False) -> None:
     validate_name(name)
-    if not is_user_program(name, root):
-        raise ProgramError("Only programs you added can be deleted.")
+    if not (root / "legacy" / name).is_dir():
+        raise ProgramError(f"There is no program named '{name}'.")
     for p in (
         root / "legacy" / name,
         root / "fixtures" / name,
-        root / "build" / name,
+        *([] if keep_build else [root / "build" / name]),
         root / "migrated" / f"{name}.py",
         root / "migrated" / f"{name}.py.bak",
+        root / "migrated" / f"{name}_naive.py",
         root / "docs" / "specs" / f"{name}.md",
     ):
         _rm(p)
+    clear_reports(name, root)
 
 
 def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = None, root: Path = ROOT,
                    programs: dict[str, str] | None = None) -> dict:
-    """programs: other COBOL programs this one CALLs (file stem -> source), compiled and translated with it."""
-    """Add a program, then analyze, compile, record, describe and draft the Python. Cleans up on failure."""
+    """Add a program, then analyze, compile, record, describe and draft the Python. Cleans up on failure.
+
+    programs: other COBOL programs this one CALLs (file stem -> source), compiled and translated with it."""
     copybooks = copybooks or {}
     programs = programs or {}
     name = (name or "").strip() or suggest_name(cobol)
@@ -298,7 +279,6 @@ def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = Non
             if sub_name.lower() == name.lower():
                 raise ProgramError(f"A called program cannot have the same file name as the main program ({sub_name}).")
             (src / f"{sub_name.lower()}.cbl").write_text(sub_text, encoding="utf-8")
-        (src / USER_MARKER).write_text("added through the UI\n", encoding="utf-8")
         try:
             model = load_model(name, root)
         except ModelError as exc:
