@@ -110,6 +110,20 @@ class NewJob(BaseModel):
     jcl: str
 
 
+class GoldenFile(BaseModel):
+    file: str
+    base64: str = Field(max_length=7_000_000)
+
+
+class GoldenData(BaseModel):
+    filename: str = "mainframe"
+    inputs: list[GoldenFile] = Field(default_factory=list, max_length=10)
+    outputs: list[GoldenFile] = Field(default_factory=list, max_length=10)
+    console_output_base64: str | None = Field(default=None, max_length=7_000_000)
+    console_input: list[str] | None = Field(default=None, max_length=200)
+    code_page: str | None = None
+
+
 class VerifyRequest(BaseModel):
     program: str
     implementation: str
@@ -423,6 +437,85 @@ async def upload_data(program: str, body: TestData):
         raise HTTPException(400, str(exc))
 
 
+@app.post("/api/golden/{program}")
+async def upload_golden(program: str, body: GoldenData):
+    """A parallel run: input data and the output your own mainframe produced for it, to check the Python against."""
+    _require(program)
+    if _is_job(program):
+        raise HTTPException(400, "Add mainframe output to the programs a job runs.")
+    if not cobc_available():
+        raise HTTPException(503, "GnuCOBOL runtime not found")
+    import base64
+    import binascii
+
+    from .cases import add_golden
+
+    def raw(b64: str) -> bytes:
+        return base64.b64decode(b64, validate=True)
+
+    try:
+        inputs = {x.file: raw(x.base64) for x in body.inputs}
+        outputs = {x.file: raw(x.base64) for x in body.outputs}
+        console = raw(body.console_output_base64) if body.console_output_base64 is not None else None
+    except binascii.Error:
+        raise HTTPException(400, "A file could not be read.")
+    try:
+        _plain_lines(body.console_input or [])
+        return await run_in_threadpool(add_golden, program, body.filename, inputs, outputs, console, body.console_input, ROOT, body.code_page)
+    except (ValueError, LegacyRuntimeError) as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/analysis")
+async def analysis(program: str):
+    """Static analysis of one program: metrics, flow, business rules, data dictionary, lineage and dependencies."""
+    _require(program)
+    from .analyze import analyze
+
+    try:
+        return await run_in_threadpool(analyze, program)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@app.get("/api/analysis/rules")
+async def analysis_rules(program: str):
+    """The business rules as Gherkin scenarios."""
+    _require(program)
+    from .analyze import analyze, gherkin
+    from .export import safe_filename
+
+    try:
+        a = await run_in_threadpool(analyze, program)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return Response(gherkin(a), media_type="text/plain; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}-rules.feature"'})
+
+
+@app.get("/api/portfolio")
+async def portfolio_view():
+    from .analyze import portfolio
+
+    return await run_in_threadpool(portfolio)
+
+
+@app.get("/api/portfolio.csv")
+async def portfolio_csv_view():
+    from .analyze import portfolio, portfolio_csv
+
+    p = await run_in_threadpool(portfolio)
+    return Response(portfolio_csv(p), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="seance-assessment.csv"'})
+
+
+@app.get("/api/history")
+def check_history(program: str, implementation: str):
+    """Every check of this Python, newest first."""
+    _require(program, implementation)
+    from .report import history
+
+    return {"history": history(implementation, ROOT)}
+
+
 @app.delete("/api/data/{program}/{name}")
 def delete_data(program: str, name: str):
     _require(program)
@@ -485,6 +578,13 @@ def download(program: str, what: str, implementation: str):
     if what == "python":
         text = (ROOT / (implementation.replace(".", "/") + ".py")).read_text(encoding="utf-8-sig")
         return Response(text, media_type="text/x-python", headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}.py"'})
+    if what == "html":
+        from .export import report_html
+
+        page = report_html(program, implementation)
+        if page is None:
+            raise HTTPException(404, "No check has been run for this Python yet.")
+        return Response(page, media_type="text/html; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}-report.html"'})
     if what == "json":
         p = ROOT / "build" / "reports" / f"{implementation.replace('.', '_')}.json"
         if not p.exists():
@@ -496,7 +596,7 @@ def download(program: str, what: str, implementation: str):
         if text is None:
             raise HTTPException(404, "No check has been run for this Python yet.")
         return Response(text, media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="{safe_filename(program)}-report.md"'})
-    raise HTTPException(400, "what must be bundle, python, report or json")
+    raise HTTPException(400, "what must be bundle, python, report, html or json")
 
 
 @app.get("/", response_class=HTMLResponse)

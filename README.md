@@ -8,13 +8,16 @@ original COBOL and the Python side by side and compares every output, byte for b
 
 1. **Add your COBOL.** Drop the program, the programs it CALLs and its copybooks (or a JCL job). Séance compiles it with
    GnuCOBOL and records what it really does on edge cases, random records and the values it finds in the code.
-2. **Get a Python draft.** A rule-based translator writes the Python statement by statement. Every line is tagged with
+2. **Understand it.** Static analysis shows the paragraph flow, the dead code, the complexity, the business rules in plain
+   English, the data dictionary and where every output field comes from. An assessment page does the same for the whole
+   workspace and orders the migration.
+3. **Get a Python draft.** A rule-based translator writes the Python statement by statement. Every line is tagged with
    the COBOL line it came from. Anything it cannot translate raises an error naming that line, so a check fails loudly
    instead of passing quietly.
-3. **Check and measure.** Run the check against the real COBOL. Then measure test strength: Séance plants small bugs in
-   the Python one at a time and shows which ones the saved records miss.
-4. **Take it with you.** A standalone Python program with a `run.py` that processes a whole file the way the batch job
-   did. It needs only Python 3.10 or newer.
+4. **Check and measure.** Run the check against the real COBOL, or against the output your own mainframe produced. Then
+   measure test strength: Séance plants small bugs in the Python one at a time and shows which ones the saved records miss.
+5. **Take it with you.** A standalone Python program with a `run.py` that processes a whole file the way the batch job
+   did, plus a pytest suite of every saved run. It needs only Python 3.10 or newer.
 
 ## Quick Start (Windows)
 
@@ -37,12 +40,20 @@ two-minute tour with a sample program, or you can add your own COBOL straight aw
 | --- | --- |
 | **Program list** (left) | Every program with its status dot and the status in words. Filter it, or hide it with `Ctrl B`. On a phone it is a drawer. |
 | **Search** (`Ctrl K`, or `/`) | Jump to any program or run an action: add, check all, go to a tab, export, settings. |
-| **Tabs** (`1` to `5`) | Overview, Code, Check, Try Input, Test Data. The address always shows where you are, so Back, Forward and reload work. |
+| **Tabs** (`1` to `6`) | Overview, Code, Analysis, Check, Try Input, Test Data. The address always shows where you are, so Back, Forward and reload work. |
 | **Status line** | The last verdict, lines compared, coverage and age, visible on every tab. A check keeps running while you look at another program. |
 | **Shortcuts** (`?`) | `A` add, `R` run the check, `[` and `]` previous and next program, `G` then `W` workspace. |
 
+Lists and menus are the app's own, so they look and behave the same everywhere and work from the keyboard.
+
 **Workspace.** Totals, filters by result (matched, restless, needs attention, not checked) and by kind (indexed, SQL, CICS,
-JCL, CALL ...), sorting, list or cards, and **Check All** with progress.
+JCL, CALL ...), sorting, list or cards, and **Check All** with progress. Tick rows to check or delete several programs at
+once, or use the menu at the end of a row.
+
+**Assessment** (sidebar, or search for it). One table for everything in the workspace: lines, statements, complexity rating,
+GO TOs, CALLs, files, dead code, translation readiness and the last verdict. Click a heading to sort. Below it, a dependency
+graph (who calls whom, who reads and writes which file) and the **migration waves**: programs that depend on nothing else
+first. Export it as CSV.
 
 **A program**
 
@@ -50,16 +61,18 @@ JCL, CALL ...), sorting, list or cards, and **Check All** with progress.
 | --- | --- |
 | **Overview** | Every file it reads, writes or updates with its record layout, and a line-numbered description generated from the COBOL. For a job: its steps, programs and data sets. |
 | **Code** | COBOL beside Python, including the programs it CALLs. Click a Python line to find its COBOL line. Lines no saved run reaches are marked. Edit the Python in place (unsaved edits are kept when you change tab). |
-| **Check** | "Spirit matched" or "Spirit restless", lines compared, random runs, coverage, a receipt (hashes of the COBOL, the Python and the test data), the smallest failing input and field-by-field differences. Also a mutation test. |
+| **Analysis** | Size and complexity figures; the **paragraph flow** drawn as a graph (PERFORM, GO TO, fall-through, and paragraphs nothing can reach); **business rules** in plain English with their line numbers, exportable as Gherkin; a **data dictionary** with where each field is read and written (CSV); **lineage** from input fields to output fields; and the files, calls, copybooks, SQL tables and CICS resources it depends on. |
+| **Check** | "Spirit Matched" or "Spirit Restless", lines compared, random runs, coverage, a receipt (hashes of the COBOL, the Python and the test data), the smallest failing input and field-by-field differences. A mutation test, and the **history** of every check. |
 | **Try Input** | Type input or replay a saved set; both programs' output side by side. Databases and CICS screens are shown as tables and terminal screens. |
-| **Test Data** | The saved sets, **Record Again**, and upload of your own files, ASCII or EBCDIC. |
+| **Test Data** | The saved sets, **Record Again**, upload of your own files (ASCII or EBCDIC), and **parallel runs**: give the data a real job read and the output your own mainframe wrote, and the Python is checked against that. Séance also runs GnuCOBOL on the same data and tells you whether it agrees with your mainframe. |
 
-**Export** gives the Python file, a standalone package, and the check report (Markdown or JSON). **Settings** covers density,
+**Export** gives the Python file, a standalone package with a pytest suite of the saved runs, and the check report as HTML
+(one page to share or print), Markdown or JSON. The business rules export as a `.feature` file. **Settings** covers density,
 text size, animation, code display, random runs per check and the workspace defaults.
 
 **The guide.** On first launch, and under Help at any time: a two-minute tour that loads a sample, runs a real check, then
 runs a hand-written port that has a bug so you can watch it being caught. The sample library is part of the guide. Samples
-become ordinary programs, and one click removes them all.
+become ordinary programs, and they can be deleted one at a time or all at once.
 
 ## Adding Your Work
 
@@ -148,27 +161,34 @@ CBLDB23. The other 6 cannot be checked: five are lab exercises with deliberate c
   needing review, because a difference there would go unseen.
 - **Mutation test:** small bugs planted in the Python one at a time must each be caught by the saved runs.
 - **Receipt:** SHA-256 of the COBOL source, the Python and the test data, so a verdict cannot be reused for other code.
+- **Parallel runs:** a set whose expected output is what your mainframe wrote. The Python is checked against it, and GnuCOBOL
+  is run on the same data so a difference between GnuCOBOL and your system shows up instead of hiding.
+- **History:** every check is kept (verdict, lines, coverage, the three hashes), so a program's record can be read back.
 
 ## How It Compares
 
-From public documentation (November 2026). Séance is a local, single-developer tool; the others are enterprise
-platforms. Where they need a mainframe, a cloud account or a services contract, Séance runs on a laptop in seconds.
+Séance is a local, deterministic verification tool. The products below are enterprise platforms; most of them generate Java
+and use AI, which Séance deliberately does not. The full table, the sources and the list of what Séance does not do are in
+[docs/COMPARISON.md](docs/COMPARISON.md). `·` means not found in the vendor's public documentation that I read.
 
-| | Séance | COBOL Phoenix | AWS Transform | IBM watsonx Code Assistant for Z | Google Dual Run |
-| --- | --- | --- | --- | --- | --- |
-| Translation | Rules, to Python | Rules, to Python | AI + rules, to Java | AI, to Java | AI, to Java/C# |
-| Runs the original COBOL to get expected answers | Yes, locally (GnuCOBOL) | Yes, locally | No (uses mainframe data) | Records on z/OS | Yes, on the mainframe |
-| Minimal failing input (shrinking) | Yes | Not documented | Not documented | Not documented | Not documented |
-| Mutation testing | Yes | Yes | No | No | No |
-| Statement coverage of the evidence | Yes | Yes | No | No | No |
-| Hash receipt over code and test data | Yes | Partial | No | No | No |
-| Indexed (VSAM-style) files | Yes | No | Yes | Yes | Yes |
-| CALL, SORT | Yes | CALL only | Yes | Yes | Yes |
-| EXEC SQL, CICS, JCL | Yes, on SQLite, both sides | No | Yes | Yes | Yes |
-| Runs offline, free | Yes | Yes | No | No | No |
+| | Séance | AWS Transform | IBM ADDI, Bob for Z | Google MAT, Dual Run | Mechanical Orchard | Rocket Enterprise Analyzer |
+| --- | --- | --- | --- | --- | --- | --- |
+| Flow and dependency graphs | ✓ | ✓ | ✓ | ✓ | · | ✓ |
+| Data lineage, data dictionary | ✓ | ✓ | lineage | · | lineage | · |
+| Business rules extracted | ✓ (fixed rules, Gherkin) | ✓ (AI, Gherkin) | ✓ | ✓ | ✓ | ✓ |
+| Assessment of a whole estate, migration waves | ✓ | ✓ | ✓ | ✓ | · | ✓ |
+| Runs the original program for the expected answer | ✓ locally | · | · | ✓ on the mainframe | ✓ | · |
+| Parallel run against your own output | ✓ | ✓ | · | ✓ | ✓ | · |
+| Failure shrunk to the smallest input | ✓ | · | · | · | · | · |
+| Generated tests | ✓ | ✓ | ✓ | · | ✓ | · |
+| Mutation testing, coverage, hash receipt | ✓ | · | · | · | · | · |
+| Check history, CI output | ✓ | · | · | · | · | · |
+| Explanations and chat | · | ✓ | ✓ | ✓ | · | ✓ |
+| Generates Java or C# | · | ✓ | ✓ | partners | ✓ | · |
+| Works offline, no account | ✓ | · | · | · | · | · |
 
-Sources: github.com/thosuperman/cobol-phoenix; docs.aws.amazon.com/transform; ibm.com/products/watsonx-code-assistant-z;
-docs.cloud.google.com/mainframe-dual-run. Passing differential tests is strong evidence, not a proof for every input.
+Also compared in the full document: Heirloom, TSRI, Astadia, CAST Imaging and Raincode. Passing differential tests is strong
+evidence, not a proof for every input.
 
 ## Settings
 
@@ -202,7 +222,7 @@ Séance compiles and runs code you give it, so treat it like a local dev server.
 
 - **MCP server** (`seance/mcp_server.py`, registered in `.kiro/settings/mcp.json`) with these tools: `list_programs`,
   `describe_program`, `describe_layout`, `run_legacy_program` (input files and console input), `record_legacy_fixtures`,
-  `draft_python`, `verify_migration`, `measure_test_strength`, `list_samples`, `load_sample`.
+  `draft_python`, `verify_migration`, `measure_test_strength`, `extract_business_rules`, `assess_workspace`, `list_samples`, `load_sample`.
 - **Steering** (`.kiro/steering/`): product rules and COBOL-to-Python rules.
 - **Hook** (`.kiro/hooks/`): re-verifies when a file in `migrated/` is saved.
 - **Spec** (`.kiro/specs/seance/`): requirements.
@@ -214,14 +234,16 @@ The venv Python path in `.kiro/settings/mcp.json` is absolute. Edit it if you cl
 ```powershell
 . .\scripts\env.ps1                       # GnuCOBOL on PATH for this shell
 python -m seance serve                    # the app, on 127.0.0.1 only
+python -m seance check-all --junit out.xml  # every program and job; exit code 1 if any is restless (for CI)
 python -m seance samples list             # the sample library
 python -m seance analyze accounts         # what Séance understood about the program
 python -m seance translate accounts       # write the Python draft
 python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 124 tests, including differential tests against GnuCOBOL
-python scripts\ui_check.py                # 59 checks that drive the real UI in Edge (app must be running, workspace empty)
+python -m pytest                          # 145 tests, including differential tests against GnuCOBOL
+python scripts\ui_check.py                # 80 checks that drive the real UI in Edge (app must be running, workspace empty)
+python scripts\audit_ui.py                # scripted audit of every screen: contrast, names, tap targets, dropdowns, errors
 python scripts\shots.py                   # screenshots of every main screen into build\shots
 ```
 
@@ -237,6 +259,9 @@ The tests load the sample library into the workspace for the run and remove it a
 - HANDLE CONDITION and HANDLE AID take effect in source order, not in the order they run. That is the same for
   programs that set handlers before using them, which is the usual style; a program that sets them on different
   paths would need RESP instead.
+- The analysis is static. It reads the source and does not execute it, so a paragraph reached only through ALTER or a computed
+  CALL is reported as unreferenced or dynamic, and lineage follows MOVE, COMPUTE, arithmetic, STRING, UNSTRING, READ INTO and
+  WRITE FROM but not SQL or CICS data movement.
 - IMS and the REPORT and SCREEN sections are the main things to add next.
 
 License: MIT.

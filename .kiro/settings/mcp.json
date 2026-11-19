@@ -13,6 +13,8 @@
                                       "autoApprove":  [
                                                           "list_programs",
                                                           "list_samples",
+                                                          "extract_business_rules",
+                                                          "assess_workspace",
                                                           "describe_program",
                                                           "describe_layout",
                                                           "run_legacy_program"

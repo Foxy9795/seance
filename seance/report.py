@@ -109,6 +109,53 @@ def write_reports(r: Report, root: Path) -> tuple[Path, Path]:
     out.mkdir(parents=True, exist_ok=True)
     tag = r.implementation.replace(".", "_")
     j, m = out / f"{tag}.json", out / f"{tag}.md"
-    j.write_text(json.dumps(to_dict(r, root), indent=2), encoding="utf-8")
+    body = to_dict(r, root)
+    j.write_text(json.dumps(body, indent=2), encoding="utf-8")
     m.write_text(to_markdown(r, root), encoding="utf-8")
+    _remember(out, tag, body)
     return j, m
+
+
+HISTORY_KEEP = 200
+
+
+def _remember(out: Path, tag: str, body: dict) -> None:
+    """One line per check, kept in build/reports/history, so the verdicts of a program can be read back as an audit trail."""
+    rc = body.get("receipt") or {}
+    cov = body.get("coverage") or {}
+    entry = {"at": rc.get("checked_at"), "verdict": body.get("verdict"), "matched": body.get("matched"), "compared": rc.get("compared_lines"),
+             "differing": sum(s.get("differing", 0) for s in body.get("sets", [])), "random_runs": body.get("random_runs"), "coverage": cov.get("percent"),
+             "random_failed": bool(body.get("random_failure")), "cobol": rc.get("cobol_sha256"), "python": rc.get("python_sha256"), "evidence": rc.get("evidence_sha256")}
+    folder = out / "history"
+    folder.mkdir(exist_ok=True)
+    path = folder / f"{tag}.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    lines.append(json.dumps(entry))
+    path.write_text("\n".join(lines[-HISTORY_KEEP:]) + "\n", encoding="utf-8")
+
+
+def history(implementation: str, root: Path, limit: int = 30) -> list[dict]:
+    path = root / "build" / "reports" / "history" / f"{implementation.replace('.', '_')}.jsonl"
+    if not path.exists():
+        return []
+    rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    return rows[-limit:][::-1]
+
+
+def junit_xml(results: list[dict], seconds: float = 0.0) -> str:
+    """JUnit XML for CI systems: one test case per program. results: name, matched, summary, detail, error, seconds."""
+    from xml.sax.saxutils import escape, quoteattr
+
+    failures = sum(1 for r in results if not r.get("error") and not r["matched"])
+    errors = sum(1 for r in results if r.get("error"))
+    out = ['<?xml version="1.0" encoding="UTF-8"?>',
+           f'<testsuite name="seance" tests="{len(results)}" failures="{failures}" errors="{errors}" time="{seconds:.2f}">']
+    for r in results:
+        out.append(f'  <testcase classname="seance" name={quoteattr(r["name"])} time="{r.get("seconds", 0):.2f}">')
+        if r.get("error"):
+            out.append(f'    <error message={quoteattr(r["error"][:300])}>{escape(r["error"])}</error>')
+        elif not r["matched"]:
+            out.append(f'    <failure message={quoteattr(r["summary"])}>{escape(r.get("detail", ""))}</failure>')
+        out.append("  </testcase>")
+    out.append("</testsuite>")
+    return "\n".join(out) + "\n"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from .programs import program_names
 from .recorder import ROOT, compile_legacy, get_model
@@ -123,6 +124,54 @@ def _serve(argv: list[str]) -> int:
     return 0
 
 
+def _check_all(argv: list[str]) -> int:
+    """Check every program and job in the workspace: the command for a build pipeline. Exit code 1 when anything is restless."""
+    import time
+
+    from . import config
+    from .jobs import job_names
+    from .report import junit_xml
+
+    p = argparse.ArgumentParser(prog="seance check-all", description="Check every program and job against the real COBOL.")
+    p.add_argument("--rounds", type=int, default=config.DEFAULT_ROUNDS, help="random runs per program")
+    p.add_argument("--junit", metavar="FILE", help="write JUnit XML for a CI system")
+    p.add_argument("--only", metavar="NAMES", help="comma-separated program or job names")
+    a = p.parse_args(argv)
+    sys.path.insert(0, str(ROOT))
+    jobs = job_names()
+    names = [n for n in program_names() + jobs if not a.only or n in {x.strip() for x in a.only.split(",")}]
+    if not names:
+        print("There is nothing to check: the workspace has no programs.", file=sys.stderr)
+        return 2
+    results, began = [], time.time()
+    for n in names:
+        t = time.time()
+        try:
+            if n in jobs:
+                from .jobs import verify_job
+
+                report = verify_job(n, a.rounds)
+            else:
+                from .verify import verify
+
+                report = verify(n, None, a.rounds)
+            write_reports(report, ROOT)
+            differing = sum(s["differing"] for s in report.sets)
+            results.append({"name": n, "matched": report.matched, "seconds": time.time() - t,
+                            "summary": f"{differing} output line(s) differ" + (", and a random run fails" if report.random_failure else ""),
+                            "detail": to_markdown(report, ROOT)[:4000], "lines": sum(s["compared"] for s in report.sets)})
+        except Exception as exc:
+            results.append({"name": n, "matched": False, "error": f"{type(exc).__name__}: {exc}", "seconds": time.time() - t, "summary": "could not run", "lines": 0})
+        r = results[-1]
+        print(f"{'Spirit matched ' if r['matched'] else 'Spirit restless'}  {n:<24} {r['lines']:>6} lines  {r['seconds']:.1f}s" + ("" if r["matched"] else f"  {r.get('error') or r['summary']}"), flush=True)
+    if a.junit:
+        Path(a.junit).write_text(junit_xml(results, time.time() - began), encoding="utf-8")
+        print(f"JUnit report: {a.junit}")
+    bad = [r for r in results if not r["matched"]]
+    print(f"\n{len(results) - len(bad)} of {len(results)} matched.")
+    return 1 if bad else 0
+
+
 def _samples(argv: list[str]) -> int:
     from .programs import ProgramError
     from .samples import catalog, install, remove_all
@@ -156,7 +205,9 @@ def main(argv=None) -> int:
         return _serve(argv[1:])
     if argv and argv[0] == "samples":
         return _samples(argv[1:])
-    p = argparse.ArgumentParser(prog="seance", epilog="Also: 'seance serve' starts the app; 'seance samples list|load|remove' manages the sample library.")
+    if argv and argv[0] == "check-all":
+        return _check_all(argv[1:])
+    p = argparse.ArgumentParser(prog="seance", epilog="Also: 'seance serve' starts the app; 'seance check-all [--junit FILE]' checks the whole workspace (for CI); 'seance samples list|load|remove' manages the sample library.")
     p.add_argument("command", choices=COMMANDS)
     p.add_argument("program")
     p.add_argument("--impl", help="python module to check (default migrated.<program>)")

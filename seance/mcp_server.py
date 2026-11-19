@@ -84,6 +84,41 @@ def describe_program(program: str) -> str:
 
 
 @mcp.tool()
+def extract_business_rules(program: str) -> str:
+    """The business rules of a program in plain English with their line numbers (decisions, cases, calculations with their
+    rounding, loops, error handling), then the data lineage from input fields to output fields, as Gherkin scenarios. Read
+    from the source by fixed rules, so the same COBOL always gives the same answer. Read this before writing a migration."""
+    _check(program)
+    from .analyze import analyze, gherkin
+    try:
+        a = analyze(program)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+    lines = [gherkin(a), "# Where each output field comes from"]
+    lines += [f"{x['field']} <- {', '.join(x['from']) or '(constants)'}" + (f" via {', '.join(x['via'])}" if x["via"] else "") for x in a["lineage"]]
+    if a["unreferenced"]:
+        lines.append(f"# Paragraphs nothing can reach: {', '.join(a['unreferenced'])}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def assess_workspace() -> str:
+    """Size, complexity, translation readiness and last verdict of every program and job in the workspace, and the order a
+    migration can follow (programs that depend on nothing else first)."""
+    from .analyze import portfolio
+    p = portfolio()
+    t = p["totals"]
+    out = [f"{t['programs']} programs and {t['jobs']} jobs, {t['lines']} lines; {t['ready']} translated with no gaps; {t['verified']} verified against the COBOL now.", ""]
+    for r in p["rows"]:
+        if r.get("error"):
+            out.append(f"- {r['name']}: cannot be read ({r['error'][:80]})")
+        else:
+            out.append(f"- {r['name']}: {r['lines']} lines, complexity {r['complexity']} ({r['rating']}), {r['readiness']}, {r['verdict'] or 'not checked'}")
+    out += ["", "Migration order:"] + [f"  wave {i}: {', '.join(w)}" for i, w in enumerate(p["waves"], 1)]
+    return "\n".join(out)
+
+
+@mcp.tool()
 def describe_layout(program: str) -> str:
     """Every file the program uses with its record layout (field, bytes, type, storage), plus console input."""
     _check(program)

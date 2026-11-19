@@ -707,8 +707,8 @@ def record_sets(program: str, root: Path = ROOT) -> dict[str, int]:
     exe = compile_legacy(program, root)
     base = root / "fixtures" / program
     if base.exists():
-        for p in base.iterdir():  # keep uploaded data; regenerate the rest
-            if p.is_dir() and not p.name.startswith("yours-"):
+        for p in base.iterdir():  # keep uploaded data and mainframe outputs; regenerate the rest
+            if p.is_dir() and not p.name.startswith(("yours-", "golden-")):
                 shutil.rmtree(p)
             elif p.is_file():
                 p.unlink()
@@ -777,8 +777,83 @@ def add_uploaded(program: str, filename: str, data: bytes, target_file: str | No
     return {"set": name, "records": n, "label": label}
 
 
+def _ascii(f: FileDef, data: bytes, code_page: str | None) -> bytes:
+    """A file from the mainframe (EBCDIC) as the bytes GnuCOBOL reads and writes."""
+    if not code_page:
+        return data
+    if f.organization == "line":
+        return data.decode(code_page).encode(ENC, errors="replace").replace(b"\x85", b"\n").replace(b"\x25", b"\n")
+    from .ebcdic import file_to_ascii
+    return file_to_ascii(f.record, f.size, data, code_page)
+
+
+def add_golden(program: str, filename: str, inputs: dict[str, bytes], outputs: dict[str, bytes], console_output: bytes | None = None,
+               stdin: list[str] | None = None, root: Path = ROOT, code_page: str | None = None) -> dict:
+    """Save a parallel run: input data plus the output your own mainframe produced for it. The Python is checked against
+    what the mainframe wrote, not against GnuCOBOL. GnuCOBOL is run too, and the set records whether it agrees with the
+    mainframe, since a difference there means the local COBOL is not a faithful stand-in for your system on this data.
+    Output files you do not provide are taken from the GnuCOBOL run and marked as such.
+    """
+    from .config import MAX_DATA_RECORDS, RUN_TIMEOUT
+    from .recorder import compile_legacy, get_model
+
+    model = get_model(program, root)
+    by_name = {f.assign: f for f in model.all_files}
+    if not outputs and console_output is None:
+        raise ValueError("Give at least one output file (or the console output) from the mainframe run.")
+    names = set_names(program, root)
+    base = load_set(program, names[0], root)[0] if names else Case()
+    case = Case(dict(base.files), list(stdin) if stdin is not None else list(base.stdin), dict(base.records))
+    count = 0
+    for assign, raw in inputs.items():
+        f = by_name.get(assign)
+        if f is None or not f.is_input:
+            raise ValueError(f"{assign} is not an input file of this program.")
+        data = _ascii(f, raw, code_page)
+        fixed = f.organization in ("sequential", "indexed", "relative")
+        if fixed and data and len(data) % max(f.size, 1):
+            raise ValueError(f"The input for {assign} is {len(data)} bytes, which is not a whole number of {f.size}-byte records.")
+        units = [data[i:i + f.size] for i in range(0, len(data), f.size)] if fixed else _units(None, data)
+        if len(units) > MAX_DATA_RECORDS:
+            raise ValueError(f"The input for {assign} has {len(units)} records. The limit is {MAX_DATA_RECORDS}.")
+        case.files[assign] = pack_file(f, units) if f.organization == "relative" else data
+        case.records[assign] = units
+        count += len(units)
+    expected = Result()
+    for assign, raw in outputs.items():
+        f = by_name.get(assign)
+        if f is None or not f.is_output:
+            raise ValueError(f"{assign} is not an output file of this program.")
+        data = _ascii(f, raw, code_page)
+        if f.organization in ("sequential", "indexed", "relative") and data and len(data) % max(f.size, 1):
+            raise ValueError(f"The output for {assign} is {len(data)} bytes, which is not a whole number of {f.size}-byte records.")
+        expected.outputs[assign] = data
+    cobol = run_cobol(compile_legacy(program, root), model, case, RUN_TIMEOUT)
+    filled = sorted(set(cobol.outputs) - set(expected.outputs))
+    for assign in filled:
+        expected.outputs[assign] = cobol.outputs[assign]
+    if console_output is not None:
+        expected.stdout = console_output.decode(code_page or ENC, errors="replace").replace("\r\n", "\n")
+    else:
+        expected.stdout = cobol.stdout
+    expected.return_code = 0
+    diffs, _units_n = compare(model, expected, Result(cobol.outputs, cobol.stdout, cobol.return_code, cobol.error))
+    stem = re.sub(r"[^a-z0-9]+", "-", Path(filename or "mainframe").stem.lower()).strip("-")[:30] or "mainframe"
+    name, k = f"golden-{stem}", 2
+    while set_dir(program, name, root).exists():
+        name, k = f"golden-{stem}-{k}", k + 1
+    label = f"Mainframe Output: {Path(filename).name or 'your run'}"
+    save_set(program, name, case, expected, label, root)
+    meta_path = set_dir(program, name, root) / "set.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta.update({"golden": True, "cobol_agrees": not diffs, "cobol_differences": len(diffs), "provided": sorted(outputs), "filled_from_cobol": filled,
+                 "records": count or meta.get("records", 0)})
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return {"set": name, "label": label, "records": meta["records"], "cobol_agrees": not diffs, "cobol_differences": len(diffs), "filled_from_cobol": filled}
+
+
 def remove_uploaded(program: str, name: str, root: Path = ROOT) -> None:
-    if not re.fullmatch(r"yours-[a-z0-9-]{1,40}", name):
+    if not re.fullmatch(r"(yours|golden)-[a-z0-9-]{1,40}", name):
         raise ValueError("Only test data you uploaded can be removed.")
     d = set_dir(program, name, root)
     if d.exists():
@@ -790,6 +865,8 @@ def describe_sets(program: str, root: Path = ROOT) -> list[dict]:
     for name in set_names(program, root):
         _, result, meta = load_set(program, name, root)
         out.append({"set": name, "label": meta["label"], "records": meta.get("records", 0), "console_lines": meta.get("console_lines", 0),
-                    "removable": name.startswith("yours-"),
+                    "removable": name.startswith(("yours-", "golden-")),
+                    "golden": bool(meta.get("golden")), "cobol_agrees": meta.get("cobol_agrees"), "cobol_differences": meta.get("cobol_differences", 0),
+                    "filled_from_cobol": meta.get("filled_from_cobol", []),
                     "cobol_error": meta.get("error")})
     return out

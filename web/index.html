@@ -71,7 +71,7 @@
   .btn.danger:hover:not(:disabled) { background: var(--bad-bg); border-color: var(--bad); }
   .btn.sm { height: 28px; padding: 0 9px; font-size: .88rem; } .btn.lg { height: 38px; padding: 0 18px; font-size: 1rem; }
   .btn:disabled, .btn[aria-disabled=true] { opacity: .5; cursor: not-allowed; }
-  .icon-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; color: var(--muted); }
+  .icon-btn { all: unset; box-sizing: border-box; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; color: var(--muted); }
   .icon-btn:hover { background: var(--hover); color: var(--text); } .icon-btn:focus-visible { outline: 2px solid var(--good); outline-offset: 1px; } .icon-btn.sm { width: 26px; height: 26px; }
   select, input[type=text], input[type=search], input[type=number], textarea { background: var(--sunk); border: 1px solid var(--line2); border-radius: 6px; }
   select, input[type=text], input[type=search], input[type=number] { height: 32px; padding: 0 10px; }
@@ -109,6 +109,21 @@
   .menu [role=menuitem][aria-disabled=true] { opacity: .45; pointer-events: none; }
   .menu [role=menuitem].danger { color: var(--bad); }
   .menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px 4px; }
+
+  /* the page's own lists, so nothing looks like the operating system */
+  .dd, .menu.floating { position: fixed; z-index: 90; }
+  .menu.floating { right: auto; top: 0; left: 0; }
+  .dd { background: var(--panel2); border: 1px solid var(--line2); border-radius: 8px; padding: 4px; box-shadow: 0 16px 40px rgba(0,0,0,.55); max-height: 300px; overflow: auto; min-width: 120px; }
+  .dd-opt { display: flex; align-items: center; gap: 6px; padding: 6px 12px 6px 6px; border-radius: 5px; cursor: pointer; white-space: nowrap; color: var(--muted); }
+  .dd-opt.on, .dd-opt:hover { background: var(--hover); color: var(--text); }
+  .dd-opt[aria-selected=true] { color: var(--text); font-weight: 600; }
+  .dd-opt[aria-disabled=true] { opacity: .45; cursor: not-allowed; }
+  .dd-ck { width: 16px; flex: none; color: var(--amber-text); display: inline-flex; }
+  select:hover:not(:disabled) { border-color: var(--muted); } select[aria-expanded=true] { border-color: var(--amber); }
+  .selbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 12px; border: 1px solid rgba(233,168,62,.5); background: rgba(233,168,62,.08); border-radius: 8px; }
+  td.chk, th.chk { width: 36px; padding-right: 0; } td.act, th.act { width: 44px; padding-left: 0; text-align: right; }
+  .card { position: relative; } .card .cardtools { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 2px; }
+  .card h3 { padding-right: 70px; }
 
   /* shell */
   .shell { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); min-height: calc(100vh - var(--top)); }
@@ -162,7 +177,7 @@
   th { color: var(--faint); font-weight: 600; font-size: .82rem; background: var(--panel); position: sticky; top: 0; z-index: 1; white-space: nowrap; }
   tr:last-child td { border-bottom: 0; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tbody tr.link { cursor: pointer; } tbody tr.link:hover td { background: var(--panel2); } tbody tr.link:focus-visible { outline: 2px solid var(--good); outline-offset: -2px; }
+  tbody tr.link { cursor: pointer; } tbody tr.link:hover td, tbody tr.link.picked td { background: var(--panel2); } tbody tr.link:focus-visible { outline: 2px solid var(--good); outline-offset: -2px; }
   .scroll { max-height: 380px; overflow: auto; }
   .status { white-space: nowrap; font-size: .93rem; display: inline-flex; align-items: center; gap: 7px; }
   .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -192,7 +207,7 @@
 
   /* program */
   .crumbs { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: .9rem; margin-bottom: 10px; }
-  .crumbs a { color: var(--muted); text-decoration: none; } .crumbs a:hover { color: var(--text); text-decoration: underline; }
+  .crumbs a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; min-height: 28px; padding: 0 6px; margin: 0 -6px; border-radius: 5px; } .crumbs a:hover { color: var(--text); text-decoration: underline; }
   .ptitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .meta { color: var(--muted); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .92rem; } .meta span { white-space: nowrap; }
   .purpose { color: var(--text); margin-top: 8px; max-width: 82ch; }
@@ -278,6 +293,36 @@
   .sample-card .row { justify-content: space-between; margin-top: 4px; }
   .sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
 
+  /* analysis and assessment */
+  .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+  .mcard { padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+  .mcard b { display: block; font: 600 1.35rem/1.2 var(--sans); font-variant-numeric: tabular-nums; } .mcard span { color: var(--faint); font-size: .82rem; }
+  .rating { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font-size: .8rem; font-weight: 600; border: 1px solid currentColor; }
+  .rating.low { color: var(--good); } .rating.moderate { color: var(--warn); } .rating.high, .rating.very-high { color: var(--bad); }
+  .subnav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .graph { overflow: auto; background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 560px; }
+  .graph svg { display: block; margin: 0 auto; }
+  .gn { cursor: pointer; } .gn rect { fill: var(--panel2); stroke: var(--line2); stroke-width: 1.2; } .gn text { fill: var(--text); font: 12px var(--mono); } .gn text.sub { fill: var(--muted); font: 10.5px var(--sans); }
+  .gn:hover rect, .gn:focus rect { stroke: var(--amber); } .gn:focus { outline: none; }
+  .gn.entry rect { stroke: var(--amber); stroke-width: 2; } .gn.dead rect { stroke: var(--bad); stroke-dasharray: 4 3; } .gn.section rect { fill: var(--panel); }
+  .gn.file rect { fill: #17202a; stroke: #4d6b86; } .gn.table rect { fill: #1d1c12; stroke: #8a7a3a; } .gn.job rect { fill: #261c12; stroke: var(--amber); } .gn.missing rect { stroke: var(--bad); stroke-dasharray: 3 3; } .gn.called rect { fill: var(--panel); }
+  .ed { fill: none; stroke-width: 1.5; opacity: .9; } .ed.perform, .ed.call, .ed.link, .ed.xctl, .ed.step { stroke: var(--amber-text); } .ed.goto { stroke: var(--bad); stroke-dasharray: 5 3; }
+  .ed.fall { stroke: #8d8596; } .ed.handler { stroke: var(--good); stroke-dasharray: 2 3; } .ed.reads, .ed.writes, .ed.updates, .ed.sql { stroke: #6f93b3; }
+  .gl { display: flex; gap: 6px 18px; flex-wrap: wrap; color: var(--muted); font-size: .84rem; margin-top: 8px; } .gl i { display: inline-block; width: 22px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+  .rule { padding: 10px var(--pad); border-bottom: 1px solid var(--line); } .rule:last-child { border-bottom: 0; }
+  .rule .rh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--faint); font-size: .84rem; margin-bottom: 4px; }
+  .rule .rw { font-weight: 600; } .rule ul { margin: 4px 0 0; padding-left: 20px; color: var(--muted); } .rule .oth { margin-top: 6px; color: var(--faint); font-size: .86rem; }
+  .barcell { display: inline-block; vertical-align: middle; width: 54px; height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; margin-right: 8px; } .barcell i { display: block; height: 100%; background: var(--amber); }
+  .tag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; font-size: .76rem; font-weight: 600; border: 1px solid var(--line2); color: var(--muted); }
+  .tag.good { color: var(--good); border-color: rgba(111,211,174,.4); } .tag.bad { color: var(--bad); border-color: rgba(255,143,126,.45); } .tag.amber { color: var(--amber-text); border-color: rgba(238,176,74,.45); }
+  th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: var(--text); } th[aria-sort] { color: var(--text); }
+  .lineage { display: grid; gap: 8px; padding: var(--pad); } .lineage .lr { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .hist td { padding-top: 4px; padding-bottom: 4px; } .spark { display: flex; gap: 3px; align-items: flex-end; height: 22px; } .spark i { width: 7px; border-radius: 1px; background: var(--good); } .spark i.x { background: var(--bad); }
+  .twocol { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .twocol h3 { margin-bottom: 6px; }
+  .mf { display: grid; gap: 10px; } .mf .frow { display: grid; grid-template-columns: minmax(120px, 190px) 1fr; gap: 10px; align-items: center; } .mf .frow code { word-break: break-all; }
+  .fname { color: var(--muted); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* palette */
   dialog#palDlg { margin-top: 11vh; width: min(640px, 94vw); max-height: 70vh; overflow: hidden; }
   .pal-in { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--faint); }
@@ -336,7 +381,7 @@
     </div>
   </div>
   <button class="icon-btn" id="setBtn" aria-label="Settings" title="Settings" data-act="settings"><i data-ic="gear" data-size="18"></i></button>
-  <button class="btn primary" id="addBtn" data-act="add"><i data-ic="plus"></i><span class="hide-sm">Add Program</span></button>
+  <button class="btn primary" id="addBtn" data-act="add" aria-label="Add program"><i data-ic="plus"></i><span class="hide-sm">Add Program</span></button>
 </header>
 
 <div class="shell">
@@ -347,6 +392,7 @@
     </div>
     <nav class="side-list" id="sideList" aria-label="Program list"></nav>
     <div class="side-foot">
+      <button data-act="assess"><i data-ic="layers"></i>Assessment</button>
       <button data-act="guide"><i data-ic="compass"></i>Guide and samples</button>
       <button data-act="keys"><i data-ic="keyboard"></i>Keyboard shortcuts</button>
     </div>
@@ -356,6 +402,9 @@
   <main id="main" tabindex="-1">
     <!-- Workspace -->
     <section class="view" id="vWork" hidden aria-labelledby="workTitle"></section>
+
+    <!-- Assessment -->
+    <section class="view" id="vPort" hidden aria-labelledby="portTitle"></section>
 
     <!-- Program -->
     <section class="view" id="vProg" hidden aria-labelledby="pTitle">
@@ -388,6 +437,7 @@
         <div class="tabs" role="tablist" id="tabs" aria-label="Program sections">
           <button role="tab" data-tab="overview" id="tab-overview" aria-controls="pOverview">Overview</button>
           <button role="tab" data-tab="code" id="tab-code" aria-controls="pCode">Code</button>
+          <button role="tab" data-tab="analysis" id="tab-analysis" aria-controls="pAnalysis">Analysis</button>
           <button role="tab" data-tab="check" id="tab-check" aria-controls="pCheck">Check</button>
           <button role="tab" data-tab="try" id="tab-try" aria-controls="pTry">Try Input</button>
           <button role="tab" data-tab="data" id="tab-data" aria-controls="pData">Test Data</button>
@@ -401,6 +451,7 @@
 
       <div role="tabpanel" id="pOverview" class="stack" aria-labelledby="tab-overview"></div>
       <div role="tabpanel" id="pCode" hidden aria-labelledby="tab-code"></div>
+      <div role="tabpanel" id="pAnalysis" hidden class="stack" aria-labelledby="tab-analysis"></div>
       <div role="tabpanel" id="pCheck" hidden class="stack" aria-labelledby="tab-check"></div>
       <div role="tabpanel" id="pTry" hidden class="stack" aria-labelledby="tab-try"></div>
       <div role="tabpanel" id="pData" hidden class="stack" aria-labelledby="tab-data"></div>
@@ -551,13 +602,13 @@ const send = (path, data, method = 'POST', ms) => api(path, { method, headers: {
 const memo = (map, key, fn) => { if (!map.has(key)) map.set(key, fn().catch((e) => { map.delete(key); throw e; })); return map.get(key); };
 
 /* ================================================================ state */
-const TABS = ['overview', 'code', 'check', 'try', 'data'];
-const TAB_LABEL = { overview: 'Overview', code: 'Code', check: 'Check', try: 'Try Input', data: 'Test Data' };
+const TABS = ['overview', 'code', 'analysis', 'check', 'try', 'data'];
+const TAB_LABEL = { overview: 'Overview', code: 'Code', analysis: 'Analysis', check: 'Check', try: 'Try Input', data: 'Test Data' };
 const KIND_LABEL = { sql: 'SQL', cics: 'CICS', jcl: 'JCL', indexed: 'Indexed', relative: 'Relative', sort: 'Sort', calls: 'CALL', console: 'Console' };
 const S = {
   about: null, programs: [], by: new Map(), view: 'work', name: null, tab: 'overview', impl: {}, lastTab: {}, sideQ: '',
-  filter: { status: 'all', kind: 'all', q: '' }, runtime: false,
-  cache: { layout: new Map(), source: new Map(), report: new Map(), sets: new Map() },
+  filter: { status: 'all', kind: 'all', q: '' }, runtime: false, sel: new Set(),
+  cache: { layout: new Map(), source: new Map(), report: new Map(), sets: new Map(), analysis: new Map(), history: new Map() }, port: null, portSort: { key: 'title', dir: 1 }, portFiles: false,
   running: new Map(), checkAll: null, preset: null,
 };
 const prog = (name) => S.by.get(name);
@@ -633,11 +684,84 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => { const c = e.target.closest('[data-close]'); if (c) c.closest('dialog').close(); });
 $$('dialog').forEach((d) => d.addEventListener('click', (e) => { if (e.target === d) d.close(); }));
 
+/* ================================================================ dropdowns and floating menus */
+const DD = { el: null, sel: null, idx: -1, typed: '', at: 0 };
+let floating = null;
+function placeFloating(el, anchor, minWidth) {
+  const r = anchor.getBoundingClientRect(); el.style.minWidth = (minWidth || r.width) + 'px';
+  const w = el.offsetWidth, h = el.offsetHeight; let left = r.left, top = r.bottom + 4;
+  if (left + w > innerWidth - 8) left = Math.max(8, innerWidth - w - 8);
+  if (top + h > innerHeight - 8) top = Math.max(8, r.top - h - 4);
+  if (top + h > innerHeight - 8) { el.style.maxHeight = innerHeight - top - 8 + 'px'; }
+  el.style.left = left + 'px'; el.style.top = top + 'px';
+}
+const floatHost = () => document.querySelector('dialog[open]') || document.body;
+function closeFloating() { if (floating) { floating.remove(); floating = null; } }
+function showFloating(anchor, html, minWidth = 220) {
+  closeFloating(); closeMenus(); closeDropdown(false);
+  const m = document.createElement('div'); m.className = 'menu floating'; m.setAttribute('role', 'menu'); m.id = 'floatMenu'; m.innerHTML = html;
+  floatHost().appendChild(m); floating = m; placeFloating(m, anchor, minWidth); m.querySelector('[role=menuitem]:not([aria-disabled=true])')?.focus({ preventScroll: true });
+}
+function closeDropdown(focus = true) {
+  if (!DD.el) return; const s = DD.sel; DD.el.remove(); DD.el = null; DD.sel = null; s?.setAttribute('aria-expanded', 'false');
+  if (focus && s && document.body.contains(s)) s.focus({ preventScroll: true });
+}
+function openDropdown(sel) {
+  if (DD.el && DD.sel === sel) { closeDropdown(); return; }
+  closeDropdown(false); closeMenus(); closeFloating();
+  const el = document.createElement('div'); el.className = 'dd'; el.setAttribute('role', 'listbox'); el.id = 'ddList';
+  el.innerHTML = [...sel.options].map((o, i) => `<div class="dd-opt" role="option" id="ddo${i}" data-i="${i}" aria-selected="${o.selected}" ${o.disabled ? 'aria-disabled="true"' : ''}><span class="dd-ck">${o.selected ? ic('check', 14) : ''}</span><span>${esc(o.textContent)}</span></div>`).join('');
+  floatHost().appendChild(el); DD.el = el; DD.sel = sel; DD.idx = Math.max(0, sel.selectedIndex); sel.setAttribute('aria-expanded', 'true');
+  placeFloating(el, sel, sel.offsetWidth); markDropdown();
+}
+function markDropdown() {
+  if (!DD.el) return; $$('.dd-opt', DD.el).forEach((o, i) => o.classList.toggle('on', i === DD.idx));
+  DD.el.querySelector('.dd-opt.on')?.scrollIntoView({ block: 'nearest' }); DD.sel.setAttribute('aria-activedescendant', 'ddo' + DD.idx);
+}
+function chooseDropdown(i) {
+  const s = DD.sel; const o = s?.options[i]; if (!o || o.disabled) return;
+  const changed = s.selectedIndex !== i; s.selectedIndex = i; closeDropdown();
+  if (changed) { s.dispatchEvent(new Event('input', { bubbles: true })); s.dispatchEvent(new Event('change', { bubbles: true })); }
+}
+document.addEventListener('mousedown', (e) => {
+  const s = e.target.closest?.('select');
+  if (s && !s.disabled) { e.preventDefault(); s.focus({ preventScroll: true }); openDropdown(s); return; }
+  if (DD.el && !e.target.closest('.dd')) closeDropdown(false);
+  if (floating && !e.target.closest('.floating')) closeFloating();
+  if (e.target.closest('.dd')) e.preventDefault();
+}, true);
+document.addEventListener('click', (e) => {
+  const o = e.target.closest('.dd-opt'); if (o) { chooseDropdown(+o.dataset.i); return; }
+  if (e.target.closest('.floating [role=menuitem]')) setTimeout(closeFloating, 0);
+});
+document.addEventListener('keydown', (e) => {
+  if (DD.el) {
+    const n = DD.sel.options.length;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDropdown(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); DD.idx = Math.min(n - 1, DD.idx + 1); markDropdown(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); DD.idx = Math.max(0, DD.idx - 1); markDropdown(); }
+    else if (e.key === 'Home') { e.preventDefault(); DD.idx = 0; markDropdown(); }
+    else if (e.key === 'End') { e.preventDefault(); DD.idx = n - 1; markDropdown(); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); chooseDropdown(DD.idx); }
+    else if (e.key === 'Tab') closeDropdown(false);
+    else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      const now = Date.now(); DD.typed = now - DD.at > 700 ? e.key.toLowerCase() : DD.typed + e.key.toLowerCase(); DD.at = now;
+      const hit = [...DD.sel.options].findIndex((o) => o.textContent.trim().toLowerCase().startsWith(DD.typed)); if (hit >= 0) { DD.idx = hit; markDropdown(); } e.preventDefault();
+    }
+    return;
+  }
+  if (floating && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFloating(); return; }
+  if (e.target.tagName === 'SELECT' && !e.target.disabled && ['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(e.key) && !e.ctrlKey && !e.metaKey) { e.preventDefault(); openDropdown(e.target); }
+}, true);
+window.addEventListener('scroll', (e) => { const t = e.target; if (t?.closest && (t.closest('.dd') || t.closest('.floating'))) return; closeDropdown(false); closeFloating(); }, true);
+window.addEventListener('resize', () => { closeDropdown(false); closeFloating(); });
+$$('dialog').forEach((d) => d.addEventListener('cancel', (e) => { if (DD.el || floating) e.preventDefault(); }));
+
 /* ================================================================ data loading */
 function setPrograms(list) {
-  S.programs = list; S.by = new Map(list.map((p) => [p.name, p]));
+  S.programs = list; S.by = new Map(list.map((p) => [p.name, p])); [...S.sel].forEach((n) => { if (!S.by.has(n)) S.sel.delete(n); });
   renderSide(); renderRuntime();
-  if (S.view === 'work') renderWork(); else if (S.name) renderProgHeader();
+  if (S.view === 'work') renderWork(); else if (S.view === 'port') renderPort(); else if (S.name) renderProgHeader();
 }
 async function loadPrograms() { const d = await api('/api/programs'); S.runtime = d.legacy_runtime; setPrograms(d.programs); }
 async function refreshProgram(name) {
@@ -651,7 +775,7 @@ const getLayout = (n) => memo(S.cache.layout, n, () => api('/api/layout?program=
 const getSource = (n, impl) => memo(S.cache.source, n + '|' + impl, () => api('/api/source?' + new URLSearchParams({ program: n, implementation: impl })));
 const getSets = (n) => memo(S.cache.sets, n, () => api('/api/data?program=' + enc(n)));
 const getReport = (n, impl) => memo(S.cache.report, n + '|' + impl, () => api('/api/report?' + new URLSearchParams({ program: n, implementation: impl })));
-function forget(name, what = ['layout', 'source', 'report', 'sets']) {
+function forget(name, what = ['layout', 'source', 'report', 'sets', 'analysis', 'history']) {
   for (const k of what) for (const key of [...S.cache[k].keys()]) if (key === name || key.startsWith(name + '|')) S.cache[k].delete(key);
 }
 
@@ -659,6 +783,7 @@ function forget(name, what = ['layout', 'source', 'report', 'sets']) {
 function renderRuntime() {
   const ok = S.runtime; const a = S.about;
   $('runtimeDot').className = 'dot ' + (ok ? 'good' : 'bad'); $('runtimeText').textContent = ok ? 'GnuCOBOL ready' : 'GnuCOBOL not found';
+  $('runtimeBtn').setAttribute('aria-label', ok ? 'COBOL runtime: GnuCOBOL ready' : 'COBOL runtime: GnuCOBOL not found');
   $('runtimeInfo').innerHTML = ok
     ? `<b class="good">The real COBOL runtime is available.</b><p class="muted" style="margin-top:4px">${esc(a?.cobc || 'GnuCOBOL')}</p>`
     : '<b class="bad">GnuCOBOL was not found.</b><p class="muted" style="margin-top:4px">Séance compiles and runs your COBOL with GnuCOBOL. Put it in <code>tools\\gnucobol</code> or on PATH, then reload.</p>';
@@ -682,9 +807,11 @@ window.addEventListener('resize', syncSide);
 /* ================================================================ router */
 const parseHash = () => {
   const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
+  if (a === 'assessment') return { view: 'port' };
   return a === 'p' && b ? { view: 'prog', name: b, tab: TABS.includes(c) ? c : null } : { view: 'work' };
 };
 const goWork = () => { if (location.hash !== '#/') location.hash = '#/'; else route(); };
+const goAssessment = () => { if (location.hash !== '#/assessment') location.hash = '#/assessment'; else route(); };
 function goTo(name, tab) {
   const t = tab || S.lastTab[name] || 'overview'; const h = `#/p/${enc(name)}/${t}`;
   if (location.hash !== h) location.hash = h; else route();
@@ -693,6 +820,13 @@ function enter(el) { el.classList.remove('enter'); void el.offsetWidth; el.class
 async function route() {
   const r = parseHash();
   if (r.view === 'prog' && !prog(r.name)) { if (S.programs.length || S.loaded) say(`There is no program named “${r.name}”.`, 'error'); location.replace('#/'); return; }
+  if (r.view === 'port') {
+    const was = S.view; S.view = 'port'; S.name = null; closeFloating?.();
+    $('vProg').hidden = true; $('vWork').hidden = true; $('vPort').hidden = false; renderPort(); renderSide(); document.title = 'Assessment · Séance';
+    if (was !== 'port') { enter($('vPort')); window.scrollTo(0, 0); }
+    return;
+  }
+  $('vPort').hidden = true;
   if (r.view === 'work') {
     const was = S.view; S.view = 'work'; S.name = null;
     $('vProg').hidden = true; $('vWork').hidden = false; renderWork(); renderSide(); document.title = 'Workspace · Séance';
@@ -718,13 +852,16 @@ function paletteItems() {
     items.push({ g: p.title, t: 'Run check', k: 'R', icon: 'play', run: () => startCheck(p.name) });
     TABS.filter((t) => !(isJob(p) && t === 'try')).forEach((t, i) => items.push({ g: p.title, t: 'Go to ' + TAB_LABEL[t], k: String(i + 1), icon: 'right', run: () => goTo(p.name, t) }));
     items.push({ g: p.title, t: 'Export Python file', icon: 'download', run: () => doExport('python'), skip: isJob(p) });
-    items.push({ g: p.title, t: 'Export standalone package', icon: 'box', run: () => doExport('bundle'), skip: isJob(p) });
+    items.push({ g: p.title, t: 'Export standalone package with tests', icon: 'box', run: () => doExport('bundle'), skip: isJob(p) });
+    items.push({ g: p.title, t: 'Export check report (HTML)', icon: 'file', run: () => doExport('html') });
+    items.push({ g: p.title, t: 'Export business rules (Gherkin)', icon: 'file', run: () => exportRules(), skip: isJob(p) });
     items.push({ g: p.title, t: 'Translate the COBOL again', icon: 'refresh', run: () => redraft(p.name), skip: isJob(p) });
     items.push({ g: p.title, t: 'Delete this program', icon: 'trash', run: () => deleteProgram(p.name) });
   }
   items.push({ g: 'Actions', t: 'Add program', k: 'A', icon: 'plus', run: openAdd });
   items.push({ g: 'Actions', t: 'Check all programs', icon: 'play', run: () => checkAll(), skip: !S.programs.length });
   items.push({ g: 'Actions', t: 'Go to workspace', k: 'G W', icon: 'layers', run: goWork });
+  items.push({ g: 'Actions', t: 'Assessment of every program', icon: 'layers', run: goAssessment, skip: !S.programs.length });
   items.push({ g: 'Actions', t: 'Guided tour', icon: 'compass', run: () => startGuide() });
   items.push({ g: 'Actions', t: 'Sample library', icon: 'book', run: () => openSamples({ tour: false }) });
   items.push({ g: 'Actions', t: 'Settings', icon: 'gear', run: openSettings });
@@ -776,7 +913,7 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'a') { e.preventDefault(); openAdd(); }
   else if (S.view === 'prog') {
     const p = prog(S.name);
-    if (/^[1-5]$/.test(k)) { const t = TABS[+k - 1]; if (!(isJob(p) && t === 'try')) goTo(S.name, t); }
+    if (/^[1-6]$/.test(k)) { const t = TABS[+k - 1]; if (!(isJob(p) && t === 'try')) goTo(S.name, t); }
     else if (k === 'r') startCheck(S.name);
     else if (k === '[') goRel(-1); else if (k === ']') goRel(1);
   }
@@ -789,13 +926,16 @@ function goRel(d) {
 /* ================================================================ global actions */
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act], [data-href], [data-go]'); if (!el || el.closest('#tcard')) return;
+  if (e.target.closest('[data-sel], [data-rowmenu], .chk')) { if (el.tagName === 'A') e.preventDefault(); return; }
   if (el.dataset.go) { e.preventDefault(); goTo(el.dataset.go, el.dataset.tab); return; }
   if (el.dataset.href) { location.href = el.dataset.href; return; }
   const a = el.dataset.act, arg = el.dataset.arg;
   const map = {
     add: openAdd, tour: () => startGuide(), guide: () => openGuide(), samples: () => openSamples({ tour: false }), keys: openKeys, about: openAbout, settings: openSettings,
-    palette: openPalette, checkAll: () => checkAll(), export: () => doExport(arg), redraft: () => redraft(S.name), record: () => recordAgain(S.name), remove: () => deleteProgram(S.name),
+    palette: openPalette, checkAll: () => checkAll(), export: () => doExport(arg), assess: goAssessment, rules: exportRules, redraft: () => redraft(S.name), record: () => recordAgain(S.name), remove: () => deleteProgram(S.name),
     copyPath: () => copyText(`legacy/${S.name}/`, 'Folder path copied.'), removeSamples: removeSamples,
+    rowOpen: () => goTo(arg), rowCheck: () => startCheck(arg), rowExport: () => doExport('python', arg), rowDelete: () => deleteProgram(arg),
+    selCheck: () => checkAll([...S.sel]), selDelete: deleteSelected, selClear: () => { S.sel.clear(); renderWork(); },
   };
   if (map[a]) { e.preventDefault(); map[a](); }
 });
@@ -883,20 +1023,21 @@ function renderWork() {
   const cov = ps.map((p) => lastOf(p).coverage).filter((c) => c != null);
   const list = prefs.view === 'cards'
     ? `<div class="cards">${rows.map((p) => { const st = statusOf(p); const c = lastOf(p);
-        return `<a class="card" href="#/p/${enc(p.name)}" data-go="${esc(p.name)}"><h3>${esc(p.title)}</h3><div class="badges">${kindBadges(p)}</div><p class="clamp c3">${esc(p.error ? 'Séance cannot read this program yet. Open it to see why.' : p.purpose || '')}</p>
-          <div class="foot">${statusHtml(st)}<span>${c.compared != null ? c.compared.toLocaleString() + ' lines' : ''}${c.coverage != null ? ' · ' + c.coverage + '%' : ''}</span></div></a>`; }).join('')}</div>`
-    : `<div class="panel"><div class="body flush" style="overflow-x:auto"><table><thead><tr><th>Program</th><th class="hide-sm">What It Does</th><th>Last Check</th><th class="num">Lines Compared</th><th class="num hide-sm">Coverage</th></tr></thead><tbody>${rows.map((p) => {
+        return `<div class="card" role="link" tabindex="0" data-go="${esc(p.name)}"><span class="cardtools"><input type="checkbox" class="chk" data-sel="${esc(p.name)}" aria-label="Select ${esc(p.title)}" ${S.sel.has(p.name) ? 'checked' : ''}><button class="icon-btn sm" data-rowmenu="${esc(p.name)}" aria-label="Actions for ${esc(p.title)}" aria-haspopup="menu">${ic('more', 16)}</button></span><h3>${esc(p.title)}</h3><div class="badges">${kindBadges(p)}</div><p class="clamp c3">${esc(p.error ? 'Séance cannot read this program yet. Open it to see why.' : p.purpose || '')}</p>
+          <div class="foot">${statusHtml(st)}<span>${c.compared != null ? c.compared.toLocaleString() + ' lines' : ''}${c.coverage != null ? ' · ' + c.coverage + '%' : ''}</span></div></div>`; }).join('')}</div>`
+    : `<div class="panel"><div class="body flush" style="overflow-x:auto"><table><thead><tr><th class="chk"><input type="checkbox" id="selAll" aria-label="Select every program shown" ${rows.length && rows.every((p) => S.sel.has(p.name)) ? 'checked' : ''}></th><th>Program</th><th class="hide-sm">What It Does</th><th>Last Check</th><th class="num">Lines Compared</th><th class="num hide-sm">Coverage</th><th class="act"><span class="sr">Actions</span></th></tr></thead><tbody>${rows.map((p) => {
         const st = statusOf(p); const c = lastOf(p);
-        return `<tr class="link" data-go="${esc(p.name)}" tabindex="0"><td><b>${esc(p.title)}</b> <span class="badges" style="display:inline-flex;margin-left:6px">${kindBadges(p)}</span><br><span class="faint mono">${esc(p.program_id || p.name)}</span></td>
+        return `<tr class="link${S.sel.has(p.name) ? ' picked' : ''}" data-go="${esc(p.name)}" tabindex="0"><td class="chk"><input type="checkbox" data-sel="${esc(p.name)}" aria-label="Select ${esc(p.title)}" ${S.sel.has(p.name) ? 'checked' : ''}></td><td><b>${esc(p.title)}</b> <span class="badges" style="display:inline-flex;margin-left:6px">${kindBadges(p)}</span><br><span class="faint mono">${esc(p.program_id || p.name)}</span></td>
           <td class="muted hide-sm" style="max-width:440px"><div class="clamp">${esc(p.error ? 'Séance cannot read this program yet. Open it to see why.' : p.purpose || '')}</div></td>
           <td>${statusHtml(st)}${c.checked_at && st.key !== 'running' ? `<br><span class="faint xs">${esc(ago(c.checked_at))}</span>` : ''}</td>
           <td class="num">${c.compared != null ? c.compared.toLocaleString() : '–'}</td>
-          <td class="num hide-sm${c.coverage != null && c.coverage < 100 ? ' warn' : ''}">${c.coverage != null ? c.coverage + '%' : '–'}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+          <td class="num hide-sm${c.coverage != null && c.coverage < 100 ? ' warn' : ''}">${c.coverage != null ? c.coverage + '%' : '–'}</td><td class="act"><button class="icon-btn sm" data-rowmenu="${esc(p.name)}" aria-label="Actions for ${esc(p.title)}" aria-haspopup="menu">${ic('more', 16)}</button></td></tr>`; }).join('')}</tbody></table></div></div>`;
   el.innerHTML = `
     <div class="page-head"><div><h1 id="workTitle">Workspace</h1><p class="lede">Each program is your original COBOL, the Python for it, and the evidence that the two behave the same.</p></div>
       <div class="row"><button class="btn" data-act="checkAll" ${ca ? 'disabled' : ''}>${ic('play')}Check All</button><button class="btn primary" data-act="add">${ic('plus')}Add Program</button></div></div>
     ${ca ? `<div class="panel body" style="margin-bottom:14px"><div class="row between"><span><span class="spin" aria-hidden="true"></span> &nbsp;Checking <b>${ca.done + 1}</b> of ${ca.total}: ${esc(ca.current)}</span><button class="btn sm" id="stopAll">Stop After This One</button></div><div class="progress" style="margin-top:10px"><i style="width:${Math.round(ca.done / ca.total * 100)}%"></i></div></div>` : ''}
     <div class="stats"><div><b>${ps.length}</b><span>Programs</span></div><div><b class="good">${count('matched')}</b><span>Spirit matched</span></div><div><b class="${count('restless') ? 'bad' : ''}">${count('restless')}</b><span>Spirit restless</span></div><div><b>${count('new')}</b><span>Not checked</span></div><div><b>${lines.toLocaleString()}</b><span>Output lines compared</span></div><div><b>${cov.length ? Math.round(cov.reduce((a, c) => a + c, 0) / cov.length) + '%' : '–'}</b><span>Average coverage</span></div></div>
+    ${S.sel.size ? `<div class="selbar" role="region" aria-label="Selected programs"><span><b>${S.sel.size}</b> selected</span><span class="row"><button class="btn sm" data-act="selCheck">${ic('play', 14)}Run Checks</button><button class="btn danger sm" data-act="selDelete">${ic('trash', 14)}Delete</button><button class="btn ghost sm" data-act="selClear">Clear</button></span></div>` : ''}
     <div class="toolbar"><div class="chips" role="group" aria-label="Filter by result">${STATUS_FILTERS.map(([k, l]) => `<button class="chipbtn" data-filter="${k}" aria-pressed="${S.filter.status === k}">${l} <b>${count(k)}</b></button>`).join('')}</div>
       <div class="row"><div class="searchbox"><span aria-hidden="true">${ic('search', 15)}</span><input type="search" id="wsSearch" placeholder="Filter by name" aria-label="Filter programs" value="${esc(S.filter.q)}"></div>
         ${kinds.length ? `<select id="kindSel" aria-label="Kind of program"><option value="all">All kinds</option>${kinds.map((k) => `<option value="${k}" ${S.filter.kind === k ? 'selected' : ''}>${esc(KIND_LABEL[k] || k)}</option>`).join('')}</select>` : ''}
@@ -906,7 +1047,23 @@ function renderWork() {
     ${samples ? `<div class="note" style="margin-top:14px"><div class="row between"><span>${plural(samples, 'program')} here came from the sample library.</span><button class="btn sm" data-act="removeSamples">Remove Samples</button></div></div>` : ''}`;
   if (S.refocus) { const t = $(S.refocus); S.refocus = null; if (t) { t.focus(); t.setSelectionRange?.(t.value.length, t.value.length); } }
 }
+function openRowMenu(btn) {
+  const name = btn.dataset.rowmenu; const p = prog(name); if (!p) return;
+  showFloating(btn, menuHtml([
+    { act: 'rowOpen', arg: name, icon: 'right', label: 'Open' },
+    { act: 'rowCheck', arg: name, icon: 'play', label: 'Run check' },
+    ...(isJob(p) ? [] : [{ act: 'rowExport', arg: name, icon: 'download', label: 'Export Python file' }]),
+    '-',
+    { act: 'rowDelete', arg: name, icon: 'trash', label: p.sample ? 'Delete this sample' : 'Delete', danger: true },
+  ]), 200);
+}
+$('vWork').addEventListener('change', (e) => {
+  const c = e.target.closest('[data-sel]');
+  if (c) { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); renderWork(); return; }
+  if (e.target.id === 'selAll') { const shown = sortList(S.programs.filter(inFilter)).map((p) => p.name); shown.forEach((n) => (e.target.checked ? S.sel.add(n) : S.sel.delete(n))); renderWork(); }
+});
 $('vWork').addEventListener('click', (e) => {
+  const m = e.target.closest('[data-rowmenu]'); if (m) { e.preventDefault(); e.stopPropagation(); openRowMenu(m); return; }
   const f = e.target.closest('[data-filter]'); if (f) { S.filter.status = f.dataset.filter; renderWork(); return; }
   const v = e.target.closest('[data-view]'); if (v) { setPref('view', v.dataset.view); renderWork(); return; }
   if (e.target.id === 'clearFilters') { S.filter = { status: 'all', kind: 'all', q: '' }; renderWork(); }
@@ -917,7 +1074,7 @@ $('vWork').addEventListener('change', (e) => {
   if (e.target.id === 'kindSel') { S.filter.kind = e.target.value; renderWork(); }
   if (e.target.id === 'sortSel') { setPref('sort', e.target.value); renderWork(); }
 });
-$('vWork').addEventListener('keydown', (e) => { const tr = e.target.closest('tr.link'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); goTo(tr.dataset.go); } });
+$('vWork').addEventListener('keydown', (e) => { const tr = e.target.closest('tr.link, .card'); if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); goTo(tr.dataset.go); } });
 
 /* ================================================================ program header */
 const PSEUDO_META = { SQLDB: 'Uses a SQL database', CICSDB: 'Runs as a CICS transaction' };
@@ -945,17 +1102,20 @@ function renderProgHeader() {
   $('runBtn').querySelector('span').textContent = running ? 'Running…' : 'Run Check';
   const hasReport = !!c;
   $('exportMenu').innerHTML = menuHtml(job ? [
+    { act: 'export', arg: 'html', icon: 'file', label: 'Check report (.html)', hint: 'One page to share or print', disabled: !hasReport },
     { act: 'export', arg: 'report', icon: 'file', label: 'Check report (.md)', hint: 'The last check and its receipt', disabled: !hasReport },
     { act: 'export', arg: 'json', icon: 'file', label: 'Check report (.json)', hint: 'The same, for other tools', disabled: !hasReport },
   ] : [
     { act: 'export', arg: 'python', icon: 'file', label: 'Python file', hint: 'The translated program' },
-    { act: 'export', arg: 'bundle', icon: 'box', label: 'Standalone package (.zip)', hint: 'Runs with plain Python: no Séance, no COBOL' },
+    { act: 'export', arg: 'bundle', icon: 'box', label: 'Standalone package (.zip)', hint: 'Plain Python with a pytest suite of the saved runs' },
     '-',
+    { act: 'export', arg: 'html', icon: 'file', label: 'Check report (.html)', hint: 'One page to share or print', disabled: !hasReport },
     { act: 'export', arg: 'report', icon: 'file', label: 'Check report (.md)', hint: 'The last check and its receipt', disabled: !hasReport },
     { act: 'export', arg: 'json', icon: 'file', label: 'Check report (.json)', hint: 'The same, for other tools', disabled: !hasReport },
   ]);
   $('moreMenu').innerHTML = menuHtml([
     ...(job ? [] : [{ act: 'redraft', icon: 'refresh', label: 'Translate the COBOL again', hint: 'Your current Python is kept as a .bak file' }]),
+    ...(job ? [] : [{ act: 'rules', icon: 'file', label: 'Business rules (.feature)', hint: 'Plain-English rules as Gherkin scenarios' }]),
     { act: 'record', icon: 'play', label: 'Record the COBOL answers again', hint: 'Re-run the real program on generated data' },
     { act: 'copyPath', icon: 'copy', label: 'Copy the folder path' },
     '-',
@@ -981,8 +1141,8 @@ $$('#tabs [role=tab]').forEach((b) => {
     if (e.key === 'End') { e.preventDefault(); tabs.at(-1).focus(); goTo(S.name, tabs.at(-1).dataset.tab); }
   });
 });
-const PANELS = { overview: 'pOverview', code: 'pCode', check: 'pCheck', try: 'pTry', data: 'pData' };
-const RENDER = { overview: () => renderOverview(), code: () => renderCode(), check: () => renderCheck(), try: () => renderTry(), data: () => renderData() };
+const PANELS = { overview: 'pOverview', code: 'pCode', analysis: 'pAnalysis', check: 'pCheck', try: 'pTry', data: 'pData' };
+const RENDER = { overview: () => renderOverview(), code: () => renderCode(), analysis: () => renderAnalysis(), check: () => renderCheck(), try: () => renderTry(), data: () => renderData() };
 const scrollMem = new Map();
 function showTab(tab, fresh) {
   const prev = S.shownTab; if (prev && S.shownName) scrollMem.set(S.shownName + '|' + prev, window.scrollY);
@@ -1119,7 +1279,7 @@ async function startCheck(name, opts = {}) {
   S.errors.delete(name); S.running.set(name, { kind: 'check', impl, t: Date.now() }); afterRunChange(name);
   try {
     const r = await send('/api/verify', { program: name, implementation: impl, rounds }, 'POST', 900000);
-    S.cache.report.set(name + '|' + impl, Promise.resolve({ report: r, status: { current: true } }));
+    S.cache.report.set(name + '|' + impl, Promise.resolve({ report: r, status: { current: true } })); forget(name, ['history']);
     S.running.delete(name); await refreshProgram(name); afterRunChange(name);
     if (!opts.quiet && !here(name, 'check')) say(`${p.title}: ${r.matched ? 'Spirit matched' : 'Spirit restless'}`, r.matched ? 'ok' : 'error', { action: { label: 'View', run: () => goTo(name, 'check') } });
     return r;
@@ -1129,9 +1289,9 @@ async function startCheck(name, opts = {}) {
     throw e;
   }
 }
-async function checkAll() {
+async function checkAll(names) {
   if (S.checkAll) return;
-  const list = S.programs.filter((p) => !p.error && !S.running.has(p.name)).sort((a, b) => isJob(a) - isJob(b));
+  const list = S.programs.filter((p) => (!names || names.includes(p.name)) && !p.error && !S.running.has(p.name)).sort((a, b) => isJob(a) - isJob(b));
   if (!list.length) { say('There is nothing to check yet.'); return; }
   if (!S.runtime) { say('GnuCOBOL was not found, so there is nothing to check against.', 'error'); return; }
   const ca = S.checkAll = { total: list.length, done: 0, cancel: false, current: list[0].title, matched: 0, restless: 0, failed: 0 };
@@ -1208,8 +1368,10 @@ async function renderCheck() {
   const strength = job ? '' : `<div class="panel"><div class="head"><div><h2>Test strength</h2><p class="muted sm">Breaks the Python on purpose in small ways (a &gt; becomes &gt;=, a ROUNDED goes away, a constant changes) and checks that the saved runs notice each one.</p></div><button class="btn" id="runStrength" ${running ? 'disabled' : ''}>${mrun ? '<span class="spin"></span>Measuring…' : ic('flask') + 'Run Mutation Test'}</button></div>
     ${mut ? (mut.error ? `<div class="body"><div class="note bad">${esc(mut.error)}</div></div>` : `<div class="body"><div class="note ${surv.length ? 'bad' : 'good'}"><b>${surv.length ? `${plural(surv.length, 'bug')} slipped through.` : 'Every planted bug was caught.'}</b> ${mut.caught} of ${mut.total} caught by ${mut.records} saved records.</div></div>
       <table><thead><tr><th>Where</th><th>Planted bug</th><th>Result</th></tr></thead><tbody>${mut.mutants.map((m) => `<tr><td>${m.cobol_line ? `<a href="#" data-line="${m.cobol_line}">COBOL line ${m.cobol_line}</a>` : `Python line ${m.line}`}</td><td>${esc(m.change)}</td><td class="${m.caught ? 'good' : 'bad'}">${m.caught ? 'Caught' : 'Slipped through'}</td></tr>`).join('')}</tbody></table>`) : ''}</div>`;
+  const hist = await historyHtml(name, impl.module);
+  if (!here(name, 'check') || curImpl(p).module !== impl.module) return;
   el.innerHTML = `<div class="panel" id="resultPanel"><div class="head"><p class="muted sm" style="max-width:74ch">Replays every saved run of the COBOL through the Python and compares each output byte, then runs both programs on fresh random input.</p>
-      <div class="row"><label class="inline" for="rounds">Random runs <input type="number" id="rounds" min="5" max="${S.about.defaults.max_rounds}" value="${prefs.rounds || S.about.defaults.rounds}"></label></div></div><div id="result">${result}</div></div>${strength}`;
+      <div class="row"><label class="inline" for="rounds">Random runs <input type="number" id="rounds" min="5" max="${S.about.defaults.max_rounds}" value="${prefs.rounds || S.about.defaults.rounds}"></label></div></div><div id="result">${result}</div></div>${strength}${hist}`;
 }
 $('pCheck').addEventListener('click', (e) => {
   if (e.target.closest('#runInline')) { startCheck(S.name); return; }
@@ -1299,13 +1461,15 @@ async function renderData() {
   const targets = job ? [] : lay.files.filter((f) => f.input).map((f) => `<option value="file:${esc(f.assign)}">${esc(PSEUDO[f.assign] || f.assign)}</option>`);
   if (lay?.console_input?.length) targets.push('<option value="console">Console input</option>');
   el.innerHTML = `<div class="panel"><div class="head"><div><h2>Saved test sets</h2><p class="muted sm">The real COBOL's output for each set is the expected answer.</p></div><button class="btn" id="recordAgain" title="Run the real COBOL again on the generated data and save its answers">${ic('refresh')}Record Again</button></div>
-      <div class="body flush"><table><thead><tr><th>Set</th><th class="num">Input</th><th></th></tr></thead><tbody>${sets.map((s) => `<tr><td>${esc(s.label)}${s.cobol_error ? `<br><span class="faint sm">The COBOL stopped: ${esc(s.cobol_error)}</span>` : ''}</td><td class="num muted">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num">${s.removable ? `<button class="btn danger sm" data-rm="${esc(s.set)}">Remove</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No sets yet. Use Record Again.</td></tr>'}</tbody></table></div></div>
+      <div class="body flush"><table><thead><tr><th>Set</th><th class="num">Input</th><th></th></tr></thead><tbody>${sets.map((s) => `<tr><td>${esc(s.label)}${s.golden ? ` <span class="tag amber">Mainframe</span> <span class="tag ${s.cobol_agrees ? 'good' : 'bad'}">${s.cobol_agrees ? 'GnuCOBOL agrees' : 'GnuCOBOL differs'}</span>${s.filled_from_cobol?.length ? `<br><span class="faint sm">${esc(s.filled_from_cobol.join(', '))} taken from the GnuCOBOL run</span>` : ''}` : ''}${s.cobol_error ? `<br><span class="faint sm">The COBOL stopped: ${esc(s.cobol_error)}</span>` : ''}</td><td class="num muted">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num">${s.removable ? `<button class="btn danger sm" data-rm="${esc(s.set)}">Remove</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No sets yet. Use Record Again.</td></tr>'}</tbody></table></div></div>
     ${targets.length ? `<div class="panel"><div class="head"><div><h2>Add your own data</h2><p class="muted sm">A real input file makes the strongest test. The COBOL runs on it first; other inputs come from the first saved set.</p></div></div>
       <div class="body"><div class="drop" id="dataDrop"><p style="margin-bottom:10px">Drop a data file here, or choose one</p><div class="row" style="justify-content:center;align-items:flex-end;gap:14px">
         <label class="block" style="text-align:left">For <select id="uploadTarget">${targets.join('')}</select></label>
         <label class="block" style="text-align:left">Encoding <select id="uploadCode"><option value="">ASCII (as GnuCOBOL writes)</option><option value="cp037">EBCDIC, code page 037 (US)</option><option value="cp1140">EBCDIC, code page 1140 (US, Euro)</option><option value="cp500">EBCDIC, code page 500 (International)</option><option value="cp273">EBCDIC, code page 273 (German)</option><option value="cp1047">EBCDIC, code page 1047 (Open Systems)</option></select></label>
         <label class="btn primary" for="uploadFile" tabindex="0" id="uploadLabel">${ic('upload')}Choose File</label><input type="file" id="uploadFile" hidden></div></div>
-      <p class="faint sm" style="margin-top:10px">EBCDIC files are converted field by field from the record layout: text and zoned numbers change code, packed and binary fields keep their bytes.</p></div></div>` : (job ? '<div class="note">A job is fed by generated data sets. Add data to the programs it runs to test them with real files.</div>' : '')}`;
+      <p class="faint sm" style="margin-top:10px">EBCDIC files are converted field by field from the record layout: text and zoned numbers change code, packed and binary fields keep their bytes.</p></div></div>` : (job ? '<div class="note">A job is fed by generated data sets. Add data to the programs it runs to test them with real files.</div>' : '')}
+    ${mainframePanel(lay, job)}`;
+  bindMainframe(lay);
 }
 async function uploadData(file) {
   const name = S.name; const target = $('uploadTarget').value; const buf = new Uint8Array(await file.arrayBuffer());
@@ -1341,17 +1505,216 @@ async function redraft(name) {
 async function deleteProgram(name) {
   const p = prog(name); if (!p) return;
   if (prefs.confirmDelete && !(await confirmBox({ title: `Delete ${p.title}?`, body: 'This removes its COBOL, Python and saved test data from the workspace. It cannot be undone.', ok: 'Delete', danger: true }))) return;
-  try { await api('/api/programs/' + enc(name), { method: 'DELETE' }); forget(name); delete S.lastTab[name]; await loadPrograms(); if (S.name === name) goWork(); say(`Deleted ${p.title}.`, 'ok'); } catch (e) { say(e.message, 'error'); }
+  try { await api('/api/programs/' + enc(name), { method: 'DELETE' }); forget(name); delete S.lastTab[name]; S.sel.delete(name); await loadPrograms(); if (S.name === name) goWork(); say(`Deleted ${p.title}.`, 'ok'); } catch (e) { say(e.message, 'error'); }
 }
-function doExport(what) {
-  const p = prog(S.name); if (!p) return; const impl = curImpl(p); const c = impl.last_check;
+async function deleteSelected() {
+  const names = [...S.sel].filter((n) => prog(n)); if (!names.length) return;
+  const titles = names.map((n) => prog(n).title);
+  if (!(await confirmBox({ title: `Delete ${plural(names.length, 'program')}?`, body: `${titles.slice(0, 8).join(', ')}${titles.length > 8 ? ' and ' + (titles.length - 8) + ' more' : ''}\n\nThis removes their COBOL, Python and saved test data from the workspace. It cannot be undone.`, ok: 'Delete', danger: true }))) return;
+  let gone = 0; for (const n of names) { try { await api('/api/programs/' + enc(n), { method: 'DELETE' }); forget(n); delete S.lastTab[n]; S.sel.delete(n); gone++; } catch (e) { say(`${n}: ${e.message}`, 'error'); } }
+  await loadPrograms(); say(`Deleted ${plural(gone, 'program')}.`, 'ok');
+}
+function doExport(what, name = S.name) {
+  const p = prog(name); if (!p) return; const impl = name === S.name ? curImpl(p) : primary(p); const c = impl.last_check;
   if ((what === 'report' || what === 'json') && !c) { say('Run a check first: the report is written from it.'); return; }
-  const a = document.createElement('a'); a.href = `/api/download/${enc(S.name)}?what=${what}&implementation=${enc(impl.module)}`; a.download = ''; document.body.appendChild(a); a.click(); a.remove();
+  const a = document.createElement('a'); a.href = `/api/download/${enc(name)}?what=${what}&implementation=${enc(impl.module)}`; a.download = ''; document.body.appendChild(a); a.click(); a.remove();
 }
 async function removeSamples() {
   const n = S.programs.filter((p) => p.sample).length; if (!n) { say('No sample programs are loaded.'); return false; }
   if (!(await confirmBox({ title: `Remove ${plural(n, 'sample program')}?`, body: 'This deletes the sample programs, their Python (including any edits you made) and their test data. Your own programs are not touched.', ok: 'Remove Samples', danger: true }))) return false;
   try { const r = await api('/api/samples', { method: 'DELETE' }); r.removed.forEach((x) => forget(x)); await loadPrograms(); if (S.name && !prog(S.name)) goWork(); say(`Removed ${plural(r.removed.length, 'sample program')}.`, 'ok'); return true; } catch (e) { say(e.message, 'error'); return false; }
+}
+
+/* ================================================================ analysis */
+const getAnalysis = (n) => memo(S.cache.analysis, n, () => api('/api/analysis?program=' + enc(n)));
+S.ana = { section: 'flow', rules: 'all', dict: '' };
+const ANA_SECTIONS = [['flow', 'Flow'], ['rules', 'Business rules'], ['dict', 'Data dictionary'], ['lineage', 'Lineage'], ['deps', 'Dependencies']];
+const EDGE_STYLE = { perform: ['Performed', 'var(--amber-text)', ''], goto: ['GO TO', 'var(--bad)', '5 3'], fall: ['Falls through', '#8d8596', ''], handler: ['CICS handler', 'var(--good)', '2 3'],
+  call: ['CALL', 'var(--amber-text)', ''], link: ['LINK', 'var(--amber-text)', ''], xctl: ['XCTL', 'var(--amber-text)', ''], step: ['Step', 'var(--amber-text)', ''], reads: ['Reads', '#6f93b3', ''],
+  writes: ['Writes', '#6f93b3', '4 2'], updates: ['Updates', '#6f93b3', ''], sql: ['SQL table', '#6f93b3', '2 2'] };
+/* a small layered layout: left to right from the entry points, so a reader can follow the order things happen in */
+function graphHtml(nodes, edges, { dead = new Set(), entry = new Set() } = {}) {
+  if (!nodes.length) return '<div class="empty-state">Nothing to draw.</div>';
+  const byId = new Map(nodes.map((n) => [n.id, n])); const es = edges.filter((e) => byId.has(e.from) && byId.has(e.to) && e.from !== e.to);
+  const out = new Map(nodes.map((n) => [n.id, []])), has = new Set();
+  es.forEach((e) => { out.get(e.from).push(e.to); has.add(e.to); });
+  const rank = new Map(); const roots = nodes.filter((n) => entry.has(n.id) || !has.has(n.id)).map((n) => n.id);
+  const queue = (roots.length ? roots : [nodes[0].id]).map((id) => (rank.set(id, 0), id));
+  for (let i = 0; i < queue.length; i++) for (const t of out.get(queue[i])) if (!rank.has(t)) { rank.set(t, rank.get(queue[i]) + 1); queue.push(t); }
+  const top = Math.max(0, ...rank.values());
+  nodes.forEach((n) => { if (!rank.has(n.id)) rank.set(n.id, dead.has(n.id) ? top + 1 : top + 1); });
+  const cols = []; nodes.forEach((n) => { const r = rank.get(n.id); (cols[r] = cols[r] || []).push(n); });
+  const W = (n) => Math.min(230, Math.max(104, n.label.length * 7.3 + 26)), H = 42, GX = 74, GY = 16, PAD = 16;
+  const pos = new Map(); let x = PAD, height = 0;
+  cols.forEach((col) => {
+    if (!col) return; const cw = Math.max(...col.map(W));
+    col.forEach((n, i) => pos.set(n.id, { x, y: PAD + i * (H + GY), w: cw, h: H }));
+    height = Math.max(height, PAD * 2 + col.length * (H + GY) - GY); x += cw + GX;
+  });
+  const width = x - GX + PAD;
+  const paths = es.map((e) => {
+    const a = pos.get(e.from), b = pos.get(e.to); const st = EDGE_STYLE[e.kind] || EDGE_STYLE.perform;
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2;
+    const back = b.x <= a.x;
+    const d = back ? `M ${a.x + a.w / 2} ${a.y + a.h} C ${a.x + a.w / 2} ${a.y + a.h + 34}, ${b.x + b.w / 2} ${b.y + b.h + 34}, ${b.x + b.w / 2} ${b.y + b.h + 2}`
+      : `M ${x1} ${y1} C ${x1 + GX / 2} ${y1}, ${x2 - GX / 2} ${y2}, ${x2 - 3} ${y2}`;
+    return `<path class="ed ${e.kind}" d="${d}" marker-end="url(#ah-${e.kind})"><title>${esc(st[0])}: ${esc(byId.get(e.from).label)} to ${esc(byId.get(e.to).label)}${e.line ? ' (line ' + e.line + ')' : ''}</title></path>`;
+  }).join('');
+  const kinds = [...new Set(es.map((e) => e.kind))];
+  const markers = kinds.map((k) => `<marker id="ah-${k}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9z" style="fill:${(EDGE_STYLE[k] || EDGE_STYLE.perform)[1]}"/></marker>`).join('');
+  const boxes = nodes.map((n) => { const p = pos.get(n.id); const cls = ['gn', n.cls || '', entry.has(n.id) ? 'entry' : '', dead.has(n.id) ? 'dead' : ''].join(' ');
+    return `<g class="${cls}" tabindex="0" role="button" data-node="${esc(n.id)}" aria-label="${esc(n.label)}${n.sub ? ', ' + esc(n.sub) : ''}${dead.has(n.id) ? ', not referenced' : ''}" transform="translate(${p.x} ${p.y})"><rect width="${p.w}" height="${p.h}" rx="7"/><text x="10" y="${n.sub ? 18 : 25}">${esc(n.label.length > 30 ? n.label.slice(0, 29) + '…' : n.label)}</text>${n.sub ? `<text class="sub" x="10" y="33">${esc(n.sub)}</text>` : ''}</g>`; }).join('');
+  const legend = kinds.map((k) => `<span><i style="border-color:${(EDGE_STYLE[k] || EDGE_STYLE.perform)[1]};border-top-style:${(EDGE_STYLE[k] || [])[2] ? 'dashed' : 'solid'}"></i>${esc((EDGE_STYLE[k] || [k])[0])}</span>`).join('');
+  return `<div class="graph"><svg width="${width}" height="${height + 20}" viewBox="0 0 ${width} ${height + 20}" role="img" aria-label="Flow graph with ${nodes.length} nodes"><defs>${markers}</defs>${paths}${boxes}</svg></div><div class="gl">${legend}${dead.size ? '<span><i style="border-color:var(--bad);border-top-style:dashed"></i>Dashed outline: never referenced</span>' : ''}</div>`;
+}
+const dictType = (d) => d.kind === 'group' ? 'Group' : d.kind === 'alpha' ? `Text ${d.bytes}` : d.kind === 'edited' ? `Edited ${d.pic}` : `${d.signed ? 'Signed ' : ''}${d.digits - d.scale}${d.scale ? '.' + d.scale : ''} digits${{ packed: ' · COMP-3', binary: ' · COMP', native: ' · COMP-5', float: ' · float' }[d.usage] || ''}`;
+const ratingCls = (r) => String(r).toLowerCase().replace(' ', '-');
+async function renderAnalysis() {
+  const name = S.name; const p = prog(name); const el = $('pAnalysis'); const job = isJob(p);
+  if (p.error) { el.innerHTML = `<div class="note bad"><b>Séance cannot read this program yet.</b><br>${esc(p.error)}</div>`; return; }
+  if (!el.innerHTML) el.innerHTML = skeleton(5);
+  let a; try { a = await getAnalysis(name); } catch (e) { if (here(name, 'analysis')) el.innerHTML = `<div class="note bad"><b>The analysis could not run.</b><br>${esc(e.message)}</div>`; return; }
+  if (!here(name, 'analysis')) return;
+  const m = a.metrics; const sec = job && ['rules', 'dict', 'lineage'].includes(S.ana.section) ? 'flow' : S.ana.section;
+  const card = (v, l, extra = '') => `<div class="mcard"><b ${extra}>${typeof v === 'number' ? v.toLocaleString() : v}</b><span>${l}</span></div>`;
+  const metrics = job
+    ? [card(m.steps, 'Steps'), card(m.programs, 'Programs run'), card(m.utilities, 'Utilities'), card(m.code, 'JCL statements'), card(`<span class="rating ${ratingCls(m.rating)}">${m.rating}</span>`, `Complexity ${m.complexity}`)]
+    : [card(m.code, 'Lines of code'), card(m.comments, 'Comment lines'), card(m.paragraphs, 'Paragraphs'), card(m.statements, 'Statements'), card(`<span class="rating ${ratingCls(m.rating)}">${m.rating}</span>`, `Complexity ${m.complexity}`),
+       card(m.goto, 'GO TO'), card(m.calls, 'CALLs'), card(m.files, 'Files'), card(m.data_items, 'Data items'), card(m.unreferenced, 'Unreferenced paragraphs', m.unreferenced ? 'class="warn"' : ''), card(m.unused_data, 'Unused data items', m.unused_data ? 'class="warn"' : '')];
+  const nav = `<div class="subnav" role="tablist" aria-label="Analysis sections">${ANA_SECTIONS.filter(([k]) => !(job && ['rules', 'dict', 'lineage'].includes(k))).map(([k, l]) => `<button class="chipbtn" role="tab" data-ana="${k}" aria-pressed="${sec === k}">${l}${k === 'rules' ? ` <b>${a.rules.length}</b>` : k === 'dict' ? ` <b>${a.dictionary.length}</b>` : k === 'lineage' ? ` <b>${a.lineage.length}</b>` : ''}</button>`).join('')}</div>`;
+  let body = '';
+  if (sec === 'flow') {
+    const paras = a.paragraphs.filter((x) => x.kind !== 'section');
+    const dead = new Set(a.unreferenced);
+    body = `<div class="panel"><div class="head"><div><h2>${job ? 'Job flow' : 'Paragraph flow'}</h2><p class="muted sm">${job ? 'Steps run in order. A step with a condition may be skipped.' : 'Who performs, jumps to or falls into whom, from the first paragraph. Click a box to see its COBOL.'}</p></div></div>
+      <div class="body">${graphHtml(paras.map((x) => ({ id: x.name, label: x.name, sub: job ? x.label : `line ${x.line} · ${x.statements} stmts`, cls: x.kind })), a.edges, { dead, entry: new Set(paras.filter((x) => x.entry).map((x) => x.name)) })}</div></div>
+      ${a.unreferenced.length ? `<div class="note warn"><b>${plural(a.unreferenced.length, 'paragraph')} can never run:</b> ${a.unreferenced.map((n) => `<code>${esc(n)}</code>`).join(', ')}. Nothing performs, jumps to or falls into ${a.unreferenced.length === 1 ? 'it' : 'them'}. They can be left out of the migration, or they point to a missing call.</div>` : ''}
+      <div class="panel"><div class="head"><h2>${job ? 'Steps' : 'Paragraphs'}</h2></div><div class="body flush" style="overflow-x:auto"><table><thead><tr><th>${job ? 'Step' : 'Paragraph'}</th>${job ? '<th>Runs</th><th>Condition</th>' : '<th class="num">Lines</th><th class="num">Statements</th><th>Complexity</th><th>Files touched</th><th>Reachable</th>'}</tr></thead><tbody>
+      ${paras.map((x) => job ? `<tr><td class="mono">${esc(x.name)}</td><td class="mono">${esc(x.label)}</td><td class="muted">${esc(x.condition) || 'Always'}</td></tr>`
+        : `<tr class="link" data-line="${x.line}" tabindex="0"><td class="mono">${esc(x.name)}${x.entry ? ' <span class="tag amber">entry</span>' : ''}</td><td class="num">${x.line}–${x.end}</td><td class="num">${x.statements}</td><td><span class="barcell"><i style="width:${Math.min(100, x.complexity * 8)}%"></i></span>${x.complexity}</td>
+          <td class="muted sm">${[...x.reads.map((f) => 'reads ' + f), ...x.writes.map((f) => 'writes ' + f)].map(esc).join(', ') || '–'}</td><td>${x.live ? '<span class="tag good">Yes</span>' : '<span class="tag bad">Never</span>'}</td></tr>`).join('')}</tbody></table></div></div>`;
+  } else if (sec === 'rules') {
+    const kinds = [['all', 'All'], ['decision', 'Decisions'], ['case', 'Cases'], ['calculation', 'Calculations'], ['loop', 'Loops'], ['handler', 'Handling']];
+    const shown = a.rules.filter((r) => S.ana.rules === 'all' || r.kind === S.ana.rules);
+    const label = { decision: 'Decision', case: 'Case', calculation: 'Calculation', loop: 'Loop', handler: 'Handling' };
+    body = `<div class="panel"><div class="head"><div><h2>Business rules</h2><p class="muted sm">Read from the source by fixed rules, not by a language model, so the same COBOL always gives the same list. Every rule names its line.</p></div><button class="btn" data-act="rules">${ic('download', 15)}Gherkin (.feature)</button></div>
+      <div class="body"><div class="chips">${kinds.map(([k, l]) => `<button class="chipbtn" data-rk="${k}" aria-pressed="${S.ana.rules === k}">${l} <b>${k === 'all' ? a.rules.length : a.rules.filter((r) => r.kind === k).length}</b></button>`).join('')}</div></div>
+      <div class="body flush">${shown.map((r) => `<div class="rule"><div class="rh"><b>${r.id}</b><span class="tag">${label[r.kind]}</span><span class="mono">${esc(r.paragraph)}</span><a href="#" data-line="${r.line}">line ${r.line}</a>${r.rounding ? `<span class="tag ${r.rounding === 'truncated' ? 'amber' : ''}">${r.rounding === 'truncated' ? 'truncates' : 'rounded'}</span>` : ''}</div>
+        ${r.when ? `<div class="rw">${r.kind === 'decision' ? 'If ' : r.kind === 'handler' ? 'When ' : ''}${esc(r.when)}</div>` : ''}${r.then.length ? `<ul>${r.then.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}${r.guard ? `<div class="oth">Guard: ${esc(r.guard)}</div>` : ''}
+        ${r.otherwise.length ? `<div class="oth">Otherwise:<ul>${r.otherwise.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}</div>`).join('') || '<div class="empty-state">No rules of this kind.</div>'}</div></div>`;
+  } else if (sec === 'dict') {
+    const q = S.ana.dict.trim().toLowerCase(); const rows = a.dictionary.filter((d) => !q || d.name.toLowerCase().includes(q) || d.record.toLowerCase().includes(q));
+    body = `<div class="panel"><div class="head"><div><h2>Data dictionary</h2><p class="muted sm">Every named field with its type, where it sits and where the program reads and writes it.</p></div><div class="row"><div class="searchbox"><span aria-hidden="true">${ic('search', 15)}</span><input type="search" id="dictQ" placeholder="Filter fields" aria-label="Filter fields" value="${esc(S.ana.dict)}"></div><button class="btn" id="dictCsv">${ic('download', 15)}CSV</button></div></div>
+      <div class="body flush scroll" style="max-height:620px"><table><thead><tr><th>Field</th><th>In</th><th>Type</th><th class="num">Bytes</th><th class="num">Reads</th><th class="num">Writes</th><th>Lines</th><th></th></tr></thead><tbody>
+      ${rows.map((d) => `<tr><td class="mono" style="white-space:nowrap">${'&nbsp;'.repeat(Math.max(0, d.level > 2 && d.level < 50 ? Math.min(6, Math.floor(d.level / 5)) : 0))}${esc(d.name)}${d.occurs ? ` <span class="faint">×${d.occurs}</span>` : ''}</td><td class="muted sm">${esc(d.section === 'File' ? d.file : d.section)} · <span class="mono">${esc(d.record)}</span></td>
+        <td class="muted">${esc(dictType(d))}${d.value != null ? ` <span class="faint">= ${esc(d.value)}</span>` : ''}${d.conditions.length ? `<br><span class="faint xs">88: ${d.conditions.map(esc).join(', ')}</span>` : ''}</td>
+        <td class="num">${d.offset}–${d.offset + d.bytes - 1}</td><td class="num">${d.reads || '–'}</td><td class="num">${d.writes || '–'}</td><td class="muted sm">${d.lines.slice(0, 6).map((l) => `<a href="#" data-line="${l}">${l}</a>`).join(', ')}${d.lines.length > 6 ? ' …' : ''}</td><td>${d.unused ? '<span class="tag amber">unused</span>' : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No field matches.</td></tr>'}</tbody></table></div></div>`;
+  } else if (sec === 'lineage') {
+    body = `<div class="panel"><div class="head"><div><h2>Data lineage</h2><p class="muted sm">For each output field: the input fields its value comes from, and the working fields it passes through on the way.</p></div></div>
+      <div class="lineage">${a.lineage.map((l) => `<div class="lr"><b class="mono">${esc(l.field)}</b><span class="faint">${esc(l.file)}</span><span class="muted">←</span>${l.from.map((f) => `<span class="tag good mono">${esc(f)}</span>`).join(' ') || '<span class="faint">no input field</span>'}${l.via.length ? `<span class="faint">via</span> ${l.via.map((f) => `<span class="tag mono">${esc(f)}</span>`).join(' ')}` : ''}</div>`).join('') || '<div class="empty-state">No output field is computed from an input field in a way the reader can follow. Programs that work through SQL or a terminal are not traced.</div>'}</div></div>`;
+  } else {
+    const rowsFiles = a.files.map((f) => `<tr><td class="mono">${esc(f.assign)}</td><td>${esc({ line: 'Text lines', sequential: 'Fixed records', indexed: 'Indexed', relative: 'Relative', dataset: 'Data set' }[f.organization] || f.organization)}</td><td>${esc(f.mode)}</td><td class="mono">${esc(f.record || '–')}</td><td class="num">${f.size || '–'}</td></tr>`).join('');
+    body = `<div class="twocol">
+      <div class="panel"><div class="head"><h3>Files</h3></div><div class="body flush"><table><thead><tr><th>Name</th><th>Kind</th><th>Use</th><th>Record</th><th class="num">Bytes</th></tr></thead><tbody>${rowsFiles || '<tr><td colspan="5" class="muted">None</td></tr>'}</tbody></table></div></div>
+      <div class="panel"><div class="head"><h3>Calls</h3></div><div class="body flush"><table><thead><tr><th>Target</th><th>How</th><th>From</th><th>Found</th></tr></thead><tbody>${a.calls.map((c) => `<tr><td class="mono">${esc(c.target)}</td><td>${esc(c.kind)}${c.dynamic ? ' (by name in a data item)' : ''}</td><td class="mono">${esc(c.from)}<br><a href="#" data-line="${c.line}" class="xs">line ${c.line}</a></td><td>${c.dynamic ? '<span class="tag">dynamic</span>' : c.resolved ? '<span class="tag good">in folder</span>' : c.kind === 'step' ? '<span class="tag good">workspace</span>' : '<span class="tag amber">outside</span>'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">None</td></tr>'}</tbody></table></div></div>
+      ${a.copybooks.length ? `<div class="panel"><div class="head"><h3>Copybooks</h3></div><div class="body">${a.copybooks.map((c) => `<span class="tag mono">${esc(c)}</span>`).join(' ')}</div></div>` : ''}
+      ${a.sql_tables.length ? `<div class="panel"><div class="head"><h3>SQL tables</h3></div><div class="body">${a.sql_tables.map((c) => `<span class="tag mono">${esc(c)}</span>`).join(' ')}</div></div>` : ''}
+      ${a.cics_resources.length ? `<div class="panel"><div class="head"><h3>CICS resources</h3></div><div class="body">${a.cics_resources.map((c) => `<span class="tag mono">${esc(c)}</span>`).join(' ')}</div></div>` : ''}
+      ${a.called.length ? `<div class="panel"><div class="head"><h3>Programs it calls (in its folder)</h3></div><div class="body flush"><table><thead><tr><th>Program</th><th class="num">Lines</th><th class="num">Paragraphs</th><th class="num">Complexity</th></tr></thead><tbody>${a.called.map((c) => `<tr><td class="mono">${esc(c.program_id)}</td><td class="num">${c.metrics.lines}</td><td class="num">${c.metrics.paragraphs ?? '–'}</td><td class="num">${c.metrics.complexity ?? '–'} <span class="rating ${ratingCls(c.metrics.rating || 'Low')}">${esc(c.metrics.rating || '')}</span></td></tr>`).join('')}</tbody></table></div></div>` : ''}</div>`;
+  }
+  el.innerHTML = `<div class="mgrid">${metrics.join('')}</div>${nav}${body}`;
+}
+$('pAnalysis').addEventListener('click', (e) => {
+  const s = e.target.closest('[data-ana]'); if (s) { S.ana.section = s.dataset.ana; renderAnalysis(); return; }
+  const k = e.target.closest('[data-rk]'); if (k) { S.ana.rules = k.dataset.rk; renderAnalysis(); return; }
+  const n = e.target.closest('[data-node]'); const row = e.target.closest('tr[data-line]'); const ln = e.target.closest('a[data-line]');
+  const go = (line) => jumpToCobol('', +line);
+  if (ln) { e.preventDefault(); go(ln.dataset.line); return; }
+  if (row) { go(row.dataset.line); return; }
+  if (n) { const a = S.cache.analysis.get(S.name); a?.then((x) => { const p = x.paragraphs.find((q) => q.name === n.dataset.node); if (p && !x.job) go(p.line); }); return; }
+  if (e.target.closest('#dictCsv')) getAnalysis(S.name).then((a) => downloadText(`${S.name}-data-dictionary.csv`, 'text/csv', dictCsv(a)));
+});
+$('pAnalysis').addEventListener('input', (e) => { if (e.target.id === 'dictQ') { S.ana.dict = e.target.value; const pos = e.target.selectionStart; renderAnalysis().then(() => { const i = $('dictQ'); if (i) { i.focus(); i.setSelectionRange(pos, pos); } }); } });
+$('pAnalysis').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { const t = e.target.closest('[data-node], tr[data-line]'); if (t && t === e.target) { e.preventDefault(); t.dispatchEvent(new MouseEvent('click', { bubbles: true })); } } });
+function downloadText(name, type, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+const csvCell = (v) => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+const dictCsv = (a) => ['Field,Section,File,Record,Level,Type,Bytes,Offset,Reads,Writes,Lines,Value,Unused', ...a.dictionary.map((d) => [d.name, d.section, d.file, d.record, d.level, dictType(d), d.bytes, d.offset, d.reads, d.writes, d.lines.join(' '), d.value, d.unused ? 'yes' : ''].map(csvCell).join(','))].join('\n') + '\n';
+function exportRules() { const a = document.createElement('a'); a.href = '/api/analysis/rules?program=' + enc(S.name); a.download = ''; document.body.appendChild(a); a.click(); a.remove(); }
+
+/* ================================================================ assessment of the whole workspace */
+async function renderPort() {
+  const el = $('vPort'); if (!S.loaded) return;
+  if (!S.programs.length) { el.innerHTML = '<div class="page-head"><div><h1 id="portTitle">Assessment</h1><p class="lede">Add programs to see how big they are, how complex, and how ready they are to migrate.</p></div></div>' + `<div class="panel"><div class="empty-state"><button class="btn primary" data-act="add">${ic('plus')}Add Program</button></div></div>`; return; }
+  if (!el.innerHTML) el.innerHTML = '<div class="page-head"><div><h1 id="portTitle">Assessment</h1></div></div>' + skeleton(5);
+  let d; try { d = S.port = await api('/api/portfolio'); } catch (e) { el.innerHTML = `<div class="note bad">${esc(e.message)}</div>`; return; }
+  if (S.view !== 'port') return;
+  const t = d.totals; const ok = d.rows.filter((r) => !r.error); const k = S.portSort.key, dir = S.portSort.dir;
+  const rows = [...d.rows].sort((x, y) => { const a = x[k], b = y[k]; return (typeof a === 'number' || typeof b === 'number' ? (a ?? -1) - (b ?? -1) : String(a ?? '').localeCompare(String(b ?? ''))) * dir || x.title.localeCompare(y.title); });
+  const cols = [['title', 'Program', 0], ['kind', 'Kind', 0], ['lines', 'Lines', 1], ['complexity', 'Complexity', 1], ['goto', 'GO TO', 1], ['calls', 'CALLs', 1], ['files', 'Files', 1], ['unreferenced', 'Dead code', 1], ['readiness', 'Translation', 0], ['verdict', 'Verified', 0]];
+  const th = (c) => `<th class="sortable${c[2] ? ' num' : ''}" data-sort="${c[0]}" tabindex="0" ${k === c[0] ? `aria-sort="${dir > 0 ? 'ascending' : 'descending'}"` : ''}>${c[1]}${k === c[0] ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+  const gnodes = d.nodes.filter((n) => S.portFiles || !['file', 'table'].includes(n.kind)).map((n) => ({ id: n.id, label: n.label, sub: { program: 'program', job: 'job', called: 'in a folder', missing: 'not found', file: 'file', table: 'table' }[n.kind], cls: n.kind }));
+  const ids = new Set(gnodes.map((n) => n.id));
+  const verified = (r) => { const st = statusOf(prog(r.name)); return `<span class="tag ${st.cls === 'good' ? 'good' : st.cls === 'bad' ? 'bad' : st.cls === 'warn' ? 'amber' : ''}">${esc(st.text)}</span>`; };
+  el.innerHTML = `<div class="page-head"><div><h1 id="portTitle">Assessment</h1><p class="lede">Size, complexity, dependencies and migration readiness of everything in the workspace, read from the source. The same figures the discovery tools report, computed locally.</p></div>
+      <div class="row"><a class="btn" href="/api/portfolio.csv" download>${ic('download', 15)}CSV</a><button class="btn" data-act="checkAll">${ic('play', 15)}Check All</button></div></div>
+    <div class="stats"><div><b>${t.programs}</b><span>Programs</span></div><div><b>${t.jobs}</b><span>Jobs</span></div><div><b>${t.lines.toLocaleString()}</b><span>Lines</span></div><div><b>${t.statements.toLocaleString()}</b><span>Statements</span></div>
+      <div><b class="good">${t.ready}</b><span>Translated, no gaps</span></div><div><b class="${t.high_complexity ? 'warn' : ''}">${t.high_complexity}</b><span>High complexity</span></div><div><b class="good">${t.verified}</b><span>Verified now</span></div></div>
+    <div class="panel"><div class="body flush" style="overflow-x:auto"><table><thead><tr>${cols.map(th).join('')}</tr></thead><tbody>${rows.map((r) => r.error ? `<tr><td>${esc(r.title)}</td><td colspan="9" class="bad sm">${esc(r.error)}</td></tr>`
+      : `<tr class="link" data-go="${esc(r.name)}" data-tab="analysis" tabindex="0"><td><b>${esc(r.title)}</b>${r.sample ? ' <span class="badge sample">Sample</span>' : ''}</td><td>${(r.kinds || []).map((x) => `<span class="badge">${esc(KIND_LABEL[x] || x)}</span>`).join(' ') || '<span class="faint">batch</span>'}</td><td class="num">${r.lines.toLocaleString()}</td>
+        <td class="num"><span class="rating ${ratingCls(r.rating)}">${esc(r.rating)}</span> <span class="faint">${r.complexity}</span></td><td class="num">${r.goto || '–'}</td><td class="num">${r.calls || '–'}</td><td class="num">${r.files || '–'}</td><td class="num ${r.unreferenced ? 'warn' : ''}">${r.unreferenced || '–'}</td>
+        <td><span class="tag ${r.readiness === 'Ready' ? 'good' : 'amber'}">${esc(r.readiness)}</span>${r.gaps ? ` <span class="faint xs">${r.gaps} to do</span>` : ''}</td><td>${verified(r)}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="panel"><div class="head"><div><h2>Dependencies</h2><p class="muted sm">Which programs call, link to or run which, and what they read and write.</p></div><label class="check"><input type="checkbox" id="portFiles" ${S.portFiles ? 'checked' : ''}> <span>Show files and tables</span></label></div>
+      <div class="body">${graphHtml(gnodes, d.edges.filter((e) => ids.has(e.from) && ids.has(e.to)))}</div></div>
+    <div class="panel"><div class="head"><div><h2>Migration order</h2><p class="muted sm">Programs that depend on nothing else in the workspace come first. Later waves can start once the earlier ones are verified.</p></div></div>
+      <div class="body stack">${d.waves.map((w, i) => `<div><b>Wave ${i + 1}</b> <span class="faint">${plural(w.length, 'program')}</span><div class="chips" style="margin-top:6px">${w.map((n) => `<a class="chipbtn" href="#/p/${enc(n)}/analysis" data-go="${esc(n)}" data-tab="analysis">${esc(prog(n)?.title || n)}</a>`).join('')}</div></div>`).join('') || '<span class="muted">Nothing to order.</span>'}</div></div>`;
+}
+$('vPort').addEventListener('click', (e) => {
+  const th = e.target.closest('[data-sort]'); if (th) { const k = th.dataset.sort; S.portSort = { key: k, dir: S.portSort.key === k ? -S.portSort.dir : 1 }; renderPort(); return; }
+  const n = e.target.closest('[data-node]'); if (n && prog(n.dataset.node)) goTo(n.dataset.node, 'analysis');
+});
+$('vPort').addEventListener('change', (e) => { if (e.target.id === 'portFiles') { S.portFiles = e.target.checked; renderPort(); } });
+$('vPort').addEventListener('keydown', (e) => { const t = e.target.closest('tr.link, [data-sort], [data-node]'); if (t && t === e.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); t.click(); } });
+
+/* ================================================================ check history */
+const getHistory = (n, impl) => memo(S.cache.history, n + '|' + impl, () => api('/api/history?' + new URLSearchParams({ program: n, implementation: impl })));
+async function historyHtml(name, impl) {
+  let rows; try { rows = (await getHistory(name, impl)).history; } catch { return ''; }
+  if (rows.length < 1) return '';
+  const spark = [...rows].reverse().slice(-24).map((r) => `<i class="${r.matched ? '' : 'x'}" style="height:${r.matched ? 22 : 12}px" title="${esc(r.verdict)} · ${esc(r.at)}"></i>`).join('');
+  return `<div class="panel"><div class="head"><div><h2>Check history</h2><p class="muted sm">Every check of this Python, newest first. The hashes show which code and data each verdict belongs to.</p></div><div class="spark" aria-hidden="true">${spark}</div></div>
+    <div class="body flush scroll" style="max-height:300px"><table class="hist"><thead><tr><th>When</th><th>Verdict</th><th class="num">Compared</th><th class="num">Differ</th><th class="num">Runs</th><th class="num">Coverage</th><th>Python</th></tr></thead><tbody>
+    ${rows.slice(0, 15).map((r) => `<tr><td class="muted">${esc(r.at || '')}</td><td><span class="tag ${r.matched ? 'good' : 'bad'}">${esc(r.verdict)}</span></td><td class="num">${(r.compared ?? 0).toLocaleString()}</td><td class="num ${r.differing ? 'bad' : ''}">${r.differing}</td><td class="num">${r.random_runs ?? ''}</td><td class="num">${r.coverage != null ? r.coverage + '%' : '–'}</td><td class="mono xs faint">${esc(r.python || '')}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+
+/* ================================================================ parallel run against the mainframe's own output */
+const fileB64 = async (file) => { const buf = new Uint8Array(await file.arrayBuffer()); let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000)); return btoa(bin); };
+function mainframePanel(lay, job) {
+  if (job) return '';
+  const ins = lay.files.filter((f) => f.input && f.fields.length), outs = lay.files.filter((f) => f.output && f.fields.length);
+  if (!outs.length) return '';
+  const pick = (id, label, hint) => `<div class="frow"><div><b class="mono">${esc(label)}</b>${hint ? `<div class="faint xs">${esc(hint)}</div>` : ''}</div><div class="row"><label class="btn sm" for="${id}" tabindex="0">${ic('upload', 14)}Choose file</label><span class="fname" id="${id}-n">None</span><input type="file" id="${id}" hidden></div></div>`;
+  return `<div class="panel" id="mfPanel"><div class="head"><div><h2>Check against your mainframe's output</h2><p class="muted sm" style="max-width:70ch">A parallel run. Give the data a real job read and the output it wrote. The Python is checked against what <b>your mainframe</b> produced, not against GnuCOBOL. Séance also runs GnuCOBOL on the same data and tells you whether the two agree.</p></div></div>
+    <div class="body mf"><div class="stack" style="gap:10px"><h3>What the job read <span class="faint sm">(optional: the saved data is used for anything you leave out)</span></h3>${ins.map((f, i) => pick('mfi' + i, f.assign, f.record || '')).join('') || '<p class="muted sm">This program reads no record files.</p>'}
+      ${lay.console_input?.length ? `<label class="block">Console input<small>One value per line</small><textarea id="mfStdin" rows="3" spellcheck="false"></textarea></label>` : ''}</div>
+      <div class="stack" style="gap:10px"><h3>What it wrote <span class="faint sm">(at least one file)</span></h3>${outs.map((f, i) => pick('mfo' + i, f.assign, f.record || '')).join('')}${pick('mfc', 'Console output', 'DISPLAY text, if you have it')}</div>
+      <div class="row"><label class="inline" for="mfCode">Encoding <select id="mfCode"><option value="">ASCII</option><option value="cp037">EBCDIC cp037 (US)</option><option value="cp1140">EBCDIC cp1140 (US, Euro)</option><option value="cp500">EBCDIC cp500 (International)</option><option value="cp273">EBCDIC cp273 (German)</option><option value="cp1047">EBCDIC cp1047 (Open Systems)</option></select></label>
+        <button class="btn primary" id="mfAdd">${ic('play', 15)}Add Parallel Run</button><span class="faint sm" id="mfNote"></span></div></div></div>`;
+}
+function bindMainframe(lay) {
+  const panel = $('mfPanel'); if (!panel) return;
+  const ins = lay.files.filter((f) => f.input && f.fields.length), outs = lay.files.filter((f) => f.output && f.fields.length);
+  panel.addEventListener('change', (e) => { const f = e.target.files?.[0]; if (e.target.type === 'file') $(e.target.id + '-n').textContent = f ? f.name : 'None'; });
+  panel.addEventListener('keydown', (e) => { if (e.target.matches('label[for]') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $(e.target.getAttribute('for')).click(); } });
+  $('mfAdd').addEventListener('click', (e) => busyBtn(e.currentTarget, 'Running both', async () => {
+    const files = async (list, prefix) => { const out = []; for (let i = 0; i < list.length; i++) { const f = $(prefix + i)?.files?.[0]; if (f) out.push({ file: list[i].assign, base64: await fileB64(f) }); } return out; };
+    const outputs = await files(outs, 'mfo'); const con = $('mfc').files?.[0];
+    if (!outputs.length && !con) { say('Choose at least one output file from your mainframe run.', 'error'); return; }
+    const first = [...panel.querySelectorAll('input[type=file]')].map((x) => x.files?.[0]).find(Boolean);
+    const body = { filename: first ? first.name : 'mainframe', inputs: await files(ins, 'mfi'), outputs, console_output_base64: con ? await fileB64(con) : null, console_input: $('mfStdin') ? $('mfStdin').value.split('\n').filter((x, i, a) => x !== '' || i < a.length - 1) : null, code_page: $('mfCode').value || null };
+    const name = S.name; const r = await send(`/api/golden/${enc(name)}`, body, 'POST', 300000);
+    forget(name, ['sets']); await refreshProgram(name); if (here(name, 'data')) renderData();
+    say(r.cobol_agrees ? 'Added. GnuCOBOL gives the same output as your mainframe on this data.' : `Added. GnuCOBOL differs from your mainframe on this data (${plural(r.cobol_differences, 'difference')}). The Python is checked against the mainframe.`, r.cobol_agrees ? 'ok' : 'error');
+  }));
 }
 
 /* ================================================================ add dialog */
@@ -1458,7 +1821,7 @@ $('setReset').addEventListener('click', () => { prefs = { ...DEFAULTS, guideSeen
 function openKeys() {
   const g = (t, rows) => `<h3>${t}</h3>` + rows.map(([k, d]) => `<span>${k.split(' ').map((x) => (x === '+' ? '+' : `<kbd>${x}</kbd>`)).join(' ')}</span><span class="muted">${d}</span>`).join('');
   $('keysBody').innerHTML = g('Anywhere', [[`${MOD} K`, 'Search programs and actions'], ['/', 'Search programs and actions'], ['A', 'Add a program'], ['G W', 'Go to the workspace'], [`${MOD} B`, 'Show or hide the program list'], ['?', 'This list'], ['Esc', 'Close a dialog, menu or the tour']])
-    + g('In a program', [['1 – 5', 'Overview, Code, Check, Try Input, Test Data'], ['R', 'Run the check'], ['[ ]', 'Previous or next program'], [`${MOD} S`, 'Save the Python (in the Code tab)'], ['← →', 'Move between tabs when a tab has focus']])
+    + g('In a program', [['1 – 6', 'Overview, Code, Analysis, Check, Try Input, Test Data'], ['R', 'Run the check'], ['[ ]', 'Previous or next program'], [`${MOD} S`, 'Save the Python (in the Code tab)'], ['← →', 'Move between tabs when a tab has focus']])
     + g('In the search', [['↑ ↓', 'Move'], ['Enter', 'Open']]);
   $('keysDlg').showModal();
 }
@@ -1526,8 +1889,8 @@ function tourSteps(name) {
   const steps = [];
   steps.push({ id: 'list', go: () => goTo(name, 'overview'), target: () => document.querySelector(`.side-item[data-name="${name}"]`), place: 'right', title: 'Your workspace',
     body: async () => `<p><b>${esc(p.title)}</b> is now in your workspace. Every program you add is listed here with the result of its last check. The dot shows the status and the words beside it say the same thing.</p><p>Press <kbd>${MOD}</kbd> <kbd>K</kbd> at any time to jump to a program or run an action.</p>` });
-  steps.push({ id: 'tabs', go: () => goTo(name, 'overview'), target: () => $('tabs'), place: 'bottom', title: 'Five sections for each program',
-    body: async () => `<ul><li><b>Overview</b>: the files and fields it touches, and a plain-English description.</li><li><b>Code</b>: the original next to the Python.</li><li><b>Check</b>: the evidence.</li>${job ? '' : '<li><b>Try Input</b>: type data, see both outputs.</li>'}<li><b>Test Data</b>: the saved runs, and your own files.</li></ul><p class="faint sm">Keys <kbd>1</kbd> to <kbd>5</kbd> switch between them.</p>` });
+  steps.push({ id: 'tabs', go: () => goTo(name, 'overview'), target: () => $('tabs'), place: 'bottom', title: 'Six sections for each program',
+    body: async () => `<ul><li><b>Overview</b>: the files and fields it touches, and a plain-English description.</li><li><b>Code</b>: the original next to the Python.</li><li><b>Analysis</b>: flow, business rules, data dictionary and lineage.</li><li><b>Check</b>: the evidence.</li>${job ? '' : '<li><b>Try Input</b>: type data, see both outputs.</li>'}<li><b>Test Data</b>: the saved runs, and your own files.</li></ul><p class="faint sm">Keys <kbd>1</kbd> to <kbd>6</kbd> switch between them.</p>` });
   steps.push({ id: 'code', go: () => goTo(name, 'code'), target: () => document.querySelector('#pCode .cols'), place: 'bottom', title: job ? 'The job and the programs it runs' : 'The original and the Python, side by side',
     body: async () => job ? '<p>The JCL is on the left. A job has no Python of its own: each step runs the Python of the program it names, and the utilities (SORT, IEBGENER) run as the same Python on both sides.</p>' : '<p>Each Python line carries the COBOL line it was translated from. <b>Click a Python line</b> and the COBOL line lights up.</p><p>Anything the translator cannot handle is marked and fails loudly when checked, so nothing passes by accident.</p>' });
   steps.push({ id: 'check', go: () => goTo(name, 'check'), target: () => $('runBtn'), place: 'bottom', title: 'Run the check',
@@ -1551,7 +1914,7 @@ function tourSteps(name) {
   steps.push({ id: 'data', go: () => goTo(name, 'data'), target: () => document.querySelector('#pData .panel'), place: 'bottom', title: 'Bring real data',
     body: async () => job ? '<p>The saved sets the job was recorded on. Add data to the programs the job runs to test them with real files.</p>' : '<p>The saved test sets are listed here. Drop in a <b>real input file</b>, ASCII or EBCDIC, and the COBOL runs on it first; every later check includes it. EBCDIC is converted field by field from the record layout.</p>' });
   steps.push({ id: 'export', go: () => goTo(name, 'overview'), target: () => $('exportBtn'), place: 'bottom', title: 'Take it with you',
-    body: async () => '<p>Export the Python file, a <b>standalone package</b> that runs with plain Python (no Séance, no COBOL), or the check report with its receipt.</p>' });
+    body: async () => '<p>Export the Python file, a <b>standalone package</b> that runs with plain Python (no Séance, no COBOL) and carries a pytest suite of the saved runs, or the check report as HTML, Markdown or JSON.</p>' });
   steps.push({ id: 'done', go: () => goTo(name, 'overview'), target: null, title: 'That is the loop',
     body: async () => `<p><b>Add COBOL, check it, read the evidence.</b> Whenever you change the Python, run the check again.</p><p class="muted">The sample stays in your workspace until you remove it. Your own programs are never touched by that.</p>`,
     buttons: () => [{ label: 'Add My Own COBOL', primary: true, run: async () => { endTour(true); openAdd(); } }, { label: 'Remove The Sample', run: async () => { endTour(true); await removeSamples(); } }, { label: 'Keep Exploring', run: async () => endTour(true) }], final: true });
