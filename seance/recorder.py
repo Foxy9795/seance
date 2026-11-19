@@ -21,11 +21,18 @@ class LegacyRuntimeError(RuntimeError):
 
 def cobol_env() -> dict[str, str]:
     env = dict(os.environ)
-    if not shutil.which("cobc") and GNUCOBOL.exists():
-        env["PATH"] = f"{GNUCOBOL / 'bin'}{os.pathsep}{env['PATH']}"
+    if GNUCOBOL.exists():
+        # the bundled GnuCOBOL first, and no repeated entries: cmd.exe cannot search a PATH longer than 8191 characters
+        bin_dir = str(GNUCOBOL / "bin")
+        seen, parts = set(), [bin_dir]
+        for p in env.get("PATH", "").split(os.pathsep):
+            if p and p.lower() not in seen and p.lower() != bin_dir.lower():
+                seen.add(p.lower())
+                parts.append(p)
+        env["PATH"] = os.pathsep.join(parts)
         env["COB_CONFIG_DIR"] = str(GNUCOBOL / "share" / "gnucobol" / "config")
         env["COB_COPY_DIR"] = str(GNUCOBOL / "share" / "gnucobol" / "copy")
-        env["COB_LIBRARY_PATH"] = str(GNUCOBOL / "bin")
+        env.setdefault("COB_LIBRARY_PATH", str(GNUCOBOL / "bin"))
     return env
 
 
@@ -43,10 +50,19 @@ def _model_cached(program: str, root: str, stamp: float) -> ProgramModel:
     return load_model(program, Path(root))
 
 
+_PRECOMPILERS = [Path(__file__).with_name(n) for n in ("sqlpre.py", "cicspre.py", "cicsbridge.py")]
+
+
+def _newest(src: Path) -> float:
+    """The newest change to a program's sources or to the precompilers that rewrite them."""
+    files = [p for p in src.glob("*") if p.is_file()] + [p for p in _PRECOMPILERS if p.exists()]
+    return max((p.stat().st_mtime for p in files), default=0.0)
+
+
 def get_model(program: str, root: Path = ROOT) -> ProgramModel:
-    """Load the program model, re-reading it when any source file changed."""
+    """Load the program model, re-reading it when any source file (or a precompiler) changed."""
     src = root / "legacy" / program
-    stamp = max((p.stat().st_mtime for p in src.glob("*") if p.is_file()), default=0.0)
+    stamp = _newest(src)
     try:
         return _model_cached(program, str(root), stamp)
     except ModelError as exc:
@@ -76,7 +92,7 @@ def compile_legacy(program: str, root: Path = ROOT) -> Path:
     src_dir = root / "legacy" / program
     exe = root / "build" / program / f"{program}{'.exe' if os.name == 'nt' else ''}"
     exe.parent.mkdir(parents=True, exist_ok=True)
-    newest = max(p.stat().st_mtime for p in src_dir.glob("*") if p.is_file())
+    newest = _newest(src_dir)
     subs = model._every()[1:]
     module_ext = ".dll" if os.name == "nt" else ".so"
     modules = [exe.parent / f"{m.program_id}{module_ext}" for m in subs]
@@ -85,16 +101,19 @@ def compile_legacy(program: str, root: Path = ROOT) -> Path:
     if not cobc_available():
         raise LegacyRuntimeError("cobc not found. Put GnuCOBOL in tools\\gnucobol or on PATH.")
     includes = ["-I", str(src_dir)]
-    if model.sql_tables is not None and any(f.organization == "sqldb" for f in model.files):
+    if any(f.organization == "sqldb" for f in model.files):
         includes = ["-I", str(exe.parent / "sqlsrc")] + includes
         _sql_bridges(exe.parent)
+    if model.cics:
+        includes = ["-I", str(exe.parent / "cicssrc")] + includes
+        _sql_bridges(exe.parent, ("cicsbridge",))
     for m, target in zip(subs, modules):
         _cobc(["-m", *m.compile_flags, *includes, "-o", str(target), str(_prepare(m, exe.parent))], f"{m.path.name}")
     _cobc(["-x", *model.compile_flags, *includes, "-o", str(exe), str(_prepare(model, exe.parent))], "it")
     return exe
 
 
-def _sql_bridges(out_dir: Path) -> None:
+def _sql_bridges(out_dir: Path, names=("sqlbridge", "dsntiar")) -> None:
     """Build SQLBRIDGE and DSNTIAR (C, on the SQLite library Python itself uses) next to the program."""
     import sys
 
@@ -105,10 +124,10 @@ def _sql_bridges(out_dir: Path) -> None:
     local = out_dir / "sqlite3.dll"
     if not local.exists():
         shutil.copy(dll, local)
-    for name in ("sqlbridge", "dsntiar"):
+    for name in names:
         target = out_dir / f"{name.upper()}{'.dll' if os.name == 'nt' else '.so'}"
         src = native / f"{name}.c"
         if target.exists() and target.stat().st_mtime >= src.stat().st_mtime:
             continue
-        extra = ["-L", str(out_dir), "-lsqlite3"] if name == "sqlbridge" else []
+        extra = ["-L", str(out_dir), "-lsqlite3"] if name in ("sqlbridge", "cicsbridge") else []
         _cobc(["-m", "-o", str(target), str(src), *extra], f"the {name} bridge")

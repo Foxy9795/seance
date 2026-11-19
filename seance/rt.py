@@ -1005,6 +1005,21 @@ class Program:
         """CALL name USING args. args: [("reference" | "content" | "value", operand)]. False when not found."""
         target = (name if isinstance(name, str) else self._text(name)).strip().upper()
         entry = getattr(self, "registry", {}).get(target)
+        if entry is None and target == "CICSBRIDGE":
+            views = []
+            for _, arg in args:
+                rec, off, size, _ = self._addr(arg)
+                views.append(memoryview(self.mem[rec])[off:off + size])
+            from . import cicsbridge
+
+            if getattr(self.io, "cics", None) is None:
+                import sqlite3
+
+                conn = sqlite3.connect(":memory:", isolation_level=None)
+                cicsbridge.seed(conn, self.io.inputs.get("CICSDB", b""))
+                self.io.cics = cicsbridge.Bridge(conn)
+            self.io.cics.call(*views[:8])
+            return True
         if entry is None and target in ("SQLBRIDGE", "DSNTIAR"):
             views = []
             for _, arg in args:

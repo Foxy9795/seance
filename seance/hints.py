@@ -49,6 +49,17 @@ def _hints(model: ProgramModel, unit: ProgramModel) -> dict[str, list]:
     for name in unit.accepts:
         if name in names.by_name:
             targets[name] = names.by_name[name][0]
+    if unit.cics:  # what a CICS program receives from the terminal or reads from its files is input too
+        from .cicspre import usage
+
+        use = usage(unit.path.read_text(encoding="utf-8", errors="replace"))
+        refs = list(use["receives"]) + [f["area"] for f in use["files"].values() if f["area"]]
+        for ref in refs:
+            found = names.by_name.get(re.split(r"[\s(]", ref.strip(), 1)[0].upper())
+            if found:
+                for lf in leaves(found[0]):
+                    if lf.name != "FILLER":
+                        targets[lf.item.name] = lf.item
     hints: dict[str, list] = {n: [] for n in targets}
     for n, it in targets.items():
         for _, choices in it.conds:
@@ -74,6 +85,13 @@ def _hints(model: ProgramModel, unit: ProgramModel) -> dict[str, list]:
                 v = _lit(m.group(1))
                 if v is not None:
                     hints[n].append(v)
+            # EVALUATE alias WHEN 'B' ... WHEN 10 THRU 20: every WHEN literal is a value the code tests for
+            pat_e = re.compile(rf"\bEVALUATE\s+{re.escape(alias)}(?![A-Z0-9-(])(.*?)\bEND-EVALUATE\b", re.I | re.S)
+            for block in pat_e.finditer(proc):
+                for m in re.finditer(rf"\b(?:WHEN|THRU|THROUGH)\s+(?:NOT\s+)?{_LIT}", block.group(1), re.I):
+                    v = _lit(m.group(1))
+                    if v is not None:
+                        hints[n].append(v)
 
     out: dict[str, list] = {}
     for n, values in hints.items():

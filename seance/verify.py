@@ -79,7 +79,10 @@ def replay_sets(program: str, impl, model: ProgramModel, root=ROOT, coverage: di
         for d in found[: max(0, SHOWN_DIFFS - len(diffs))]:
             diffs.append({"set": name, **d.to_dict()})
     if tracer is not None:
-        summary = summarize(Path(impl.__file__).read_text(encoding="utf-8-sig"), tracer.hits)
+        limits = {}
+        if model.source and model.source != model.path:
+            limits[""] = len(model.path.read_text(encoding="utf-8", errors="replace").splitlines())
+        summary = summarize(Path(impl.__file__).read_text(encoding="utf-8-sig"), tracer.hits, limits)
         if summary:
             coverage.update(summary)
     return sets, diffs
@@ -126,7 +129,13 @@ class _Runner:
 
     def diffs(self, rows: dict, stdin: list[str]) -> tuple[Case, list[Diff]]:
         self.runs += 1
-        case = build_case(self.model, rows, stdin)
+        tables = None
+        if self.model.sql_tables:  # a database whose keys overlap this run's input
+            from .cases import _text_pool, table_rows
+
+            seed = sum(len(v) for v in rows.values()) * 31 + len(stdin)
+            tables = table_rows(self.model, random.Random(seed), 15, _text_pool(self.model, rows))
+        case = build_case(self.model, rows, stdin, tables, random.Random(len(stdin) * 7 + sum(len(v) for v in rows.values())), 15)
         found, _ = compare(self.model, run_cobol(self.exe, self.model, case), run_python(self.impl, case))
         return case, found
 
@@ -190,7 +199,7 @@ def describe_case(model: ProgramModel, case: Case) -> dict:
 def random_check(program: str, impl, model: ProgramModel, rounds: int) -> tuple[int, dict | None]:
     from .hints import value_hints
 
-    if not model.inputs and not model.all_accepts:
+    if not model.inputs and not model.all_accepts and not model.cics:
         return 0, None  # the program reads nothing, so every run is the same as the saved one
     exe = compile_legacy(program)
     hints = value_hints(model)

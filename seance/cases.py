@@ -79,6 +79,16 @@ def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> 
                 for n in {f.assign, f.raw_assign or f.assign}:
                     env[f"DD_{n}"] = str(target)
                     env[f"dd_{n}"] = str(target)
+            if f.organization == "cicsdb":  # the CICS region's state: files, queues, terminal, COMMAREA
+                import sqlite3
+
+                from .cicsbridge import seed
+
+                conn = sqlite3.connect(str(target), isolation_level=None)
+                seed(conn, case.files.get(f.assign, b""))
+                conn.close()
+                env["SEANCE_CICSDB"] = str(target)
+                continue
             if f.organization == "sqldb":  # the database: seeded before the run, dumped after
                 from .sqlbridge import seed_file
 
@@ -93,8 +103,21 @@ def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> 
                 else:
                     target.write_bytes(case.files[f.assign])
         stdin = "".join(line + "\n" for line in case.stdin).encode(ENC, errors="replace")
+        cicsdb = next((paths[f.assign] for f in model.all_files if f.organization == "cicsdb"), None)
         try:
             proc = subprocess.run([str(exe)], cwd=work, input=stdin, capture_output=True, env=env, timeout=timeout)
+            while cicsdb is not None and proc.returncode == 0:  # the next screen of a pseudo-conversation
+                import sqlite3
+
+                from .cicsbridge import next_turn
+
+                conn = sqlite3.connect(str(cicsdb), isolation_level=None)
+                more = next_turn(conn)
+                conn.close()
+                if not more:
+                    break
+                again = subprocess.run([str(exe)], cwd=work, input=b"", capture_output=True, env=env, timeout=timeout)
+                proc = subprocess.CompletedProcess(proc.args, again.returncode, proc.stdout + again.stdout, proc.stderr + again.stderr)
         except subprocess.TimeoutExpired:
             raise LegacyRuntimeError(
                 f"The COBOL program did not finish within {timeout} seconds. A loop probably never ends, or it waits for more console input."
@@ -103,7 +126,7 @@ def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> 
         for f in model.all_files:
             if not f.is_output or not paths[f.assign].exists():
                 continue
-            if f.organization == "sqldb":
+            if f.organization in ("sqldb", "cicsdb"):
                 from .sqlbridge import dump_file
 
                 outputs[f.assign] = dump_file(paths[f.assign])
@@ -132,8 +155,22 @@ def run_python(module, case: Case) -> Result:
     try:
         out = main(io)
         io = out if out is not None else io
+        if "CICSDB" in case.files:  # a pseudo-conversation: run again while the program asks for the next screen
+            from .cicsbridge import next_turn
+            from .sqlbridge import dump
+
+            while getattr(io, "cics", None) is not None and int(io.return_code or 0) == 0 and next_turn(io.cics.conn):
+                io.cics.last, io.cics.browse, io.cics.qpos = {}, {}, {}
+                out = main(io)
+                io = out if out is not None else io
+            if getattr(io, "cics", None) is not None:
+                io.outputs["CICSDB"] = dump(io.cics.conn)
         return Result(dict(io.outputs), io.stdout.replace("\r\n", "\n"), int(io.return_code or 0))
     except Exception as exc:  # the program's own failure is a result, not a crash of the checker
+        if getattr(io, "cics", None) is not None:
+            from .sqlbridge import dump
+
+            io.outputs["CICSDB"] = dump(io.cics.conn)
         return Result(dict(io.outputs), io.stdout.replace("\r\n", "\n"), int(getattr(io, "return_code", 0) or 0), f"{type(exc).__name__}: {exc}")
 
 
@@ -141,7 +178,7 @@ def run_python(module, case: Case) -> Result:
 
 def _units(f: FileDef | None, data: bytes) -> list[bytes]:
     """Split an output stream into records or lines."""
-    if f is not None and f.organization == "sqldb":
+    if f is not None and f.organization in ("sqldb", "cicsdb"):
         f = None
     if f is not None and f.keyed:
         step = f.size + (9 if f.organization == "relative" else 0)
@@ -380,8 +417,24 @@ def console_lines(model: ProgramModel, hints: dict[str, list], rng: random.Rando
     return lines
 
 
-def table_rows(model: ProgramModel, rng: random.Random | None, count: int) -> dict[str, list[list]]:
-    """Rows for each SQL table, from its column types: boundary values for the edge set, random ones otherwise."""
+def _text_pool(model: ProgramModel, rows_by_file: dict) -> dict[int, list[str]]:
+    """Text values of the generated input records, by length: table keys drawn from them meet the input."""
+    pool: dict[int, list[str]] = {}
+    for f in model.inputs:
+        if f.record is None:
+            continue
+        lv = leaves(f.record)
+        for row in rows_by_file.get(f.name, []):
+            for i, v in row.items():
+                if i < len(lv) and lv[i].item.kind == "alpha" and isinstance(v, str) and v.strip():
+                    pool.setdefault(lv[i].item.size, []).append(v)
+    return pool
+
+
+def table_rows(model: ProgramModel, rng: random.Random | None, count: int, pool: dict | None = None) -> dict[str, list[list]]:
+    """Rows for each SQL table, from its column types: boundary values for the edge set, random ones otherwise.
+    The first (key) column takes about half its values from input fields of the same length, so lookups hit."""
+    pool = pool or {}
     out = {}
     for name, t in model.sql_tables.items():
         rows = []
@@ -406,6 +459,9 @@ def table_rows(model: ProgramModel, rng: random.Random | None, count: int) -> di
                     size = int(ln.group(1)) if ln else 10
                     if ci == 0:
                         v = f"K{k + 1:0{max(1, min(size - 1, 6))}d}"
+                        same = pool.get(size, [])
+                        if same and (k % 2 == 0 if rng is None else rng.random() < 0.5):
+                            v = same[k % len(same)] if rng is None else rng.choice(same)
                     else:
                         v = ("A" * min(size, 4)) if rng is None else rng.choice(["SMITH", "JONES", "GARCIA", "LEE", "O'NEIL", "MÜLLER", "BROWN"])
                     row.append(v[:size])
@@ -414,9 +470,105 @@ def table_rows(model: ProgramModel, rng: random.Random | None, count: int) -> di
     return out
 
 
+def _area_bytes(it: Item, row: dict[int, object]) -> bytes:
+    """Bytes of any data item (not only an 01) from leaf values, as encode_record does for records."""
+    buf = bytearray(b" " * it.size)
+    for i, lf in enumerate(leaves(it)):
+        if lf.name == "FILLER":
+            continue
+        sp = spec_of(lf.item)
+        v = row.get(i)
+        if v is None:
+            v = Decimal(0) if lf.item.kind in ("num", "edited") else ""
+        if lf.item.kind == "num":
+            v = store_into(sp, Decimal(v), move=True)
+        buf[lf.offset:lf.offset + lf.width] = encode(sp, v)
+    return bytes(buf)
+
+
+AID_MIX = ["'"] * 6 + ["_", "@", "1", "%"]  # mostly ENTER, sometimes CLEAR, PF12, PF1, PA1
+EDGE_AIDS = ["_", "@", "%", "1"]  # the edge set ends with these keys, then PF3
+
+
+def cics_seed(model: ProgramModel, rng: random.Random | None, count: int) -> tuple[bytes, int]:
+    """The CICS region a transaction starts in: file records, the screens the user will send, an empty COMMAREA."""
+    from .cicspre import usage
+    from .hints import value_hints
+    from .translate import build_names
+
+    names, _ = build_names(model)
+    use = usage(model.path.read_text(encoding="utf-8", errors="replace"))
+    hints = value_hints(model)
+
+    def item(ref):
+        if not ref:
+            return None
+        base = re.split(r"[\s(]", ref.strip(), 1)[0].upper()
+        found = names.by_name.get(base)
+        return found[0] if found else None
+
+    lines, keys_by_len = [], {}
+    n = 30 if rng is None else count
+    for fname, f in sorted(use["files"].items()):
+        area, keyit = item(f["area"]), item(f["key"])
+        if area is None:
+            continue
+        kl = keyit.size if keyit is not None else min(8, area.size)
+        rows = edge_rows(area, hints)[:n] if rng is None else random_rows(area, n, rng, hints)
+        seen: set[bytes] = set()
+        for i, r in enumerate(rows):
+            rec = bytearray(_area_bytes(area, r))
+            if bytes(rec[:kl]) in seen:  # the key starts the record (as in a KSDS); give every edge record its own
+                rec[:kl] = str(i).zfill(kl)[-kl:].encode()
+            if bytes(rec[:kl]) in seen:
+                continue
+            rec = bytes(rec)
+            key = rec[:kl]
+            seen.add(key)
+            keys_by_len.setdefault(kl, []).append(key)
+            if rng is None and i == len(rows) - 1:  # one record longer than the program's area: READ gives LENGERR
+                long_key = str(len(rows)).zfill(kl)[-kl:].encode()
+                if long_key not in seen:
+                    long_rec = long_key + rec[kl:] + b"+"
+                    lines.append(f"INSERT OR IGNORE INTO files VALUES ('{fname}', X'{long_key.hex()}', X'{long_rec.hex()}');")
+                    keys_by_len[kl].insert(0, long_key)
+            lines.append(f"INSERT OR IGNORE INTO files VALUES ('{fname}', X'{key.hex()}', X'{rec.hex()}');")
+    screens = 0
+    for ref in dict.fromkeys(use["receives"]):
+        area = item(ref)
+        if area is None:
+            continue
+        rows = edge_rows(area, hints)[:n] if rng is None else random_rows(area, n, rng, hints)
+        if rng is None:
+            aids = ["'"] * len(rows) + ["'"] + EDGE_AIDS + ["3"]
+            rows = rows + [None] + rows[:len(EDGE_AIDS) + 1]  # None: ENTER with nothing typed
+        else:
+            aids = [rng.choice(AID_MIX) for _ in rows] + (["3"] if rng.random() < 0.5 else [])
+            rows = rows + rows[:len(aids) - len(rows)]
+        for k, r in enumerate(rows):
+            if r is None:
+                screens += 1
+                lines.append(f"INSERT INTO term_in (seq, aid, data) VALUES ({screens}, X'27', X'');")
+                continue
+            data = bytearray(_area_bytes(area, r))
+            for lf in leaves(area):  # typed keys that exist in the files, about half the time
+                pool = keys_by_len.get(lf.width)
+                if pool and lf.item.kind == "alpha" and (k % 2 == 0 if rng is None else rng.random() < 0.5):
+                    data[lf.offset:lf.offset + lf.width] = pool[k % len(pool)] if rng is None else rng.choice(pool)
+            aid = aids[k]
+            screens += 1
+            lines.append(f"INSERT INTO term_in (seq, aid, data) VALUES ({screens}, X'{aid.encode().hex()}', X'{bytes(data).hex()}');")
+    lines.append("INSERT INTO control VALUES ('commarea_in', X'');")
+    return ("\n".join(lines) + "\n").encode(ENC), screens + sum(1 for l in lines if l.startswith("INSERT OR IGNORE INTO files"))
+
+
 def build_case(model: ProgramModel, rows_by_file: dict[str, list[dict[int, object]]], stdin: list[str],
-               tables: dict[str, list[list]] | None = None) -> Case:
+               tables: dict[str, list[list]] | None = None, rng: random.Random | None = None, cics_count: int = 0) -> Case:
     case = Case(stdin=list(stdin))
+    if model.cics:
+        seed, n = cics_seed(model, rng, cics_count or 12)
+        case.files["CICSDB"] = seed
+        case.records["CICSDB"] = [b""] * n
     if model.sql_tables:
         from .sqlpre import schema_and_seed
 
@@ -486,9 +638,10 @@ def generated_cases(model: ProgramModel, random_count: int = 300, seed: int = 10
     rand = {f.name: random_rows(f.record, random_count, rng, hints) for f in model.inputs if f.record is not None}
     apply_links(links, edges, random.Random(seed + 1))
     apply_links(links, rand, rng)
-    sets = {"edges": build_case(model, edges, console_lines(model, hints, None), table_rows(model, None, 0))}
+    sets = {"edges": build_case(model, edges, console_lines(model, hints, None), table_rows(model, None, 0, _text_pool(model, edges)))}
     if model.inputs or model.all_accepts:
-        sets["random"] = build_case(model, rand, console_lines(model, hints, rng), table_rows(model, rng, 40))
+        sets["random"] = build_case(model, rand, console_lines(model, hints, rng), table_rows(model, rng, 40, _text_pool(model, rand)),
+                                    rng, 40)
     # Input files that are not there: reaches the code that handles a missing file, where the program checks for it
     if any(f.status or f.optional for f in model.inputs):
         sets["missing"] = Case(stdin=console_lines(model, hints, None))

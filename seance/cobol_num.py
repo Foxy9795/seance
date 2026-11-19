@@ -185,12 +185,15 @@ def _symbol(c: str, negative: bool) -> str:
 def format_edited(value: Decimal | int | str, pic: str) -> str:
     """Apply a numeric-edited PICTURE to a value, the way GnuCOBOL does on a MOVE.
 
-    Values that fit the picture match GnuCOBOL exactly (see tests). When a value is too big for the picture,
-    GnuCOBOL's display of the leftover digits is inconsistent between picture shapes, so it is not emulated:
-    Séance will report such a field as a difference instead of guessing.
+    As in GnuCOBOL (move.c), a leading $ + or - (the first symbol of a floating run) also takes a digit of the value. That digit is
+    never printed, but when it is not zero (a value too big for the picture) zero suppression ends there and the
+    symbol stays in the first cell: -1071699.76 in -(6)9.99 is "-071699.76". A picture with no 9 and no decimals
+    that prints no digit is all blanks. Measured against GnuCOBOL 3.1.2 (tests/test_edited.py).
     """
     int_pic, dec_pic, point, trailer = split_edited(pic)
     n_int, n_dec = edited_digits(pic)
+    if _run_length(int_pic) >= 1:
+        n_int += 1  # the digit under the first (or only) leading symbol
     d = Decimal(value)
     quantum = Decimal(1).scaleb(-n_dec)
     full = int((abs(d).quantize(quantum, rounding=ROUND_DOWN) * 10**n_dec).to_integral_value())
@@ -221,9 +224,17 @@ def format_edited(value: Decimal | int | str, pic: str) -> str:
         if ch in _SYMBOLS and ch == symbol and seen_symbols < run:
             seen_symbols += 1
             if not floating:
+                if int_digits[di] != "0":
+                    suppressing = False  # a digit too many for the picture: nothing after it is suppressed
+                di += 1
                 cells.append(_symbol(ch, negative))
             elif seen_symbols == 1:
-                cells.append(" ")  # holds the symbol only, never a digit
+                digit = int_digits[di]; di += 1  # taken but never printed
+                if digit == "0":
+                    cells.append(" ")
+                else:
+                    cells.append(_symbol(ch, negative))
+                    placed, suppressing = True, False
             else:
                 digit = int_digits[di]; di += 1
                 if suppressing and digit == "0":
@@ -245,6 +256,8 @@ def format_edited(value: Decimal | int | str, pic: str) -> str:
             cells.append(" ")
         else:
             cells.append(ch)  # '0' and '/' are inserted as written
+    if suppressing and not point and "9" not in int_pic and fill == " ":
+        return " " * (len(cells) + len(trailer))  # nothing printed: the whole field is blank
     if floating and not placed:
         end_suppression()
 

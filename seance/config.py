@@ -37,11 +37,16 @@ SUPPORTED = [
     "MOVE, COMPUTE, ADD, SUBTRACT, MULTIPLY, DIVIDE, IF, EVALUATE, PERFORM in every form, GO TO, NEXT SENTENCE, ON SIZE ERROR",
     "STRING, UNSTRING, INSPECT, SEARCH, SEARCH ALL, SET, INITIALIZE, reference modification, intrinsic FUNCTIONs",
     "Mainframe data files in EBCDIC, converted field by field from the record layout",
+    "Floating point (COMP-1, COMP-2), P scaling in pictures, and CALL ... RETURNING",
+    "Embedded SQL (EXEC SQL: SELECT INTO, cursors, INSERT, UPDATE, DELETE, SQLCA, DSNTIAR), run on SQLite on both sides",
+    "CICS transactions (EXEC CICS: files, browse, SEND/RECEIVE, temporary storage, RETURN TRANSID, LINK, XCTL, HANDLE CONDITION), "
+    "replayed screen by screen on both sides",
+    "JCL jobs: steps that run programs, SORT, IEBGENER and IEFBR14, COND and IF/THEN, temporary data sets passed between steps",
+    "Variable-length records (RECORD VARYING, RECORD CONTAINS n TO m)",
 ]
 NOT_YET = [
-    "Embedded SQL (EXEC SQL), CICS and IMS: they need a database or transaction monitor to run the original",
-    "JCL jobs with several steps (each program is checked on its own)",
+    "IMS databases (EXEC DLI, CALL 'CBLTDLI')",
     "REPORT SECTION and SCREEN SECTION",
-    "Floating point (COMP-1, COMP-2) and P scaling in pictures",
-    "CALL ... RETURNING and dynamic CALL of programs that are not in the folder",
+    "BMS map source (the symbolic map copybook is used instead) and CICS commands outside the list above",
+    "Dynamic CALL of programs that are not in the folder, and PROCEDURE DIVISION RETURNING (GnuCOBOL 3.1.2 crashes on it)",
 ]

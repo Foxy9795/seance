@@ -84,6 +84,7 @@ class ProgramModel:
     linkage_records: list[Item] = field(default_factory=list)
     source: Path | None = None  # what is compiled and translated: the program itself, or its precompiled copy
     sql_tables: dict = field(default_factory=dict)  # EXEC SQL: tables from DECLARE TABLE (or schema.sql)
+    cics: bool = False  # EXEC CICS: runs as a transaction
     using: list[str] = field(default_factory=list)  # PROCEDURE DIVISION USING: linkage records in order
     initial: bool = False  # PROGRAM-ID ... IS INITIAL: fresh storage on every CALL
     subprograms: list["ProgramModel"] = field(default_factory=list)  # other programs in the folder, reached by CALL
@@ -247,7 +248,23 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
         except SqlError as exc:
             raise ModelError(f"embedded SQL: {exc}") from exc
         src_dir = root / "build" / program / "sqlsrc"
+    cics = any(q.is_file() and re.search(r"\bEXEC\s+CICS\b", q.read_text(encoding="utf-8", errors="replace"), re.I) for q in src_dir.iterdir())
+    cics_notes: list[str] = []
+    if cics:  # CICS commands become CALLs of the CICS bridge (after SQL, if the program has both)
+        from .cicspre import CicsError, precompile_folder as cics_precompile
+
+        try:
+            cics_notes = cics_precompile(src_dir, program, root / "build" / program / "cicssrc")
+        except CicsError as exc:
+            raise ModelError(f"CICS: {exc}") from exc
+        src_dir = root / "build" / program / "cicssrc"
     model = load_file(src_dir / path.name, program, shown=path)
+    if cics:
+        model.notes.append("CICS: commands precompiled to CALLs of Séance's CICS bridge; files, temporary storage, the terminal "
+                           "and the COMMAREA are kept in SQLite, and the transaction runs pseudo-conversationally.")
+        model.notes += cics_notes
+        model.files.append(FileDef("CICSDB", "CICSDB", False, "cicsdb", modes={"io"}))
+        model.cics = True
     if pre is not None:
         model.sql_tables = pre.tables
         model.notes.append(f"Embedded SQL: {pre.statements} statement(s) precompiled to CALLs of Séance's SQL bridge, run on SQLite "
@@ -379,7 +396,11 @@ def load_file(path: Path, program: str, shown: Path | None = None) -> ProgramMod
     for m in re.finditer(r"\bACCEPT\s+([A-Z0-9-]+)(?:\s*\([^)]*\))?(?!\s+FROM)", proc_text, re.I):
         accepts.append(m.group(1).upper())
     calls = []
-    for m in re.finditer(r"\bCALL\s+['\"]([A-Za-z0-9_-]+)['\"]", proc_text, re.I):
+    for m in re.finditer(r"\bCALL\s+['\"]([A-Za-z0-9_-]+)['\"]|\bEXEC\s+CICS\s+(?:LINK|XCTL)\s+PROGRAM\s*\(\s*['\"]([A-Za-z0-9_-]+)", proc_text, re.I):
+        name = (m.group(1) or m.group(2)).upper()
+        if name not in calls:
+            calls.append(name)
+    for m in []:
         if m.group(1).upper() not in calls:
             calls.append(m.group(1).upper())
     pid, initial = program.upper(), False
@@ -393,7 +414,7 @@ def load_file(path: Path, program: str, shown: Path | None = None) -> ProgramMod
             break
     model = ProgramModel(program, shown or path, fixed, pid.strip("'\"").upper(), list(files.values()), fd_items, ws, proc, ws_records, accepts,
                          [], sorted(set(unsupported)), linkage_records=linkage, using=using, initial=initial,
-                         calls=[c for c in calls if c not in ("SQLBRIDGE", "DSNTIAR")], source=path)
+                         calls=[c for c in calls if c not in ("SQLBRIDGE", "DSNTIAR", "CICSBRIDGE")], source=path)
     if not proc:
         raise ModelError("No PROCEDURE DIVISION statements were found.")
     missing = [u for u in using if u not in {r.name for r in linkage}]

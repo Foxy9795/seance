@@ -11,6 +11,9 @@ Apply when editing files under `migrated/`.
 - Never use `float`, `round()`, or banker's rounding. COBOL ROUNDED is half away from zero.
 - Record layouts come from the COBOL (FD, WORKING-STORAGE and copybooks). To change one, change the COBOL and run
   `python -m seance record <program>` and `python -m seance translate <program>`.
+- Programs with EXEC SQL or EXEC CICS are precompiled into CALLs to a bridge. The Python side must go through
+  `seance/sqlbridge.py` or `seance/cicsbridge.py`, never a second implementation. A change to bridge behaviour goes
+  into both the Python bridge and its C twin in `seance/native/`, then re-record.
 - After a change, run `python -m seance verify <program>`. A mismatch means the Python is wrong, not the saved test data.
 
 ## Use the MCP tools instead of guessing

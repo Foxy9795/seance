@@ -13,12 +13,13 @@ from seance.recorder import cobc_available, cobc_path, cobol_env
 
 pytestmark = pytest.mark.skipif(not cobc_available(), reason="GnuCOBOL not installed")
 
-VALUES = ["0", "0.05", "5", "12.5", "123.45", "1234.56", "-1.5", "-0.05", "-1234.56", "99999.99", "987654.32", "-987654.32", "7", "100", "0.99", "1000000", "-1000000", "100000.5", "2000000.07", "-0.001", "-0.00"]
+VALUES = ["0", "0.05", "5", "12.5", "123.45", "1234.56", "-1.5", "-0.05", "-1234.56", "99999.99", "987654.32", "-987654.32", "7", "100", "0.99", "1000000", "-1000000", "100000.5", "2000000.07", "-0.001", "-0.00", "-1071699.76", "-71699.76", "-9000005", "-100012.34", "10000"]
 
 EDITED = [
     "9999.99", "ZZZ9.99", "ZZZ9", "ZZ,ZZ9.99", "ZZ,ZZ9.99-", "ZZ9.99CR", "ZZ9.99DB", "$$,$$$,$$9.99", "$$$9.99", "$ZZ,ZZ9.99",
     "+++9.99", "---9.99", "-(5)9.99", "--,--9.99", "***,**9.99", "ZZZ,ZZ9", "999,999.99", "ZZ9.99+", "99B99",
     "$$,$$9.99-", "$$,$$9.99", "$$$,$$9.99-", "$$$9.99-", "$$,$$9",
+    "-(6)9.99", "-,---,--9.99", "$$,$$9.99CR", "++++", "+ZZZ9.99", "-9999",
 ]
 SIGNED = [("S9(5)V99", "trailing_over"), ("S9(5)V99 SIGN LEADING", "leading_over"), ("S9(5)V99 SIGN TRAILING SEPARATE", "trailing_sep"), ("S9(5)V99 SIGN LEADING SEPARATE", "leading_sep")]
 
@@ -82,8 +83,6 @@ def test_edited_pictures_match_cobol():
     problems = []
     for v, line in zip(VALUES, lines):
         for pic, w, real in zip(EDITED, widths, split(line.ljust(sum(widths)), widths)):
-            if len(str(int(abs(Decimal(v))))) > edited_digits(expand(pic))[0]:
-                continue  # overflow display is not emulated (documented)
             ours = format_edited(Decimal(v), expand(pic))
             if ours != real:
                 problems.append(f"{pic:<16} value {v:>11}: cobol={real!r} ours={ours!r}")

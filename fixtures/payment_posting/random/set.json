@@ -1,0 +1,15 @@
+{
+  "label": "Random Records",
+  "stdin": [],
+  "inputs": {
+    "PAYIN": "in0.dat",
+    "SQLDB": "in1.dat"
+  },
+  "outputs": {
+    "SQLDB": "out0.dat"
+  },
+  "return_code": 0,
+  "error": null,
+  "records": 340,
+  "console_lines": 0
+}

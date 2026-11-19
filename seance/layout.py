@@ -309,7 +309,7 @@ def leaves(record: Item) -> list[Leaf]:
                 label = "FILLER" if it.name.startswith("FILLER#") else it.name
                 if s:
                     label += "(" + ",".join(map(str, s)) + ")"
-                out.append(Leaf(label, it, it.offset + d, it.size))
+                out.append(Leaf(label, it, it.offset + d - record.offset, it.size))  # relative to the item asked about
 
     if record.children:
         for c in record.children:

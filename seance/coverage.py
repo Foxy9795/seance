@@ -77,8 +77,11 @@ class Tracer:
         return self._local
 
 
-def summarize(source: str, hits: set[int]) -> dict | None:
+def summarize(source: str, hits: set[int], limits: dict[str, int] | None = None) -> dict | None:
+    """limits: program -> last line of the source people see; lines past it were generated (the SQL precompiler's)."""
     tags = tagged_lines(source)
+    if limits:
+        tags = {k: v for k, v in tags.items() if v[0] not in limits or v[1] <= limits[v[0]]}
     if not tags:
         return None
     every = sorted(set(tags.values()))

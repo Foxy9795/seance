@@ -65,15 +65,31 @@ The lists are served by `/api/about` and shown in the app, from `seance/config.p
   SEARCH, SEARCH ALL, SET, INITIALIZE, reference modification, intrinsic FUNCTIONs, edited pictures
 - Mainframe data in **EBCDIC** (code pages 037, 1140, 500, 273, 1047), converted field by field: text and zoned
   numbers change code, packed and binary fields keep their bytes
+- Floating point (COMP-1, COMP-2), P scaling (`999PP`, `VPP99`), CALL ... RETURNING, variable-length records
+- **Embedded SQL** (EXEC SQL): SELECT INTO, cursors (DECLARE, OPEN, FETCH, CLOSE), INSERT, UPDATE, DELETE including
+  WHERE CURRENT OF, SQLCA, WHENEVER, indicator variables, DSNTIAR
+- **CICS** (EXEC CICS): READ (EQUAL, GTEQ, GENERIC, UPDATE), WRITE, REWRITE, DELETE, browsing (STARTBR, READNEXT,
+  READPREV, ENDBR), SEND TEXT/MAP, RECEIVE/RECEIVE MAP, temporary storage and transient data queues, RETURN TRANSID with a
+  COMMAREA, LINK, XCTL, ABEND, HANDLE CONDITION, HANDLE AID, RESP/RESP2, DFHRESP, DFHAID, the EIB
+- **JCL jobs**: a folder with a `.jcl` file. Steps that run programs, SORT/DFSORT, IEBGENER and IEFBR14, COND and
+  IF/THEN/ELSE, temporary data sets (`&&TEMP`) passed between steps, in-stream data
 
-**Not yet:** EXEC SQL, CICS and IMS (the original cannot run without a database or transaction monitor, so there
-would be nothing to prove against), multi-step JCL jobs, REPORT and SCREEN sections, COMP-1/COMP-2, P scaling,
-CALL ... RETURNING. A program that uses them is still accepted when it compiles; untranslatable statements raise an
-error naming the COBOL line, so the check fails there instead of passing quietly.
+**How SQL and CICS run without a mainframe.** Like the IBM precompilers, Séance rewrites each EXEC SQL or EXEC CICS
+into ordinary COBOL that CALLs a bridge, on the same source lines. The COBOL side links a small C bridge; the Python
+side has a Python bridge with the same rules. Both work on one SQLite database, seeded the same way, so both
+programs start from the same tables, VSAM files, queues and screens, and are compared on the state they leave. A
+CICS transaction is replayed pseudo-conversationally: each RETURN TRANSID starts the next turn with the COMMAREA it
+returned and the next screen the user typed (ENTER, PF keys, CLEAR, PA keys, with MAPFAIL where CICS gives it).
+This proves the Python does what the COBOL does against the same data. It does not prove DB2-specific SQL
+behaviour that SQLite does not share; SQL the bridge cannot run is reported, not guessed.
 
-**Real-world test:** the 30 programs of the Open Mainframe Project COBOL course. All 21 that GnuCOBOL can run
-translate with no gaps and match byte for byte, including CBL0033, which CALLs another program. The other 9 are lab
-exercises with deliberate compile errors or an endless loop, or need DB2.
+**Not yet:** IMS (EXEC DLI), REPORT and SCREEN sections, BMS map source (the symbolic map copybook is used), dynamic
+CALL of programs that are not in the folder. A program that uses them is still accepted when it compiles;
+untranslatable statements raise an error naming the COBOL line, so the check fails there instead of passing quietly.
+
+**Real-world test:** the 30 programs of the Open Mainframe Project COBOL course. 24 translate with no gaps and match
+byte for byte, including CBL0033, which CALLs another program, and the three DB2 programs CBLDB21, CBLDB22 and
+CBLDB23. The other 6 cannot be checked: five are lab exercises with deliberate compile errors and one loops forever.
 
 ## How the Checking Works
 
@@ -106,7 +122,7 @@ platforms. Where they need a mainframe, a cloud account or a services contract, 
 | Hash receipt over code and test data | Yes | Partial | No | No | No |
 | Indexed (VSAM-style) files | Yes | No | Yes | Yes | Yes |
 | CALL, SORT | Yes | CALL only | Yes | Yes | Yes |
-| EXEC SQL, CICS, JCL | No | No | Yes | Yes | Yes |
+| EXEC SQL, CICS, JCL | Yes, on SQLite, both sides | No | Yes | Yes | Yes |
 | Runs offline, free | Yes | Yes | No | No | No |
 
 Sources: github.com/thosuperman/cobol-phoenix; docs.aws.amazon.com/transform; ibm.com/products/watsonx-code-assistant-z;
@@ -146,7 +162,7 @@ python -m seance translate accounts       # write the Python draft
 python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 69 tests, including differential tests against GnuCOBOL
+python -m pytest                          # 80 tests, including differential tests against GnuCOBOL
 python scripts\ui_check.py                # 19 checks that drive the real UI in Edge (app must be running)
 ```
 
@@ -166,6 +182,9 @@ python scripts\ui_check.py                # 19 checks that drive the real UI in 
 | order_pricing | CALLs a pricing module (IS INITIAL, RETURN-CODE) and a counter module whose storage persists; CANCEL; ON EXCEPTION. |
 | transaction_sort | SORT USING/GIVING on packed keys, SORT with INPUT/OUTPUT PROCEDURE, and SORT of a table. |
 | seat_bookings | A relative file updated by slot number, then listed with START and READ NEXT. |
+| payment_posting | Embedded SQL: a cursor over payments, SELECT INTO and UPDATE of account balances, SQLCODE checks. |
+| customer_inquiry | A pseudo-conversational CICS transaction: RECEIVE MAP, READ UPDATE and REWRITE of a KSDS, WRITEQ TS, PF3 and CLEAR. |
+| nightly_batch | A JCL job: SORT, then customer_master, then accounts only if the update ended with RC 0, then an IEBGENER backup. |
 
 The three course programs are CC-BY-4.0, unchanged; see `SOURCE.md` next to each.
 
@@ -174,6 +193,11 @@ The three course programs are CC-BY-4.0, unchanged; see `SOURCE.md` next to each
 - Windows-first. The COBOL runtime is the MinGW build of GnuCOBOL 3.1.2.
 - A pass is strong evidence, not a proof for every possible input. Test Strength shows where the evidence is thin.
 - The translator and the description are rule-based, not an LLM. They never guess: what they cannot read is marked.
-- Multi-step JCL jobs and EXEC SQL are the main things to add next.
+- SQL and CICS run on SQLite through bridges, not on DB2 or a CICS region. Both programs see the same data, so a
+  match proves the translation; it says nothing about DB2 behaviour SQLite does not share.
+- HANDLE CONDITION and HANDLE AID take effect in source order, not in the order they run. That is the same for
+  programs that set handlers before using them, which is the usual style; a program that sets them on different
+  paths would need RESP instead.
+- IMS and the REPORT and SCREEN sections are the main things to add next.
 
 License: MIT.
