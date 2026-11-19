@@ -551,6 +551,18 @@ class Program:
             line = line.rstrip(b"\r")
             buf[0:f.size] = line[:f.size].ljust(f.size, b" ")
             self._status(f, "00")
+        elif f.extra.get("variable"):  # 4-byte header: 2-byte big-endian length, 2 zero bytes
+            while f.pos < len(f.data) and f.data[f.pos:f.pos + 1] in (b"\n", b"\r", b"\f"):
+                f.pos += 1
+            if f.pos + 4 > len(f.data):
+                f.at_end = True
+                self._status(f, "10")
+                return False
+            n = int.from_bytes(f.data[f.pos:f.pos + 2], "big")
+            chunk = f.data[f.pos + 4:f.pos + 4 + n]
+            f.pos += 4 + n
+            buf[0:f.size] = chunk[:f.size].ljust(f.size, b" ")
+            self._status(f, "00")
         else:
             chunk = f.data[f.pos:f.pos + f.size]
             f.pos += f.size
@@ -580,6 +592,8 @@ class Program:
         data = bytes(self.mem[f.record][0:size])
         if f.organization == "line":
             data = data.rstrip(b" ")
+        elif f.extra.get("variable"):
+            data = len(data).to_bytes(2, "big") + b"\x00\x00" + data
         nl = b"\n"
         pre = post = b""
         if advancing:
@@ -991,6 +1005,20 @@ class Program:
         """CALL name USING args. args: [("reference" | "content" | "value", operand)]. False when not found."""
         target = (name if isinstance(name, str) else self._text(name)).strip().upper()
         entry = getattr(self, "registry", {}).get(target)
+        if entry is None and target in ("SQLBRIDGE", "DSNTIAR"):
+            views = []
+            for _, arg in args:
+                rec, off, size, _ = self._addr(arg)
+                views.append(memoryview(self.mem[rec])[off:off + size])
+            from . import sqlbridge
+
+            if target == "DSNTIAR":
+                sqlbridge.dsntiar(*views[:3])
+            else:
+                if getattr(self.io, "sql", None) is None:
+                    self.io.sql = sqlbridge.Bridge(self.io.inputs.get("SQLDB"))
+                self.io.sql.call(*views[:11])
+            return True
         if entry is None:
             if on_exception:
                 return False
@@ -1252,6 +1280,13 @@ class Program:
         except StopRun:
             pass
         finally:
+            if "SQLDB" in io.inputs or getattr(io, "sql", None) is not None:  # the database as it is at the end of the run
+                from . import sqlbridge
+
+                if getattr(io, "sql", None) is None:
+                    io.sql = sqlbridge.Bridge(io.inputs.get("SQLDB"))
+                io.outputs["SQLDB"] = io.sql.finish()
+                io.sql = None
             for prog in [self] + [sub for sub, _, _ in self.registry.values()]:
                 for f in prog.files.values():  # files left open are closed, as the runtime does at exit, even after an error
                     if f.mode and f.organization != "sort":

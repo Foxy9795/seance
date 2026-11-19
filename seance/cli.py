@@ -72,6 +72,36 @@ def _analyze(program: str) -> None:
         print("note:", note)
 
 
+def _job_command(a) -> int:
+    from .jobs import describe, record, verify_job
+
+    try:
+        if a.command == "analyze":
+            for s in describe(a.program)["steps"]:
+                print(f"{s['step']:<10} {s['pgm']:<10} " + ", ".join(f"{d['dd']}={d['what']}" for d in s["dds"]))
+            return 0
+        if a.command in ("record", "all"):
+            print("recorded", record(a.program))
+        if a.command in ("verify", "all"):
+            report = verify_job(a.program, a.rounds)
+            write_reports(report, ROOT)
+            if a.json:
+                body = to_dict(report, ROOT)
+                body["markdown"] = to_markdown(report, ROOT)
+                _emit(body)
+            else:
+                print(to_markdown(report, ROOT))
+            return 0 if report.matched else 1
+        if a.command not in ("record", "all", "verify"):
+            raise ValueError(f"{a.command} is not available for a job; use analyze, record or verify")
+        return 0
+    except Exception as exc:
+        if a.json:
+            _emit({"error": str(exc)})
+            return 2
+        raise
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="seance")
     p.add_argument("command", choices=COMMANDS)
@@ -82,8 +112,12 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     sys.path.insert(0, str(ROOT))
 
+    from .jobs import job_names
+
+    if a.program in job_names():
+        return _job_command(a)
     if a.program not in program_names():
-        print(f"unknown program {a.program!r}. Available: {', '.join(program_names())}", file=sys.stderr)
+        print(f"unknown program {a.program!r}. Available: {', '.join(program_names() + job_names())}", file=sys.stderr)
         return 2
     implementation = a.impl or f"migrated.{a.program}"
 

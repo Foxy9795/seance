@@ -76,8 +76,15 @@ def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> 
             target = work / f.assign
             paths[f.assign] = target
             if not f.literal:
-                env[f"DD_{f.assign}"] = str(target)
-                env[f"dd_{f.assign}"] = str(target)
+                for n in {f.assign, f.raw_assign or f.assign}:
+                    env[f"DD_{n}"] = str(target)
+                    env[f"dd_{n}"] = str(target)
+            if f.organization == "sqldb":  # the database: seeded before the run, dumped after
+                from .sqlbridge import seed_file
+
+                seed_file(target, case.files.get(f.assign, b""))
+                env["SEANCE_SQLDB"] = str(target)
+                continue
             if f.keyed:
                 tools[f.assign] = keyed.tools(f, exe.parent, cobc_path(), cobol_env())
             if f.is_input and f.assign in case.files:
@@ -95,6 +102,11 @@ def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> 
         outputs = {}
         for f in model.all_files:
             if not f.is_output or not paths[f.assign].exists():
+                continue
+            if f.organization == "sqldb":
+                from .sqlbridge import dump_file
+
+                outputs[f.assign] = dump_file(paths[f.assign])
                 continue
             if f.keyed:
                 data = keyed.dump(tools[f.assign][1], paths[f.assign], work, env)
@@ -129,9 +141,21 @@ def run_python(module, case: Case) -> Result:
 
 def _units(f: FileDef | None, data: bytes) -> list[bytes]:
     """Split an output stream into records or lines."""
+    if f is not None and f.organization == "sqldb":
+        f = None
     if f is not None and f.keyed:
         step = f.size + (9 if f.organization == "relative" else 0)
         return [data[i:i + step] for i in range(0, len(data), step)]
+    if f is not None and f.variable:
+        out, i = [], 0
+        while i < len(data):
+            if data[i:i + 1] in (b"\n", b"\r", b"\f"):
+                i += 1
+                continue
+            n = int.from_bytes(data[i:i + 2], "big")
+            out.append(data[i + 4:i + 4 + n])
+            i += 4 + n
+        return out
     if f is not None and f.organization != "line" and (b"\n" in data or b"\f" in data):
         return _record_units(f, data)
     if f is None or f.organization == "line":
@@ -268,6 +292,8 @@ def pack_file(f: FileDef, records: list[bytes]) -> bytes:
         return b"".join(b"%09d" % (i + 1) + r.ljust(f.size, b" ")[:f.size] for i, r in enumerate(records))
     if f.organization == "line":
         return b"".join(r.rstrip(b" ").replace(b"\n", b" ").replace(b"\r", b" ") + b"\n" for r in records)
+    if f.variable:
+        return b"".join(len(r).to_bytes(2, "big") + b"\x00\x00" + r for r in records)
     size = f.size
     return b"".join(r.ljust(size, b" ")[:size] for r in records)
 
@@ -354,8 +380,48 @@ def console_lines(model: ProgramModel, hints: dict[str, list], rng: random.Rando
     return lines
 
 
-def build_case(model: ProgramModel, rows_by_file: dict[str, list[dict[int, object]]], stdin: list[str]) -> Case:
+def table_rows(model: ProgramModel, rng: random.Random | None, count: int) -> dict[str, list[list]]:
+    """Rows for each SQL table, from its column types: boundary values for the edge set, random ones otherwise."""
+    out = {}
+    for name, t in model.sql_tables.items():
+        rows = []
+        n = 6 if rng is None else count
+        for k in range(n):
+            row = []
+            for ci, (col, typ, notnull) in enumerate(t.columns):
+                u = typ.upper()
+                m = re.match(r"(?:DECIMAL|DEC|NUMERIC)\s*\((\d+)(?:\s*,\s*(\d+))?\)", u)
+                ln = re.match(r"(?:CHAR|CHARACTER|VARCHAR)\s*\((\d+)\)", u)
+                if rng is not None and not notnull and rng.random() < 0.1:
+                    row.append(None)
+                elif m:
+                    p, sc = int(m.group(1)), int(m.group(2) or 0)
+                    top = 10 ** (p - sc) - Decimal(1).scaleb(-sc)
+                    edge = [Decimal(0), Decimal(1).scaleb(-sc), top, -top, Decimal(1), Decimal(-1)]
+                    v = edge[k % len(edge)] if rng is None else Decimal(rng.randrange(-(10 ** min(p, 7)), 10 ** min(p, 7))).scaleb(-sc)
+                    row.append(format(v, "f"))
+                elif re.match(r"(SMALLINT|INTEGER|INT|BIGINT)\b", u):
+                    row.append(k + 1 if ci == 0 else (k if rng is None else rng.randrange(0, 1000)))
+                else:
+                    size = int(ln.group(1)) if ln else 10
+                    if ci == 0:
+                        v = f"K{k + 1:0{max(1, min(size - 1, 6))}d}"
+                    else:
+                        v = ("A" * min(size, 4)) if rng is None else rng.choice(["SMITH", "JONES", "GARCIA", "LEE", "O'NEIL", "MÜLLER", "BROWN"])
+                    row.append(v[:size])
+            rows.append(row)
+        out[name] = rows
+    return out
+
+
+def build_case(model: ProgramModel, rows_by_file: dict[str, list[dict[int, object]]], stdin: list[str],
+               tables: dict[str, list[list]] | None = None) -> Case:
     case = Case(stdin=list(stdin))
+    if model.sql_tables:
+        from .sqlpre import schema_and_seed
+
+        case.files["SQLDB"] = schema_and_seed(model.sql_tables, tables or {}).encode(ENC, errors="replace")
+        case.records["SQLDB"] = [b""] * sum(len(v) for v in (tables or {}).values())
     for f in model.inputs:
         if f.record is None:
             continue
@@ -420,9 +486,9 @@ def generated_cases(model: ProgramModel, random_count: int = 300, seed: int = 10
     rand = {f.name: random_rows(f.record, random_count, rng, hints) for f in model.inputs if f.record is not None}
     apply_links(links, edges, random.Random(seed + 1))
     apply_links(links, rand, rng)
-    sets = {"edges": build_case(model, edges, console_lines(model, hints, None))}
+    sets = {"edges": build_case(model, edges, console_lines(model, hints, None), table_rows(model, None, 0))}
     if model.inputs or model.all_accepts:
-        sets["random"] = build_case(model, rand, console_lines(model, hints, rng))
+        sets["random"] = build_case(model, rand, console_lines(model, hints, rng), table_rows(model, rng, 40))
     # Input files that are not there: reaches the code that handles a missing file, where the program checks for it
     if any(f.status or f.optional for f in model.inputs):
         sets["missing"] = Case(stdin=console_lines(model, hints, None))

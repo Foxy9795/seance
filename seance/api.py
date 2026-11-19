@@ -56,7 +56,17 @@ async def require_token(request: Request, call_next):
     return await call_next(request)
 
 
+def _is_job(name: str) -> bool:
+    from .jobs import job_names
+
+    return name in job_names()
+
+
 def _require(program: str, implementation: str | None = None) -> None:
+    if _is_job(program):
+        if implementation is not None and implementation != f"jobs.{program}":
+            raise HTTPException(404, f"unknown implementation {implementation!r}")
+        return
     if program not in program_names():
         raise HTTPException(404, f"unknown program {program!r}")
     if implementation is not None and implementation not in [i.module for i in implementations(program)]:
@@ -167,7 +177,10 @@ def about():
 
 @app.get("/api/programs")
 def programs():
-    infos = [program_info(n) for n in program_names()]
+    from .jobs import job_info, job_names
+
+    infos = [program_info(n) for n in program_names()] + [job_info(n) for n in job_names()]
+    infos.sort(key=lambda p: p["title"])
     demo = next((p["name"] for p in infos if any(i["role"] == "naive" for i in p["implementations"])), None)
     return {"legacy_runtime": cobc_available(), "programs": infos, "demo": demo}
 
@@ -207,6 +220,11 @@ async def redraft(name: str):
 @app.get("/api/source")
 def source(program: str, implementation: str):
     _require(program, implementation)
+    if _is_job(program):
+        from .jobs import job_programs
+
+        return {"legacy": (ROOT / "legacy" / program / f"{program}.jcl").read_text(encoding="utf-8-sig", errors="replace"), "called": {},
+                "migrated": "", "spec": "", "editable": False, "job": True, "programs": job_programs(program)}
     impl_path = ROOT / (implementation.replace(".", "/") + ".py")
     spec_path = ROOT / "docs" / "specs" / f"{program}.md"
     return {
@@ -294,6 +312,11 @@ def sample(program: str, limit: int = 6):
 @app.get("/api/data")
 def list_data(program: str):
     _require(program)
+    if _is_job(program):
+        from .jobs import load, set_names
+
+        return {"sets": [{"set": n, "label": load(program, n)[2]["label"], "records": load(program, n)[2].get("records", 0), "console_lines": 0,
+                          "removable": False, "cobol_error": load(program, n)[2].get("error")} for n in set_names(program)]}
     from .cases import describe_sets
 
     return {"sets": describe_sets(program)}

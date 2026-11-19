@@ -19,14 +19,20 @@ def receipt(r: Report, root: Path) -> dict:
     """What was checked: hashes of the COBOL and the Python, so the verdict cannot be reused for other code."""
     impl_path = root / (r.implementation.replace(".", "/") + ".py")
     return {
-        "cobol_sha256": _sha(root / "legacy" / r.program / f"{r.program}.cbl"),
-        "python_sha256": _sha(impl_path),
+        "cobol_sha256": _sha(root / "legacy" / r.program / f"{r.program}.cbl") or _sha(root / "legacy" / r.program / f"{r.program}.jcl"),
+        "python_sha256": _sha(impl_path) if not r.implementation.startswith("jobs.") else _job_python_sha(r, root),
         "checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "saved_records": sum(s["records"] for s in r.sets),
         "compared_lines": sum(s["compared"] for s in r.sets),
         "random_runs": r.random_runs,
         "evidence_sha256": _evidence(r.program, root),
     }
+
+
+def _job_python_sha(r: Report, root: Path) -> str | None:
+    from .jobs import python_sha
+
+    return python_sha(r.program, root)
 
 
 def _evidence(program: str, root: Path) -> str | None:

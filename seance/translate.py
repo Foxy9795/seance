@@ -1707,6 +1707,8 @@ def _data_literals(names: Names, records: dict[str, int], model: ProgramModel) -
         extra = {"access": f.access}
         if f.optional:
             extra["optional"] = True
+        if f.variable:
+            extra["variable"] = True
         if f.organization == "indexed":
             extra["key"] = key_of(f.record_key)
             extra["alt"] = [[key_of(k), d] for k, d in f.alt_keys]
@@ -1738,7 +1740,7 @@ def _has(nodes, kind) -> bool:
 def _unit(model: ProgramModel, tag: str) -> dict:
     """Translate one program (the main one or a called one) into its data literals and paragraph functions."""
     names, records = build_names(model)
-    src_lines = normalize(model.path.read_text(encoding="utf-8", errors="replace"), model.fixed)
+    src_lines = normalize((model.source or model.path).read_text(encoding="utf-8", errors="replace"), model.fixed)
     start = next((i for i, l in enumerate(src_lines) if not l.comment and re.match(r"^\s*PROCEDURE\s+DIVISION", l.text, re.I)), None)
     if start is None:
         raise Unsupported("no PROCEDURE DIVISION")

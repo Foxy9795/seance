@@ -31,6 +31,20 @@ class FileDef:
     alt_keys: list[tuple[str, bool]] = field(default_factory=list)  # indexed: (ALTERNATE RECORD KEY, WITH DUPLICATES)
     relative_key: str | None = None  # relative: the RELATIVE KEY data item
     optional: bool = False
+    raw_assign: str = ""  # the name as written (UT-S-REPORT), which GnuCOBOL also looks up
+    contains: tuple[int, int] | None = None  # RECORD CONTAINS / IS VARYING: (smallest, largest) record
+
+    @property
+    def variable(self) -> bool:
+        """Records of more than one length. GnuCOBOL then writes each record of a sequential file behind a
+        4-byte header (2-byte big-endian length, 2 zero bytes); measured: RECORD CONTAINS 120 with a 58-byte
+        record gives 00 3A 00 00 before each record."""
+        if self.organization != "sequential" or not self.records:
+            return False
+        sizes = {r.size for r in self.records}
+        if self.contains:
+            sizes |= {self.contains[0], self.contains[1]}
+        return len(sizes) > 1
 
     @property
     def keyed(self) -> bool:
@@ -68,6 +82,8 @@ class ProgramModel:
     notes: list[str] = field(default_factory=list)
     unsupported: list[str] = field(default_factory=list)  # statements the runner can never execute (EXEC SQL, CICS ...)
     linkage_records: list[Item] = field(default_factory=list)
+    source: Path | None = None  # what is compiled and translated: the program itself, or its precompiled copy
+    sql_tables: dict = field(default_factory=dict)  # EXEC SQL: tables from DECLARE TABLE (or schema.sql)
     using: list[str] = field(default_factory=list)  # PROCEDURE DIVISION USING: linkage records in order
     initial: bool = False  # PROGRAM-ID ... IS INITIAL: fresh storage on every CALL
     subprograms: list["ProgramModel"] = field(default_factory=list)  # other programs in the folder, reached by CALL
@@ -161,8 +177,9 @@ def _parse_select(text: str, line_no: int) -> FileDef:
         raise ModelError(f"line {line_no}: cannot find the file name in ASSIGN for {name}.")
     literal = tok.group(1) is not None or tok.group(2) is not None
     assign = next(g for g in tok.groups() if g is not None)
+    raw = assign
     if not literal:
-        assign = re.sub(r"^(?:UT-S-|UR-S-|S-)", "", assign, flags=re.I)  # old IBM device prefixes
+        assign = re.sub(r"^(?:UT-S-|UR-S-|DA-S-|UT-|DA-|S-)", "", assign, flags=re.I)  # old IBM device prefixes
     upper = re.sub(r"\s+", " ", rest.upper())
     om = re.search(r"ORGANI[SZ]ATION (?:IS )?(LINE SEQUENTIAL|RECORD SEQUENTIAL|SEQUENTIAL|INDEXED|RELATIVE)", upper)
     org = {"LINE SEQUENTIAL": "line", "INDEXED": "indexed", "RELATIVE": "relative"}.get(om.group(1) if om else "", "sequential")
@@ -173,6 +190,7 @@ def _parse_select(text: str, line_no: int) -> FileDef:
     sm = re.search(r"\bFILE STATUS (?:IS )?([A-Z0-9-]+)", upper)
     f = FileDef(name, Path(assign).name if literal else assign, literal, org, sm.group(1) if sm else None)
     f.optional = bool(re.match(r"^SELECT\s+OPTIONAL\b", text.strip(), re.I))
+    f.raw_assign = raw.upper() if not literal else ""
     am = re.search(r"\bACCESS (?:MODE )?(?:IS )?(SEQUENTIAL|RANDOM|DYNAMIC)", upper)
     f.access = am.group(1).lower() if am else "sequential"
     km = re.search(r"(?<!ALTERNATE )\bRECORD KEY (?:IS )?([A-Z0-9-]+)", upper)
@@ -218,15 +236,31 @@ SOURCE_EXTENSIONS = (".cbl", ".cob", ".cobol")
 def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     """The program in legacy/<program>/<program>.cbl, plus any other programs in that folder it CALLs."""
     path = root / "legacy" / program / f"{program}.cbl"
-    model = load_file(path, program)
-    others = [q for q in sorted(path.parent.iterdir()) if q.is_file() and q.suffix.lower() in SOURCE_EXTENSIONS and q.name != path.name]
+    src_dir = path.parent
+    sql = any(q.is_file() and re.search(r"\bEXEC\s+SQL\b", q.read_text(encoding="utf-8", errors="replace"), re.I) for q in src_dir.iterdir())
+    pre = None
+    if sql:  # precompile the folder; everything is then read from the plain-COBOL copy
+        from .sqlpre import SqlError, precompile_folder
+
+        try:
+            pre = precompile_folder(src_dir, program, root / "build" / program / "sqlsrc")
+        except SqlError as exc:
+            raise ModelError(f"embedded SQL: {exc}") from exc
+        src_dir = root / "build" / program / "sqlsrc"
+    model = load_file(src_dir / path.name, program, shown=path)
+    if pre is not None:
+        model.sql_tables = pre.tables
+        model.notes.append(f"Embedded SQL: {pre.statements} statement(s) precompiled to CALLs of Séance's SQL bridge, run on SQLite "
+                           f"with tables {', '.join(pre.tables) or '(none declared)'}.")
+        model.files.append(FileDef("SQLDB", "SQLDB", False, "sqldb", modes={"io"}))
+    others = [q for q in sorted(src_dir.iterdir()) if q.is_file() and q.suffix.lower() in SOURCE_EXTENSIONS and q.name != path.name]
     subs: dict[str, ProgramModel] = {}
     for q in others:
         text = q.read_text(encoding="utf-8", errors="replace")
         if not re.search(r"PROCEDURE\s+DIVISION", text, re.I):
             continue  # a copybook saved with a program extension
         try:
-            sub = load_file(q, q.stem.lower())
+            sub = load_file(q, q.stem.lower(), shown=path.parent / q.name)
         except ModelError as exc:
             raise ModelError(f"{q.name}: {exc}") from exc
         subs[sub.program_id] = sub
@@ -249,7 +283,8 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     return model
 
 
-def load_file(path: Path, program: str) -> ProgramModel:
+def load_file(path: Path, program: str, shown: Path | None = None) -> ProgramModel:
+    """shown: the file people see (the original when path is a precompiled copy)."""
     text = path.read_text(encoding="utf-8", errors="replace")
     fixed = detect_fixed(text)
     try:
@@ -258,6 +293,7 @@ def load_file(path: Path, program: str) -> ProgramModel:
         raise ModelError(str(exc)) from exc
     files: dict[str, FileDef] = {}
     fd_items: dict[str, list[tuple[int, str]]] = {}
+    fd_contains: dict[str, tuple[int, int]] = {}
     sd_names: set[str] = set()
     ws: list[tuple[int, str]] = []
     link: list[tuple[int, str]] = []
@@ -297,6 +333,12 @@ def load_file(path: Path, program: str) -> ProgramModel:
             if up.startswith("SD"):
                 sd_names.add(current_fd)
             fd_items.setdefault(current_fd, [])
+            vm = re.search(r"\bRECORD\s+(?:IS\s+)?VARYING\s+(?:IN\s+SIZE\s+)?(?:FROM\s+)?(\d+)?\s*(?:TO\s+(\d+))?", up)
+            cm = re.search(r"\bRECORD\s+(?:CONTAINS\s+)?(\d+)(?:\s+TO\s+(\d+))?\s+CHARACTERS", up)
+            if vm and (vm.group(1) or vm.group(2)):
+                fd_contains[current_fd] = (int(vm.group(1) or 1), int(vm.group(2) or vm.group(1)))
+            elif cm:
+                fd_contains[current_fd] = (int(cm.group(1)), int(cm.group(2) or cm.group(1)))
         elif section == "FILE" and current_fd and re.match(r"^\d{1,2}\s", up):
             fd_items[current_fd].append((line_no, s))
         elif section in ("WORKING-STORAGE", "LOCAL-STORAGE") and re.match(r"^\d{1,2}\s", up):
@@ -308,6 +350,9 @@ def load_file(path: Path, program: str) -> ProgramModel:
     for name in sd_names:
         if name in files:
             files[name].organization = "sort"
+    for name, c in fd_contains.items():
+        if name in files:
+            files[name].contains = c
     try:
         for name, f in files.items():
             if name in fd_items:
@@ -346,8 +391,9 @@ def load_file(path: Path, program: str) -> ProgramModel:
                 pid = re.sub(r"[.\s].*$", "", rest.strip())
                 initial = bool(re.search(r"\bINITIAL\b", rest, re.I))
             break
-    model = ProgramModel(program, path, fixed, pid.strip("'\"").upper(), list(files.values()), fd_items, ws, proc, ws_records, accepts,
-                         [], sorted(set(unsupported)), linkage, using, initial, [], calls)
+    model = ProgramModel(program, shown or path, fixed, pid.strip("'\"").upper(), list(files.values()), fd_items, ws, proc, ws_records, accepts,
+                         [], sorted(set(unsupported)), linkage_records=linkage, using=using, initial=initial,
+                         calls=[c for c in calls if c not in ("SQLBRIDGE", "DSNTIAR")], source=path)
     if not proc:
         raise ModelError("No PROCEDURE DIVISION statements were found.")
     missing = [u for u in using if u not in {r.name for r in linkage}]

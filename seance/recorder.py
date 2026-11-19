@@ -63,7 +63,7 @@ def _cobc(args: list[str], what: str) -> None:
 
 def _prepare(model: ProgramModel, out_dir: Path) -> Path:
     """A copy with the reported dialect fixes (the original is never changed; line numbers stay the same)."""
-    fixed_text, _ = source_fixes(model.path.read_text(encoding="utf-8", errors="replace"), model.fixed)
+    fixed_text, _ = source_fixes((model.source or model.path).read_text(encoding="utf-8", errors="replace"), model.fixed)
     prepared = out_dir / "src" / model.path.name
     prepared.parent.mkdir(parents=True, exist_ok=True)
     prepared.write_text(fixed_text, encoding="utf-8")
@@ -84,7 +84,31 @@ def compile_legacy(program: str, root: Path = ROOT) -> Path:
         return exe
     if not cobc_available():
         raise LegacyRuntimeError("cobc not found. Put GnuCOBOL in tools\\gnucobol or on PATH.")
+    includes = ["-I", str(src_dir)]
+    if model.sql_tables is not None and any(f.organization == "sqldb" for f in model.files):
+        includes = ["-I", str(exe.parent / "sqlsrc")] + includes
+        _sql_bridges(exe.parent)
     for m, target in zip(subs, modules):
-        _cobc(["-m", *m.compile_flags, "-I", str(src_dir), "-o", str(target), str(_prepare(m, exe.parent))], f"{m.path.name}")
-    _cobc(["-x", *model.compile_flags, "-I", str(src_dir), "-o", str(exe), str(_prepare(model, exe.parent))], "it")
+        _cobc(["-m", *m.compile_flags, *includes, "-o", str(target), str(_prepare(m, exe.parent))], f"{m.path.name}")
+    _cobc(["-x", *model.compile_flags, *includes, "-o", str(exe), str(_prepare(model, exe.parent))], "it")
     return exe
+
+
+def _sql_bridges(out_dir: Path) -> None:
+    """Build SQLBRIDGE and DSNTIAR (C, on the SQLite library Python itself uses) next to the program."""
+    import sys
+
+    native = Path(__file__).resolve().parent / "native"
+    dll = Path(sys.base_prefix) / "DLLs" / "sqlite3.dll"
+    if not dll.exists():
+        raise LegacyRuntimeError("sqlite3.dll was not found next to Python, so embedded SQL cannot run.")
+    local = out_dir / "sqlite3.dll"
+    if not local.exists():
+        shutil.copy(dll, local)
+    for name in ("sqlbridge", "dsntiar"):
+        target = out_dir / f"{name.upper()}{'.dll' if os.name == 'nt' else '.so'}"
+        src = native / f"{name}.c"
+        if target.exists() and target.stat().st_mtime >= src.stat().st_mtime:
+            continue
+        extra = ["-L", str(out_dir), "-lsqlite3"] if name == "sqlbridge" else []
+        _cobc(["-m", "-o", str(target), str(src), *extra], f"the {name} bridge")

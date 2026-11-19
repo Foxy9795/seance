@@ -144,7 +144,13 @@ def last_check(implementation: str, root: Path = ROOT) -> dict | None:
     def sha(path: Path):
         return hashlib.sha256(path.read_bytes()).hexdigest()[:16] if path.exists() else None
 
-    current = rc.get("python_sha256") == sha(impl_path) and rc.get("cobol_sha256") == sha(cbl)
+    if implementation.startswith("jobs."):
+        from .jobs import python_sha
+
+        cbl = root / "legacy" / program / f"{program}.jcl"
+        current = rc.get("python_sha256") == python_sha(program, root) and rc.get("cobol_sha256") == sha(cbl)
+    else:
+        current = rc.get("python_sha256") == sha(impl_path) and rc.get("cobol_sha256") == sha(cbl)
     cov = r.get("coverage") or {}
     return {"verdict": r.get("verdict"), "matched": r.get("matched"), "checked_at": rc.get("checked_at"), "current": current,
             "compared": rc.get("compared_lines"), "random_runs": rc.get("random_runs"), "coverage": cov.get("percent"),
