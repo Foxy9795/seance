@@ -149,6 +149,7 @@ class TestData(BaseModel):
     base64: str | None = Field(default=None, max_length=7_000_000)
     file: str | None = None  # which input file it is for (ASSIGN name); None when there is only one
     console: bool = False  # the upload is console input, one value per line
+    code_page: str | None = None  # EBCDIC code page of a mainframe file, such as cp037
 
 
 # ---------------------------------------------------------------- endpoints
@@ -309,7 +310,7 @@ async def upload_data(program: str, body: TestData):
     else:
         stdin, target = None, body.file
     try:
-        return await run_in_threadpool(add_uploaded, program, body.filename, data, target, stdin)
+        return await run_in_threadpool(add_uploaded, program, body.filename, data, target, stdin, ROOT, body.code_page)
     except (ValueError, LegacyRuntimeError) as exc:
         raise HTTPException(400, str(exc))
 

@@ -25,7 +25,21 @@ def receipt(r: Report, root: Path) -> dict:
         "saved_records": sum(s["records"] for s in r.sets),
         "compared_lines": sum(s["compared"] for s in r.sets),
         "random_runs": r.random_runs,
+        "evidence_sha256": _evidence(r.program, root),
     }
+
+
+def _evidence(program: str, root: Path) -> str | None:
+    """One hash over every saved input and expected output, so the receipt pins the exact test data."""
+    base = root / "fixtures" / program
+    if not base.exists():
+        return None
+    h = hashlib.sha256()
+    for f in sorted(base.rglob("*")):
+        if f.is_file():
+            h.update(f.relative_to(base).as_posix().encode())
+            h.update(f.read_bytes())
+    return h.hexdigest()[:16]
 
 
 def to_dict(r: Report, root: Path | None = None) -> dict:
@@ -51,13 +65,16 @@ def to_markdown(r: Report, root: Path | None = None) -> str:
     lines = [f"# Séance report: {r.program}", "", f"Python checked: `{r.implementation}`", f"Verdict: **{verdict}**", ""]
     if root is not None:
         rc = receipt(r, root)
-        lines += ["## Receipt", f"- COBOL source SHA-256: `{rc['cobol_sha256']}`", f"- Python SHA-256: `{rc['python_sha256']}`",
+        lines += ["## Receipt", f"- COBOL source SHA-256: `{rc['cobol_sha256']}`", f"- Python SHA-256: `{rc['python_sha256']}`", f"- Test data SHA-256: `{rc['evidence_sha256']}`",
                   f"- Checked: {rc['checked_at']}", ""]
     lines.append("## Saved test sets")
     for s in r.sets:
         given = [f"{s['records']} input records"] if s["records"] else []
         given += [f"{s['console_lines']} console lines"] if s.get("console_lines") else []
         lines.append(f"- {s['label']}: {', '.join(given) or 'no input'}; {s['compared']} output lines compared, {s['differing']} differ")
+    if r.coverage:
+        c = r.coverage
+        lines += ["", "## Coverage", f"- The saved runs reach {c['reached']} of {c['statements']} COBOL statements ({c['percent']}%)"]
     lines += ["", "## Random runs", f"- {r.random_runs} fresh runs of both programs on generated input"]
     if r.random_failure:
         lines.append("- Smallest failing case found:")

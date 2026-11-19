@@ -15,11 +15,12 @@ import string
 import sys
 from dataclasses import dataclass, field
 from decimal import Decimal
+from pathlib import Path
 
 from hypothesis import HealthCheck, Phase, given, settings
 from hypothesis import strategies as st
 
-from .cases import Case, Diff, build_case, compare, console_lines, load_set, run_cobol, run_python, set_names, show
+from .cases import Case, Diff, apply_links, build_case, key_links, compare, console_lines, load_set, run_cobol, run_python, set_names, show
 from .layout import Item, leaves
 from .model import ProgramModel
 from .recorder import ROOT, compile_legacy, get_model
@@ -37,6 +38,7 @@ class Report:
     diffs: list[dict] = field(default_factory=list)  # first differences in the saved sets
     random_runs: int = 0
     random_failure: dict | None = None  # the smallest failing random case: inputs, stdin, diffs
+    coverage: dict | None = None  # COBOL statements the saved runs reach (translated Python only)
     review: list[str] = field(default_factory=list)
 
     @property
@@ -58,17 +60,28 @@ def load_implementation(implementation: str):
 
 # ---------------------------------------------------------------- saved sets
 
-def replay_sets(program: str, impl, model: ProgramModel, root=ROOT) -> tuple[list[dict], list[dict]]:
+def replay_sets(program: str, impl, model: ProgramModel, root=ROOT, coverage: dict | None = None) -> tuple[list[dict], list[dict]]:
+    """Replay every saved set. If coverage is a dict, it receives which COBOL statements the runs reached."""
+    from contextlib import nullcontext
+
+    from .coverage import Tracer, summarize
+
     sets, diffs = [], []
+    tracer = Tracer(impl.__file__) if coverage is not None and getattr(impl, "__file__", None) else None
     for name in set_names(program, root):
         case, expected, meta = load_set(program, name, root)
-        actual = run_python(impl, case)
+        with tracer if tracer else nullcontext():
+            actual = run_python(impl, case)
         found, units = compare(model, expected, actual)
         sets.append({"name": name, "label": meta["label"], "records": meta.get("records", 0), "console_lines": len(case.stdin),
                      "compared": units, "differing": len(found),
                      "python_error": actual.error, "cobol_error": expected.error})
         for d in found[: max(0, SHOWN_DIFFS - len(diffs))]:
             diffs.append({"set": name, **d.to_dict()})
+    if tracer is not None:
+        summary = summarize(Path(impl.__file__).read_text(encoding="utf-8-sig"), tracer.hits)
+        if summary:
+            coverage.update(summary)
     return sets, diffs
 
 
@@ -182,6 +195,7 @@ def random_check(program: str, impl, model: ProgramModel, rounds: int) -> tuple[
     exe = compile_legacy(program)
     hints = value_hints(model)
     runner = _Runner(exe, model, impl)
+    links = key_links(model)
     state: dict = {"failure": None}
 
     # Hypothesis only generates here. Its own shrinker would rerun the COBOL thousands of times,
@@ -192,6 +206,8 @@ def random_check(program: str, impl, model: ProgramModel, rounds: int) -> tuple[
         if state["failure"] is not None:
             return
         rows, seed, n = drawn
+        rows = {k: [dict(r) for r in v] for k, v in rows.items()}
+        apply_links(links, rows, random.Random(seed))  # transactions that name records the master really has
         stdin = _stdin(model, hints, seed, n)
         _, found = runner.diffs(rows, stdin)
         if found:
@@ -212,15 +228,21 @@ def verify(program: str, implementation: str | None = None, rounds: int = 40) ->
     impl = load_implementation(implementation)
     model = get_model(program)
     report = Report(program, implementation)
-    report.sets, report.diffs = replay_sets(program, impl, model)
+    cov: dict = {}
+    report.sets, report.diffs = replay_sets(program, impl, model, coverage=cov)
+    report.coverage = cov or None
     if not report.sets:
         raise ValueError(f"No saved test sets for {program!r}. Run: python -m seance record {program}")
     report.random_runs, report.random_failure = random_check(program, impl, model, rounds)
     for s in report.sets:
         if s["differing"]:
             report.review.append(f"{s['label']}: {s['differing']} of {s['compared']} output lines differ")
-        if s["python_error"]:
+        if s["python_error"] and not s.get("cobol_error"):
             report.review.append(f"{s['label']}: the Python stopped with {s['python_error']}")
+    if report.coverage and report.coverage["missed"]:
+        lines = ", ".join((f"{m['program']} " if m["program"] else "") + str(m["line"]) for m in report.coverage["missed"][:12])
+        report.review.append(f"{len(report.coverage['missed'])} COBOL statement(s) are never reached by the saved runs, so a difference "
+                             f"there would go unseen: line {lines}{' ...' if len(report.coverage['missed']) > 12 else ''}. Add data that reaches them.")
     if report.random_failure:
         d = report.random_failure["diffs"][0] if report.random_failure["diffs"] else None
         where = f"{d['stream']} line {d['index'] + 1}" if d and d["index"] >= 0 else "the run result"

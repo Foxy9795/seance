@@ -29,6 +29,29 @@ def test_indexed_file_keys_are_read():
     assert f.record_key == "M-ID" and f.alt_keys == [("M-REGION", True)] and f.access == "dynamic"
 
 
+def test_ebcdic_record_converts_field_by_field():
+    from decimal import Decimal
+
+    from seance.cases import spec_of
+    from seance.codec import decode
+    from seance.ebcdic import record_to_ascii
+    from seance.layout import leaves
+
+    rec = next(f for f in get_model("accounts").files if f.assign == "ACCTIN").record
+    lv = {lf.name: lf for lf in leaves(rec)}
+    ebc = bytearray(b"\x40" * rec.size)
+    ebc[0:8] = "AC-00042".encode("cp037")
+    bal = lv["ACCT-BALANCE"]  # S9(7)V99, sign in the last digit: -123.45 is F0...F1F2F3F4 D5
+    ebc[bal.offset:bal.offset + bal.width] = bytes([0xF0] * 4 + [0xF1, 0xF2, 0xF3, 0xF4, 0xD5])
+    out = record_to_ascii(rec, bytes(ebc))
+    assert out[0:8] == b"AC-00042"
+    assert decode(spec_of(bal.item), out[bal.offset:bal.offset + bal.width]) == Decimal("-123.45")
+
+    packed = next(f for f in get_model("account_report").files if f.assign == "ACCTREC").record
+    raw = bytearray("12345678".encode("cp037") + b"\x00\x00\x12\x34\x5c" + b"\x40" * (packed.size - 13))
+    assert record_to_ascii(packed, bytes(raw))[8:13] == b"\x00\x00\x12\x34\x5c", "packed bytes are left alone"
+
+
 def test_table_sort_reproduces_the_c_runtime_order():
     rows = [s.encode() for s in "ZZZ1 YYY2 XXX1 WWW2 VVV1 UUU1 TTT2 SSS1 RRR2 QQQ1".split()]
     crt_qsort(rows, lambda a, b: (a[3] > b[3]) - (a[3] < b[3]))

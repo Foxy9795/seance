@@ -365,16 +365,67 @@ def build_case(model: ProgramModel, rows_by_file: dict[str, list[dict[int, objec
     return case
 
 
+def key_links(model: ProgramModel) -> list[tuple[str, int, str, object]]:
+    """Fields of one input file that the program MOVEs into the key of a keyed file it reads.
+
+    Returns (file, leaf position, keyed file, key leaf position or "slot"). Generated transactions then use keys
+    that exist in the generated master often enough to reach the "record found" paths.
+    """
+    moved: dict[str, set[str]] = {}
+    for m in model._every():
+        words = " ".join(t for _, t in m.proc_items).upper().split()
+        for i, w in enumerate(words):
+            if w == "MOVE" and i + 3 < len(words) and words[i + 2] == "TO":
+                moved.setdefault(words[i + 1], set()).add(words[i + 3].rstrip("."))
+    links = []
+    for kf in model.inputs:
+        if not kf.keyed or kf.record is None:
+            continue
+        targets: dict[str, object] = {}
+        if kf.organization == "indexed":
+            klv = leaves(kf.record)
+            for key in [kf.record_key, *[k for k, _ in kf.alt_keys]]:
+                pos = next((i for i, lf in enumerate(klv) if lf.item.name == key), None)
+                if pos is not None:
+                    targets[key] = pos
+        elif kf.relative_key:
+            targets[kf.relative_key] = "slot"
+        for f in model.inputs:
+            if f is kf or f.record is None:
+                continue
+            for i, lf in enumerate(leaves(f.record)):
+                for key, pos in targets.items():
+                    if key in moved.get(lf.item.name, set()):
+                        links.append((f.name, i, kf.name, pos))
+    return links
+
+
+def apply_links(links, rows_by_file: dict, rng: random.Random, share: float = 0.6) -> None:
+    for src, i, dst, pos in links:
+        pool = rows_by_file.get(dst) or []
+        if not pool:
+            continue
+        for row in rows_by_file.get(src, []):
+            if rng.random() < share:
+                row[i] = Decimal(rng.randrange(1, len(pool) + 1)) if pos == "slot" else rng.choice(pool).get(pos, row.get(i))
+
+
 def generated_cases(model: ProgramModel, random_count: int = 300, seed: int = 1031) -> dict[str, Case]:
     from .hints import value_hints
 
     hints = value_hints(model)
     rng = random.Random(seed)
+    links = key_links(model)
     edges = {f.name: edge_rows(f.record, hints) for f in model.inputs if f.record is not None}
     rand = {f.name: random_rows(f.record, random_count, rng, hints) for f in model.inputs if f.record is not None}
+    apply_links(links, edges, random.Random(seed + 1))
+    apply_links(links, rand, rng)
     sets = {"edges": build_case(model, edges, console_lines(model, hints, None))}
     if model.inputs or model.all_accepts:
         sets["random"] = build_case(model, rand, console_lines(model, hints, rng))
+    # Input files that are not there: reaches the code that handles a missing file, where the program checks for it
+    if any(f.status or f.optional for f in model.inputs):
+        sets["missing"] = Case(stdin=console_lines(model, hints, None))
     return sets
 
 
@@ -416,7 +467,7 @@ def set_names(program: str, root: Path = ROOT) -> list[str]:
     base = root / "fixtures" / program
     if not base.exists():
         return []
-    order = {"edges": 0, "random": 1}
+    order = {"edges": 0, "random": 1, "missing": 2}
     names = [p.name for p in base.iterdir() if (p / "set.json").exists()]
     return sorted(names, key=lambda n: (order.get(n, 2), n))
 
@@ -424,6 +475,7 @@ def set_names(program: str, root: Path = ROOT) -> list[str]:
 DEFAULT_LABELS = {
     "edges": "Edge Cases (zero, smallest and largest values, plus values the code tests for)",
     "random": "Random Records",
+    "missing": "Missing Input Files (how the program handles a file that is not there)",
 }
 
 
@@ -453,8 +505,13 @@ def record_sets(program: str, root: Path = ROOT) -> dict[str, int]:
     return counts
 
 
-def add_uploaded(program: str, filename: str, data: bytes, target_file: str | None, stdin: list[str] | None = None, root: Path = ROOT) -> dict:
-    """Save uploaded input data as a test set, with the real COBOL's answers for it."""
+def add_uploaded(program: str, filename: str, data: bytes, target_file: str | None, stdin: list[str] | None = None, root: Path = ROOT,
+                 code_page: str | None = None) -> dict:
+    """Save uploaded input data as a test set, with the real COBOL's answers for it.
+
+    code_page: the file is EBCDIC from a mainframe (for example cp037); it is converted field by field first.
+    The program's other inputs come from the first saved set, so one real file can be tried on its own.
+    """
     from .config import MAX_DATA_RECORDS
     from .recorder import compile_legacy, get_model
 
@@ -466,13 +523,26 @@ def add_uploaded(program: str, filename: str, data: bytes, target_file: str | No
         f = next((x for x in inputs if x.assign == target_file or x.name == target_file), inputs[0] if len(inputs) == 1 or target_file is None else None)
         if f is None:
             raise ValueError(f"Unknown input file {target_file}.")
-        n = len(_units(f if f.organization != "line" else None, data)) if data else 0
-        if f.organization == "sequential" and data and len(data) % max(f.size, 1):
+        if code_page:
+            if f.organization == "line":
+                data = data.decode(code_page).encode(ENC, errors="replace").replace(b"\x85", b"\n").replace(b"\x25", b"\n")
+            else:
+                from .ebcdic import file_to_ascii
+
+                data = file_to_ascii(f.record, f.size, data, code_page)
+        fixed = f.organization in ("sequential", "indexed", "relative")
+        if fixed and data and len(data) % max(f.size, 1):
             raise ValueError(f"The file is {len(data)} bytes, which is not a whole number of {f.size}-byte records for {f.assign}.")
+        units = [data[i:i + f.size] for i in range(0, len(data), f.size)] if fixed else _units(None, data)
+        if f.organization == "relative":
+            data = pack_file(f, units)
+        n = len(units)
         if n > MAX_DATA_RECORDS:
             raise ValueError(f"The file has {n} records. The limit is {MAX_DATA_RECORDS}; split it into smaller files.")
-        case = Case({f.assign: data}, list(stdin or []))
-        case.records = {f.assign: _units(f if f.organization != "line" else None, data)}
+        names = set_names(program, root)
+        base = load_set(program, names[0], root)[0] if names else Case()
+        case = Case({**base.files, f.assign: data}, list(stdin) if stdin is not None else list(base.stdin))
+        case.records = {**base.records, f.assign: units}
     else:
         case = Case({}, list(stdin) if stdin is not None else data.decode(ENC).splitlines())
         n = len(case.stdin)
