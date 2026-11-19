@@ -1,5 +1,5 @@
        IDENTIFICATION DIVISION.
-       PROGRAM-ID. RELDEMO.
+       PROGRAM-ID. SEATBOOK.
       * Seat bookings in a relative file: slot number = seat number.
        ENVIRONMENT DIVISION.
        INPUT-OUTPUT SECTION.

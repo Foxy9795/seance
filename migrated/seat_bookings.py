@@ -1,4 +1,4 @@
-"""Python translation of legacy/seat_bookings/seat_bookings.cbl (PROGRAM-ID RELDEMO).
+"""Python translation of legacy/seat_bookings/seat_bookings.cbl (PROGRAM-ID SEATBOOK).
 
 Written by the Séance translator on 2026-11-19. The program reads SEATFILE, reads REQFILE, writes SEATFILE.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).

@@ -145,7 +145,10 @@ def last_check(implementation: str, root: Path = ROOT) -> dict | None:
         return hashlib.sha256(path.read_bytes()).hexdigest()[:16] if path.exists() else None
 
     current = rc.get("python_sha256") == sha(impl_path) and rc.get("cobol_sha256") == sha(cbl)
-    return {"verdict": r.get("verdict"), "matched": r.get("matched"), "checked_at": rc.get("checked_at"), "current": current}
+    cov = r.get("coverage") or {}
+    return {"verdict": r.get("verdict"), "matched": r.get("matched"), "checked_at": rc.get("checked_at"), "current": current,
+            "compared": rc.get("compared_lines"), "random_runs": rc.get("random_runs"), "coverage": cov.get("percent"),
+            "differing": sum(s.get("differing", 0) for s in r.get("sets", []))}
 
 
 def program_info(name: str, root: Path = ROOT) -> dict:
@@ -166,6 +169,7 @@ def program_info(name: str, root: Path = ROOT) -> dict:
             "files": [{"name": f.name, "assign": f.assign, "role": "input" if f.is_input and not f.is_output else ("output" if f.is_output and not f.is_input else "both"),
                        "lines": f.organization == "line", "record": f.record.name if f.record else None, "size": f.size} for f in model.all_files],
             "console_input": model.all_accepts,
+            "calls": [m.program_id for m in model._every()[1:]],
             "io": model.describe_io(),
             "unsupported": model.unsupported,
             "notes": model.notes,

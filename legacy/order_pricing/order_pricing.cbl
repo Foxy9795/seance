@@ -1,5 +1,5 @@
        IDENTIFICATION DIVISION.
-       PROGRAM-ID. CALLDEMO.
+       PROGRAM-ID. ORDPRICE.
       * Prices orders by calling a pricing module and a counter module.
        ENVIRONMENT DIVISION.
        INPUT-OUTPUT SECTION.

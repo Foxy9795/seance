@@ -1,4 +1,4 @@
-"""Python translation of legacy/customer_master/customer_master.cbl (PROGRAM-ID IDXDEMO).
+"""Python translation of legacy/customer_master/customer_master.cbl (PROGRAM-ID CUSTMAST).
 
 Written by the Séance translator on 2026-11-19. The program reads CUSTMAST, reads TRANSIN, writes CUSTMAST, writes RPTOUT.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).

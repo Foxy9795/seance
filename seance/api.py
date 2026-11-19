@@ -211,11 +211,22 @@ def source(program: str, implementation: str):
     spec_path = ROOT / "docs" / "specs" / f"{program}.md"
     return {
         "legacy": (ROOT / "legacy" / program / f"{program}.cbl").read_text(encoding="utf-8-sig", errors="replace"),
+        # the programs it CALLs, by PROGRAM-ID, so the code view can show them too
+        "called": {m.program_id: m.path.read_text(encoding="utf-8-sig", errors="replace") for m in _called(program)},
         "migrated": impl_path.read_text(encoding="utf-8-sig"),
         "spec": spec_path.read_text(encoding="utf-8") if spec_path.exists() else "",
         # The shipped examples are reference solutions: read-only. Only programs you added can be edited here.
         "editable": implementation == f"migrated.{program}" and is_user_program(program),
     }
+
+
+def _called(program: str):
+    from .recorder import get_model
+
+    try:
+        return get_model(program)._every()[1:]
+    except Exception:
+        return []
 
 
 @app.put("/api/source")

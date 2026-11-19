@@ -1,4 +1,4 @@
-"""Python translation of legacy/order_pricing/order_pricing.cbl (PROGRAM-ID CALLDEMO).
+"""Python translation of legacy/order_pricing/order_pricing.cbl (PROGRAM-ID ORDPRICE).
 
 Written by the Séance translator on 2026-11-19. The program reads ORDERIN, writes PRICEOUT, calls COUNTER, PRICER.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).

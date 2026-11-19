@@ -34,58 +34,83 @@ Any `cobc` already on PATH also works. Start with **See A Bug Being Caught** on 
 
 ## The App
 
-Pick a program on the left. Each one has four tabs:
+The **Workspace** lists every program with its last check, the output lines compared, and coverage. Open one:
 
 | Tab | What it does |
 | --- | --- |
-| **Overview** | What the program does, every file it reads and writes with its record layout, and a plain-English, line-numbered description. |
-| **Code Side By Side** | COBOL on the left, Python on the right. Click a Python line to see its COBOL line. Your own programs can be edited, saved and translated again. |
-| **Prove It** | Runs the check: "Spirit Matched" or "Spirit Restless", a receipt with hashes of both files, the smallest failing input, and field-by-field differences. Also Test Strength (planted bugs) and Test Data (upload real files). |
-| **Try Your Input** | Type records or console input, or replay a saved set, and see both programs' output side by side. |
+| **Overview** | Every file it reads, writes or updates, with its record layout, and a line-numbered description generated from the COBOL. |
+| **Code** | COBOL beside Python, including the programs it CALLs. Click a Python line to find its COBOL line. COBOL lines no saved run reaches are marked. |
+| **Check** | "Spirit Matched" or "Spirit Restless", lines compared, random runs, statement coverage, a receipt (hashes of the COBOL, the Python and the test data), the smallest failing input, and field-by-field differences. Also a mutation test. |
+| **Try Input** | Type input or replay a saved set; both programs' output side by side. |
+| **Test Data** | The saved sets, and upload of your own files, ASCII or EBCDIC. |
 
-**Download** gives the Python file, a standalone package that runs without Séance or COBOL, and the check report.
+**Download** gives the Python file, a standalone package that runs without Séance or COBOL, and the report.
 
-## What COBOL It Reads
+## What COBOL It Runs
 
-The same lists are served by `/api/about` and shown in the app, from one place in `seance/config.py`.
+The lists are served by `/api/about` and shown in the app, from `seance/config.py`.
 
 **Works today:**
 
-- Fixed-format and free-format source, including IBM-style programs (a missing period after PROGRAM-ID is fixed and reported)
-- Any number of sequential input and output files, with DD names such as `ACCTREC`
-- Console programs: `DISPLAY`, and `ACCEPT` for typed input
-- Fixed-length records, `LINE SEQUENTIAL` text files, and printed reports written with `ADVANCING`
-- Records in the FD, WORKING-STORAGE or copybooks (`COPY`, `COPY REPLACING`)
-- Packed decimal (`COMP-3`), binary (`COMP`, `COMP-5`) and display numbers anywhere, every sign style
-- `OCCURS` tables (`DEPENDING ON`, `INDEXED BY`), `REDEFINES`, groups, `FILLER`, `VALUE`, level-88 conditions
-- Edited pictures such as `$$,$$9.99-`, `ZZ9.99CR`, `***,**9.99`
-- `MOVE`, `COMPUTE`, `ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, `IF`, `EVALUATE`, `PERFORM` in every form, `GO TO`,
-  `ON SIZE ERROR`, `STRING`, `UNSTRING`, `INSPECT`, `SEARCH`, `SEARCH ALL`, `SET`, `INITIALIZE`, reference modification,
-  and intrinsic `FUNCTION`s such as `CURRENT-DATE`, `UPPER-CASE`, `TRIM`, `NUMVAL`
+- Fixed and free format, including IBM-style source (a missing period after PROGRAM-ID is fixed and reported)
+- Sequential, line sequential, **indexed** (VSAM KSDS style, with alternate keys) and **relative** files: READ by key,
+  READ NEXT, START, WRITE, REWRITE, DELETE, INVALID KEY, FILE STATUS, OPTIONAL files
+- **CALL** between programs in the same folder: LINKAGE SECTION, BY REFERENCE / BY CONTENT, GOBACK, EXIT PROGRAM,
+  CANCEL, IS INITIAL, ON EXCEPTION, RETURN-CODE
+- **SORT and MERGE** (USING/GIVING, INPUT/OUTPUT PROCEDURE with RELEASE and RETURN), and SORT of a table, which
+  reproduces the C runtime's unstable order exactly
+- Console programs (DISPLAY, ACCEPT)
+- Packed (COMP-3), binary (COMP, COMP-5) and display numbers anywhere; OCCURS, REDEFINES, level-88s, COPY REPLACING
+- MOVE, COMPUTE, arithmetic verbs, IF, EVALUATE, every PERFORM, GO TO, NEXT SENTENCE, STRING, UNSTRING, INSPECT,
+  SEARCH, SEARCH ALL, SET, INITIALIZE, reference modification, intrinsic FUNCTIONs, edited pictures
+- Mainframe data in **EBCDIC** (code pages 037, 1140, 500, 273, 1047), converted field by field: text and zoned
+  numbers change code, packed and binary fields keep their bytes
 
-**Not yet:** indexed or relative files, `SORT`/`MERGE`, `EXEC SQL` and CICS, `CALL`, REPORT and SCREEN sections,
-`COMP-1`/`COMP-2` and `P` scaling. A program that uses them is still accepted if it compiles; the statements the
-translator cannot handle raise an error naming the COBOL line, so the check fails there instead of passing quietly.
+**Not yet:** EXEC SQL, CICS and IMS (the original cannot run without a database or transaction monitor, so there
+would be nothing to prove against), multi-step JCL jobs, REPORT and SCREEN sections, COMP-1/COMP-2, P scaling,
+CALL ... RETURNING. A program that uses them is still accepted when it compiles; untranslatable statements raise an
+error naming the COBOL line, so the check fails there instead of passing quietly.
 
-**Real-world test:** the 30 programs of the Open Mainframe Project COBOL course
-(github.com/openmainframeproject/cobol-programming-course). 20 of the 21 that GnuCOBOL can run translate with
-no gaps and match the COBOL byte for byte; the other one calls a second program (`CALL`). The other 9 are lab
-exercises with deliberate compile errors or an endless loop, or need DB2. Three of them ship as examples.
+**Real-world test:** the 30 programs of the Open Mainframe Project COBOL course. All 21 that GnuCOBOL can run
+translate with no gaps and match byte for byte, including CBL0033, which CALLs another program. The other 9 are lab
+exercises with deliberate compile errors or an endless loop, or need DB2.
 
 ## How the Checking Works
 
-- **Byte-accurate runtime:** the Python keeps every 01 record as bytes laid out the way GnuCOBOL lays them out, so
-  packed decimal, binary, REDEFINES, tables and group moves behave the same. The encodings are differential-tested
-  against GnuCOBOL.
-- **A test case is a whole run:** the bytes of every input file plus the console input. Both programs run on it with
-  the same fixed clock, and every output file, everything displayed, and the return code are compared.
-- **Saved test sets:** edge cases from the layout (zero, smallest and largest values) and from the code (level-88
-  values and every literal a field is compared against), random records, and any files you upload.
-- **Random runs each check:** Hypothesis generates fresh input files and console input; the first failure is shrunk
-  (fewer records, plainer values) within a fixed budget of COBOL runs.
-- **Test strength:** planted bugs run in their own process with a time limit, so a bug that loops forever is caught.
-- **Receipt:** each report records SHA-256 hashes of the COBOL and the Python, and the app says when either changed
-  after the check.
+- **Byte-accurate runtime:** every 01 record is a byte buffer laid out the way GnuCOBOL lays it out. Behaviour was
+  measured with probe programs (file status codes, RETURN-CODE across CALL, sort stability, record initial values).
+- **A test case is a whole run:** every input file plus console input. Both programs run on it with the same fixed
+  clock; every output file, everything displayed and the return code are compared. Indexed and relative files go
+  in and out of the real COBOL through generated loader and unloader programs.
+- **Saved sets:** edge values from the layout and from the code (level-88s and literals the program compares
+  against), random records whose transaction keys are drawn from the generated master, a run with input files
+  missing (when the program checks FILE STATUS), and any files you upload.
+- **Random runs each check:** Hypothesis generates fresh input; the first failure is shrunk to the smallest input.
+- **Coverage:** the saved runs are replayed under a line tracer; COBOL statements no run reaches are listed as
+  needing review, because a difference there would go unseen.
+- **Mutation test:** small bugs planted in the Python one at a time must each be caught by the saved runs.
+- **Receipt:** SHA-256 of the COBOL source, the Python and the test data, so a verdict cannot be reused for other code.
+
+## How It Compares
+
+From public documentation (November 2026). Séance is a local, single-developer tool; the others are enterprise
+platforms. Where they need a mainframe, a cloud account or a services contract, Séance runs on a laptop in seconds.
+
+| | Séance | COBOL Phoenix | AWS Transform | IBM watsonx Code Assistant for Z | Google Dual Run |
+| --- | --- | --- | --- | --- | --- |
+| Translation | Rules, to Python | Rules, to Python | AI + rules, to Java | AI, to Java | AI, to Java/C# |
+| Runs the original COBOL to get expected answers | Yes, locally (GnuCOBOL) | Yes, locally | No (uses mainframe data) | Records on z/OS | Yes, on the mainframe |
+| Minimal failing input (shrinking) | Yes | Not documented | Not documented | Not documented | Not documented |
+| Mutation testing | Yes | Yes | No | No | No |
+| Statement coverage of the evidence | Yes | Yes | No | No | No |
+| Hash receipt over code and test data | Yes | Partial | No | No | No |
+| Indexed (VSAM-style) files | Yes | No | Yes | Yes | Yes |
+| CALL, SORT | Yes | CALL only | Yes | Yes | Yes |
+| EXEC SQL, CICS, JCL | No | No | Yes | Yes | Yes |
+| Runs offline, free | Yes | Yes | No | No | No |
+
+Sources: github.com/thosuperman/cobol-phoenix; docs.aws.amazon.com/transform; ibm.com/products/watsonx-code-assistant-z;
+docs.cloud.google.com/mainframe-dual-run. Passing differential tests is strong evidence, not a proof for every input.
 
 ## Settings
 
@@ -121,8 +146,8 @@ python -m seance translate accounts       # write the Python draft
 python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 53 tests, including differential tests against GnuCOBOL
-python scripts\ui_check.py                # 16 checks that drive the real UI in Edge (app must be running)
+python -m pytest                          # 69 tests, including differential tests against GnuCOBOL
+python scripts\ui_check.py                # 19 checks that drive the real UI in Edge (app must be running)
 ```
 
 ## Example Programs
@@ -137,6 +162,10 @@ python scripts\ui_check.py                # 16 checks that drive the real UI in 
 | account_report | Real course program CBL0011: a report with headers and totals over packed-decimal (`COMP-3`) records. |
 | add_amounts | Real course program ADDAMT: an interactive console loop that runs until you answer NO. |
 | table_search | Real course program SRCHBIN: an `OCCURS` table loaded from a file and searched with `SEARCH ALL`. |
+| customer_master | An indexed customer master updated by transactions: WRITE, READ by key, REWRITE, DELETE, START on an alternate key, READ NEXT. |
+| order_pricing | CALLs a pricing module (IS INITIAL, RETURN-CODE) and a counter module whose storage persists; CANCEL; ON EXCEPTION. |
+| transaction_sort | SORT USING/GIVING on packed keys, SORT with INPUT/OUTPUT PROCEDURE, and SORT of a table. |
+| seat_bookings | A relative file updated by slot number, then listed with START and READ NEXT. |
 
 The three course programs are CC-BY-4.0, unchanged; see `SOURCE.md` next to each.
 
@@ -145,6 +174,6 @@ The three course programs are CC-BY-4.0, unchanged; see `SOURCE.md` next to each
 - Windows-first. The COBOL runtime is the MinGW build of GnuCOBOL 3.1.2.
 - A pass is strong evidence, not a proof for every possible input. Test Strength shows where the evidence is thin.
 - The translator and the description are rule-based, not an LLM. They never guess: what they cannot read is marked.
-- `CALL` between programs and indexed files are the main things to add next.
+- Multi-step JCL jobs and EXEC SQL are the main things to add next.
 
 License: MIT.

@@ -1,5 +1,5 @@
        IDENTIFICATION DIVISION.
-       PROGRAM-ID. SORTDEMO.
+       PROGRAM-ID. TRANSORT.
       * Sorts transactions three ways and sorts a table in storage.
        ENVIRONMENT DIVISION.
        INPUT-OUTPUT SECTION.

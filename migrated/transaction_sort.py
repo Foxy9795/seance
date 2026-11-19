@@ -1,4 +1,4 @@
-"""Python translation of legacy/transaction_sort/transaction_sort.cbl (PROGRAM-ID SORTDEMO).
+"""Python translation of legacy/transaction_sort/transaction_sort.cbl (PROGRAM-ID TRANSORT).
 
 Written by the Séance translator on 2026-11-19. The program reads TRANSIN, writes BYACCT, writes BIGONES.
 Run it with main(IO(files={...}, stdin=[...])) or from the command line: python <this file> (see the README).

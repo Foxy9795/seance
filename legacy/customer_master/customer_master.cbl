@@ -1,5 +1,5 @@
        IDENTIFICATION DIVISION.
-       PROGRAM-ID. IDXDEMO.
+       PROGRAM-ID. CUSTMAST.
       * Applies transactions to an indexed customer master (VSAM KSDS
       * style): add, change, delete, then lists by region.
        ENVIRONMENT DIVISION.
