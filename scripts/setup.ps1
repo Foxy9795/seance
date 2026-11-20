@@ -1,4 +1,4 @@
-# One-time setup on Windows, from a fresh clone:  .\scripts\setup.ps1
+﻿# One-time setup on Windows, from a fresh clone:  .\scripts\setup.ps1
 #   1. a Python 3.12 virtual environment in .venv, with Séance installed into it (the `seance` command)
 #   2. GnuCOBOL 3.1.2 in tools\gnucobol: downloaded (82 MB), checked against a fixed SHA-256, then unpacked
 #   3. a setup check (python -m seance doctor)

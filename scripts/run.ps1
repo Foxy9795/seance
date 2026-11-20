@@ -1,4 +1,4 @@
-# Starts Séance with GnuCOBOL on PATH and opens the browser. Run from anywhere:  .\scripts\run.ps1
+﻿# Starts Séance with GnuCOBOL on PATH and opens the browser. Run from anywhere:  .\scripts\run.ps1
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'env.ps1')
 $py = Join-Path $root '.venv\Scripts\python.exe'
