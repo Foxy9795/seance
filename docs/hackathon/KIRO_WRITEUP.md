@@ -35,7 +35,7 @@ numeric and theme rules into a check that fails the build. [Which rule changed K
 **Hooks**: `verify-migration-on-save` re-runs the verifier whenever a file in `migrated/` is saved, so a wrong
 migration is flagged at once. [Confirm it fired in your session, and what it caught.]
 
-**MCP**: `seance/mcp_server.py` exposes 13 tools. `run_legacy_program` is the key one: Kiro asks the real COBOL what
+**MCP**: `seance/mcp_server.py` exposes 14 tools. `run_legacy_program` is the key one: Kiro asks the real COBOL what
 it does for any input instead of guessing from the source. `fill_test_gaps` lets Kiro close test gaps itself.
 Read-only tools are auto-approved; tools that write files are not.
 

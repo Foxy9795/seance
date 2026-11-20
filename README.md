@@ -245,8 +245,8 @@ Séance compiles and runs code you give it, so treat it like a local dev server.
 
 - **MCP server** (`seance/mcp_server.py`, registered in `.kiro/settings/mcp.json`) with these tools: `list_programs`,
   `describe_program`, `describe_layout`, `run_legacy_program` (input files and console input), `record_legacy_fixtures`,
-  `draft_python`, `verify_migration`, `measure_test_strength`, `fill_test_gaps`, `extract_business_rules`, `assess_workspace`, `list_samples`, `load_sample`
-  (13 tools; the ones that only read are auto-approved).
+  `draft_python`, `verify_migration`, `measure_test_strength`, `fill_test_gaps`, `extract_business_rules`, `assess_workspace`,
+  `where_used`, `list_samples`, `load_sample` (14 tools; the ones that only read are auto-approved).
 - **Steering** (`.kiro/steering/`): product rules and COBOL-to-Python rules.
 - **Hook** (`.kiro/hooks/`): re-verifies when a file in `migrated/` is saved.
 - **Spec** (`.kiro/specs/seance/`): requirements, design and tasks.

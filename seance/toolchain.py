@@ -153,7 +153,7 @@ def mcp_config(root: Path = ROOT, existing: dict | None = None) -> dict:
     entry["env"] = {**entry.get("env", {}), "PYTHONPATH": str(root)}
     entry.setdefault("disabled", False)
     entry.setdefault("autoApprove", ["list_programs", "list_samples", "extract_business_rules", "assess_workspace",
-                                     "describe_program", "describe_layout", "run_legacy_program"])
+                                     "describe_program", "describe_layout", "run_legacy_program", "where_used"])
     return cfg
 
 

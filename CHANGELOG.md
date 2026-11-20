@@ -8,7 +8,7 @@ version numbers follow [Semantic Versioning](https://semver.org/).
 ### Added
 - The command bar searches the code as well as programs and actions. Choosing a name opens **Where Used**: every line in
   the workspace that defines, changes or reads it, grouped by program, each one a link into the code (`/api/xref`, and the
-  `where_used` MCP tool).
+  `where_used` MCP tool, which only reads and is auto-approved in a newly written MCP config).
 - **View Records** on the Test Data tab: any saved input or output file split into the fields of its record layout, with
   CSV export (`/api/records`).
 - Translator: compiler directives (`>>IF`, `>>ELIF`, `>>ELSE`, `>>DEFINE`, `>>SOURCE FORMAT`, `$SET`), `REPLACE` (with `ALSO`,
