@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seance"
+dynamic = ["version"]
+description = "Rewrite COBOL in Python and prove it gives the same answers: the original runs beside the Python on the same inputs, byte for byte."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+# keep in step with requirements.txt (tests/test_release.py checks)
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "hypothesis>=6.100",
+    "pytest>=8",
+    "mcp>=1.9,<2",
+]
+keywords = ["cobol", "migration", "gnucobol", "mainframe", "differential-testing", "property-based-testing"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: COBOL",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.optional-dependencies]
+dev = ["playwright>=1.40"]
+
+[project.scripts]
+seance = "seance.cli:main"
+
+[tool.setuptools]
+packages = ["seance"]
+
+[tool.setuptools.dynamic]
+version = { attr = "seance.__version__" }
+
+[tool.setuptools.package-data]
+seance = ["native/*.c"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# FastAPI's test client warns about its own httpx backend; it says nothing about Séance
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]

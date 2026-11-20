@@ -21,7 +21,7 @@ You review. You do not fix anything until I approve a specific finding.
 
 - Work only inside this repository folder. No network access except what a command below needs. No publishing, no
   `git push`, no force operations, no `git reset --hard`, no deleting files outside `build/`.
-- Read-only by default. You may create files under `review/` and `build/review/` only.
+- Read-only by default. You may create files under `docs/review/<today's date>/` and `build/review/` only. Call that folder REVIEW below.
 - Never edit `legacy/`, `fixtures/`, `samples/*/legacy/` or `.kiro/settings/mcp.json`. A mismatch means the Python
   is wrong, not the saved data.
 - Do not weaken a test to make it pass. Do not mark something "fine" without running or reading the thing.
@@ -69,7 +69,7 @@ Kiroween rules (`docs/hackathon/`, `scripts/check_rules.py`):
 
 ## Phase 1: plan, then **STOP**
 
-Write `review/PLAN.md` and wait for my approval. It must list, for each sub-agent: its single question, the exact files
+Write `REVIEW/PLAN.md` and wait for my approval. It must list, for each sub-agent: its single question, the exact files
 it may read, the commands it may run, what it must not touch, and its output file. Use these scopes, or tell me why you
 would change them:
 
@@ -88,7 +88,7 @@ Keep sub-agents independent. Do not give one agent another's conclusions.
 
 ## Phase 2: run the sub-agents (after I approve the plan)
 
-Each sub-agent writes `review/findings/<number>-<name>.md` in exactly this format, one block per finding:
+Each sub-agent writes `REVIEW/findings/<number>-<name>.md` in exactly this format, one block per finding:
 
 ```
 ### F<scope>.<n> <short title>
@@ -114,7 +114,7 @@ A sub-agent that finds nothing for its question says so and lists what it checke
 
 1. Merge duplicates. For every Critical and High finding, reproduce it yourself and paste the reproduction. Downgrade
    or drop anything you cannot reproduce, and say so.
-2. Write `review/REPORT.md`: a verdict (one of "ship", "ship after fixes", "do not ship"), the findings by severity,
+2. Write `REVIEW/REPORT.md`: a verdict (one of "ship", "ship after fixes", "do not ship"), the findings by severity,
    what was checked and found clean, and what was not checked.
 3. Wait for me. I will choose which findings to fix.
 

@@ -179,6 +179,7 @@ def _samples(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="seance samples", description="The sample library the guide loads from.")
     p.add_argument("action", choices=["list", "load", "remove"])
     p.add_argument("name", nargs="?")
+    p.add_argument("--all", action="store_true", help="with load: every sample in the library")
     a = p.parse_args(argv)
     try:
         if a.action == "list":
@@ -186,10 +187,11 @@ def _samples(argv: list[str]) -> int:
                 print(f"{'*' if s['loaded'] else ' '} {s['name']:<18} {s['summary']}")
             print("\n* already in the workspace")
         elif a.action == "load":
-            if not a.name:
-                p.error("load needs a sample name")
-            r = install(a.name)
-            print("loaded:", ", ".join(r["added"]) or "nothing new", f"(already there: {', '.join(r['already'])})" if r["already"] else "")
+            if not a.name and not a.all:
+                p.error("load needs a sample name, or --all")
+            for name in [s["name"] for s in catalog()["samples"]] if a.all else [a.name]:
+                r = install(name)
+                print("loaded:", ", ".join(r["added"]) or "nothing new", f"(already there: {', '.join(r['already'])})" if r["already"] else "")
         else:
             gone = remove_all()
             print("removed:", ", ".join(gone) or "nothing (no sample programs are loaded)")
@@ -199,15 +201,59 @@ def _samples(argv: list[str]) -> int:
     return 0
 
 
+def _setup(argv: list[str]) -> int:
+    """GnuCOBOL 3.1.2 (downloaded and checked on Windows), and on request Kiro's MCP settings for this folder."""
+    from .toolchain import ToolchainError, install, mcp_config, write_mcp_config
+
+    p = argparse.ArgumentParser(prog="seance setup", description="Get GnuCOBOL 3.1.2: on Windows it is downloaded, checked against a fixed "
+                                "SHA-256 and unpacked into tools/gnucobol. Nothing already installed is changed.")
+    p.add_argument("--mcp-config", action="store_true", help="also write .kiro/settings/mcp.json with this folder's paths (other settings are kept)")
+    p.add_argument("--print-mcp-config", action="store_true", help="print the MCP settings for this folder and change nothing")
+    a = p.parse_args(argv)
+    target = ROOT / ".kiro" / "settings" / "mcp.json"
+    if a.print_mcp_config:
+        existing = json.loads(target.read_text(encoding="utf-8")) if target.exists() else None
+        print(json.dumps(mcp_config(ROOT, existing), indent=2))
+        return 0
+    try:
+        r = install()
+    except ToolchainError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(f"GnuCOBOL {'was already installed' if r['status'] == 'present' else 'is installed'}: {r['version']} ({r['cobc']})")
+    if a.mcp_config:
+        try:
+            write_mcp_config(target, ROOT)
+        except ToolchainError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print(f"wrote {target}")
+    print("Next: python -m seance doctor")
+    return 0
+
+
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in ("--version", "-V"):
+        from . import __version__
+
+        print(f"seance {__version__}")
+        return 0
+    if argv and argv[0] == "setup":
+        return _setup(argv[1:])
+    if argv and argv[0] == "doctor":
+        from .doctor import main as doctor_main
+
+        return doctor_main(argv[1:])
     if argv and argv[0] == "serve":
         return _serve(argv[1:])
     if argv and argv[0] == "samples":
         return _samples(argv[1:])
     if argv and argv[0] == "check-all":
         return _check_all(argv[1:])
-    p = argparse.ArgumentParser(prog="seance", epilog="Also: 'seance serve' starts the app; 'seance check-all [--junit FILE]' checks the whole workspace (for CI); 'seance samples list|load|remove' manages the sample library.")
+    p = argparse.ArgumentParser(prog="seance", epilog="Also: 'seance serve' starts the app; 'seance setup' gets GnuCOBOL; 'seance doctor' checks this machine; "
+           "'seance check-all [--junit FILE]' checks the whole workspace (for CI); 'seance samples list|load|remove' manages the sample library; "
+           "'seance --version'.")
     p.add_argument("command", choices=COMMANDS)
     p.add_argument("program")
     p.add_argument("--impl", help="python module to check (default migrated.<program>)")

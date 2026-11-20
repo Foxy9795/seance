@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 node_modules/
 build/
+*.egg-info/
 *.bak
 
 # Your workspace: the programs you add, their saved test data and their Python stay out of the product repository.

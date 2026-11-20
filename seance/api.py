@@ -559,6 +559,17 @@ async def run_mutate(req: MutateRequest):
     return await run_in_threadpool(_run_cli, ["mutate", req.program, "--impl", req.implementation, "--json"], config.VERIFY_TIMEOUT)
 
 
+@app.post("/api/doctor")
+async def setup_check():
+    """The same checks as python -m seance doctor. A POST because it compiles a small program (in a temporary folder)."""
+    from dataclasses import asdict
+
+    from .doctor import run
+
+    checks = await run_in_threadpool(run)
+    return {"version": __version__, "ok": not any(c.level == "fail" for c in checks), "checks": [asdict(c) for c in checks]}
+
+
 @app.post("/api/gapfill")
 async def run_gapfill(req: MutateRequest):
     """Search for inputs that catch the planted bugs the saved records missed, and save them as test sets."""

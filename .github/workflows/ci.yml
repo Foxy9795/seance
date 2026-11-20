@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Keep the GnuCOBOL download between runs
+        uses: actions/cache@v4
+        with:
+          path: build/downloads
+          key: gnucobol-3.1.2-20230124-mingw-x64
+
+      - name: Set up (virtual environment, GnuCOBOL 3.1.2, setup check)
+        shell: pwsh
+        run: ./scripts/setup.ps1
+
+      - name: Tests
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          ./.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider
+
+      - name: Submission and steering rules
+        shell: pwsh
+        run: ./.venv/Scripts/python.exe scripts/check_rules.py
+
+      - name: Check every sample against the real COBOL (JUnit report)
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          ./.venv/Scripts/seance.exe samples load --all
+          ./.venv/Scripts/seance.exe check-all --rounds 10 --junit build/junit.xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit
+          path: build/junit.xml
+          if-no-files-found: ignore

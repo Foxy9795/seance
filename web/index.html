@@ -403,6 +403,7 @@
   body[data-motion=reduce] dialog::backdrop { transition: none !important; backdrop-filter: none !important; } body[data-motion=reduce] .brand svg { animation: none; }
   @media (prefers-reduced-motion: reduce) { body[data-motion=system] dialog::backdrop { transition: none !important; backdrop-filter: none !important; } body[data-motion=system] .brand svg { animation: none; } }
   @media (max-width: 720px) { dialog#palDlg { border-radius: 10px; } }
+  table.doctor td:first-child { width: 92px; vertical-align: top; } table.doctor td { overflow-wrap: anywhere; }
 </style>
 </head>
 <body data-density="comfortable" data-motion="system" data-side="on">
@@ -846,7 +847,7 @@ function renderRuntime() {
   $('runtimeBtn').setAttribute('aria-label', ok ? 'COBOL runtime: GnuCOBOL ready' : 'COBOL runtime: GnuCOBOL not found');
   $('runtimeInfo').innerHTML = ok
     ? `<b class="good">The real COBOL runtime is available.</b><p class="muted" style="margin-top:4px">${esc(a?.cobc || 'GnuCOBOL')}</p>`
-    : '<b class="bad">GnuCOBOL was not found.</b><p class="muted" style="margin-top:4px">Séance compiles and runs your COBOL with GnuCOBOL. Put it in <code>tools\\gnucobol</code> or on PATH, then reload.</p>';
+    : '<b class="bad">GnuCOBOL was not found.</b><p class="muted" style="margin-top:4px">Séance compiles and runs your COBOL with GnuCOBOL. Run <code>python -m seance setup</code> (it downloads and checks GnuCOBOL 3.1.2 on Windows), or put <code>cobc</code> on PATH, then reload.</p>';
 }
 function renderSide() {
   const q = S.sideQ.trim().toLowerCase();
@@ -1942,10 +1943,24 @@ function openAbout() {
   const a = S.about;
   $('aboutBody').innerHTML = `<div class="row" style="gap:16px">${WISP('calm', 46)}<div><h2 style="font-family:var(--serif);font-size:1.4rem">Séance <span class="faint" style="font:500 .9rem var(--sans)">version ${esc(a.version)}</span></h2><p class="muted">Migrates COBOL to Python and proves the Python gives the same answers.</p></div></div>
     <div class="panel"><table class="sm"><tbody><tr><td class="muted">COBOL runtime</td><td>${S.runtime ? esc(a.cobc || 'GnuCOBOL') : '<b class="bad">GnuCOBOL not found</b>'}</td></tr><tr><td class="muted">Workspace</td><td class="mono">${esc(a.workspace)}</td></tr><tr><td class="muted">Programs</td><td>${S.programs.length}</td></tr></tbody></table></div>
+    <div class="panel"><div class="head"><div><h3>Setup check</h3><p class="muted sm">Python, packages, GnuCOBOL, a test program compiled and compared, the workspace and the Kiro MCP settings. The same as <code>python -m seance doctor</code>.</p></div><button class="btn sm" id="runDoctor">${ic('play', 14)}Run Setup Check</button></div><div id="doctorOut"></div></div>
     <div class="cols"><div><h3 style="margin-bottom:6px">Séance runs</h3><ul class="plain">${a.supported.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div><div><h3 style="margin-bottom:6px">Not yet</h3><ul class="plain">${a.not_yet.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
       <p class="faint sm" style="margin-top:12px">A program that uses something not supported is still accepted when it compiles. Statements that cannot be translated raise an error naming the COBOL line, so a check fails there instead of passing quietly.</p></div></div>`;
   $('aboutDlg').showModal();
 }
+const DOCTOR_TAG = { ok: ['good', 'OK'], warn: ['amber', 'Warning'], fail: ['bad', 'Problem'], skip: ['', 'Skipped'] };
+async function runDoctor() {
+  const out = $('doctorOut'), btn = $('runDoctor'); if (!out || btn.disabled) return;
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Checking…';
+  out.innerHTML = '<div class="body"><div class="skel"></div><div class="skel" style="width:70%"></div></div>';
+  try {
+    const r = await send('/api/doctor', {}, 'POST', 120000);
+    out.innerHTML = `<table class="sm doctor"><tbody>${r.checks.map((c) => { const [cls, word] = DOCTOR_TAG[c.level] || DOCTOR_TAG.skip;
+      return `<tr><td><span class="tag ${cls}">${word}</span></td><td><b>${esc(c.name)}</b><br><span class="muted">${esc(c.detail)}</span>${c.fix && c.level !== 'ok' ? `<br><span class="faint">Fix: ${esc(c.fix)}</span>` : ''}</td></tr>`; }).join('')}</tbody></table>`;
+  } catch (e) { out.innerHTML = `<div class="body"><div class="note bad">${esc(e.message)}</div></div>`; }
+  btn.disabled = false; btn.innerHTML = `${ic('refresh', 14)}Run Again`;
+}
+$('aboutDlg').addEventListener('click', (e) => { if (e.target.closest('#runDoctor')) runDoctor(); });
 
 /* ================================================================ guide: welcome, samples, tour */
 const tour = { on: false, i: 0, name: null, steps: [], busy: false, token: 0, el: null };

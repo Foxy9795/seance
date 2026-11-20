@@ -21,15 +21,25 @@ original COBOL and the Python side by side and compares every output, byte for b
 
 ## Quick Start (Windows)
 
+You need Python 3.12 or newer and about 700 MB of disk space for GnuCOBOL.
+
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-# Put GnuCOBOL 3.1.2 (MinGW x64) in tools\gnucobol\ :
-#   https://github.com/mridoni/gnucobol-binaries/releases  (gnucobol-3.1.2-windows-mingw-x64.7z)
-.\scripts\run.ps1        # or: python -m seance serve   (opens http://127.0.0.1:8000)
+.\scripts\setup.ps1      # .venv with the seance command, GnuCOBOL 3.1.2 (an 82 MB download, SHA-256 checked), a setup check
+.\scripts\run.ps1        # opens http://127.0.0.1:8000
 ```
 
-Any `cobc` already on PATH also works. The workspace starts empty. The first time you open the app, the **guide** offers a
+The same steps by hand:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\seance setup     # or unpack gnucobol-3.1.2-windows-mingw-x64.7z from release 3.1.2-20230124
+                                   # of github.com/mridoni/gnucobol-binaries into tools\gnucobol\
+.\.venv\Scripts\seance doctor    # checks Python, packages, GnuCOBOL, a test compile, the workspace, Kiro's MCP settings
+.\.venv\Scripts\seance serve
+```
+
+Any `cobc` already on PATH also works; on Linux or macOS, install GnuCOBOL 3.1.2 with your package manager. The workspace starts empty. The first time you open the app, the **guide** offers a
 two-minute tour with a sample program, or you can add your own COBOL straight away.
 
 ## The App
@@ -218,7 +228,7 @@ version your own migration work in this repository.
 
 ## Security Model
 
-Séance compiles and runs code you give it, so treat it like a local dev server.
+Séance compiles and runs code you give it, so treat it like a local dev server. `SECURITY.md` has the details.
 
 - It binds to 127.0.0.1 and rejects requests addressed to any other host name, which blocks DNS rebinding.
 - Every request that changes anything must be JSON and carry a random per-launch token that only the page it serves contains.
@@ -235,15 +245,17 @@ Séance compiles and runs code you give it, so treat it like a local dev server.
 - **Spec** (`.kiro/specs/seance/`): requirements, design and tasks.
 - **Rules check** (`scripts/check_rules.py`, also run by the tests): the Kiroween submission rules and the steering rules, as code.
 
-`.kiro/settings/mcp.json` starts the MCP server with the virtual environment's Python. `docs/mcp.portable.json` is the same configuration with
-relative paths (`.venv/Scripts/python.exe`, Windows; use `.venv/bin/python` elsewhere), so it works from any clone: copy it over
-`.kiro/settings/mcp.json` if the path in that file is not yours.
+`.kiro/settings/mcp.json` starts the MCP server with this folder's virtual environment. After cloning, run
+`.\.venv\Scripts\seance setup --mcp-config` (or `.\scripts\setup.ps1 -McpConfig`) to write your folder's paths into it;
+other servers and settings in the file are kept. `seance doctor` says when the paths in it do not exist on your machine.
 
 ## Command Line
 
 ```powershell
 . .\scripts\env.ps1                       # GnuCOBOL on PATH for this shell
 python -m seance serve                    # the app, on 127.0.0.1 only
+python -m seance setup                    # GnuCOBOL 3.1.2 into tools\gnucobol (Windows); --mcp-config for Kiro
+python -m seance doctor                   # check this machine, with a fix for each problem (--json for scripts)
 python -m seance check-all --junit out.xml  # every program and job; exit code 1 if any is restless (for CI)
 python -m seance samples list             # the sample library
 python -m seance analyze accounts         # what Séance understood about the program
@@ -280,6 +292,19 @@ The tests load the sample library into the workspace for the run and remove it a
   functions' display formats. A program that uses them is accepted and says so in its notes; the check shows where it differs.
   `docs/STRESS.md` measures this against GnuCOBOL's own test programs (141 of 466 usable ones matched; the suite is deliberately hostile).
 - IMS and the REPORT and SCREEN sections are the main things to add next.
+
+## Documentation
+
+| File | What is in it |
+| --- | --- |
+| `CHANGELOG.md` | What each release contains |
+| `CONTRIBUTING.md` | Setting up for development, the checks to run, the rules the code follows |
+| `SECURITY.md` | What Séance does that matters for security, and how to report a problem |
+| `docs/COMPARISON.md` | Ten products that do part of this job, and where Séance differs |
+| `docs/STRESS.md` | The translator measured against GnuCOBOL's own test programs |
+| `docs/review/` | An independent review, the prompt that ran it, and how each finding was resolved |
+| `.kiro/specs/seance/` | Requirements, design and tasks |
+| `docs/hackathon/` | The Kiroween demo script and write-up |
 
 License: MIT.
 

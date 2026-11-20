@@ -68,7 +68,7 @@ def kiroween() -> list[Result]:
         ok("MCP server configured", ", ".join(servers))
         if re.search(r"[A-Za-z]:\\\\Users\\\\|/home/\w+/|/Users/\w+/", text):
             warn("MCP config runs on other machines", "mcp.json holds an absolute path from this machine, so a judge who clones the repo "
-                 "gets a server that does not start. Use `python` with `-m seance.mcp_server` and a relative PYTHONPATH.")
+                 "gets a server that does not start until they run: python -m seance setup --mcp-config")
     else:
         bad("MCP server configured", ".kiro/settings/mcp.json is missing")
 
