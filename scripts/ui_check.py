@@ -60,6 +60,18 @@ def main() -> int:
         page.wait_for_selector("#palDlg[open]")
         check("the palette lists actions", "Add program" in page.inner_text("#palList"))
         close_dialogs()
+        # the command bar grows out of the search button, at any window size, and focus goes back to it
+        for w, h in ((1360, 900), (2050, 1000), (700, 800)):
+            page.set_viewport_size({"width": w, "height": h})
+            page.click("#palOpen")
+            page.wait_for_selector("#palDlg[open]")
+            page.wait_for_timeout(450)
+            box, trig = page.locator("#palDlg").bounding_box(), page.locator("#palOpen").bounding_box()
+            check(f"the command bar opens at the search button ({w} wide)", (abs(box["x"] - trig["x"]) <= 10 or (w < 720 and box["x"] <= 10)) and abs(box["y"] - trig["y"]) <= 4 and box["y"] < 60,
+                  f"dialog {box['x']:.0f},{box['y']:.0f} button {trig['x']:.0f},{trig['y']:.0f}")
+            close_dialogs()
+            check(f"focus returns to the search button ({w} wide)", page.evaluate("document.activeElement && document.activeElement.id") == "palOpen")
+        page.set_viewport_size({"width": 1360, "height": 900})
         page.keyboard.press("?")
         page.wait_for_selector("#keysDlg[open]")
         check("the shortcut list opens with ?", "Run the check" in page.inner_text("#keysBody"))
@@ -108,7 +120,7 @@ def main() -> int:
         check("coverage and receipt are shown", hit("#result .meter") == 1 and hit("#result .receipt") == 1)
         check("the sidebar status changed", "Spirit matched" in page.locator(".side-item[data-name=payroll]").inner_text())
         page.select_option("#implSel", label="Hand-written port (floats)")
-        page.wait_for_selector("#runInline")
+        page.wait_for_selector("#result .empty-state")
         page.click("#runBtn")
         page.wait_for_selector("#result .word.bad", timeout=300000)
         check("the buggy port is caught", True)
@@ -245,6 +257,24 @@ def main() -> int:
         page.wait_for_selector("#vWork tr.link:has-text('Loan')")
         page.check("#selAll")
         check("selecting rows shows what can be done with them", "3 selected" in page.inner_text("#vWork .selbar"), page.inner_text("#vWork .selbar")[:40])
+        check("the selection bar is compact", page.locator("#vWork .selbar").bounding_box()["width"] < 560, page.locator("#vWork .selbar").bounding_box())
+        check("the select boxes are small", page.locator("#selAll").bounding_box()["width"] <= 16)
+        # each action is offered in one place: no label appears in two different parts of the page
+        page.click("#helpBtn")
+        page.wait_for_selector("#helpMenu:not([hidden])")
+        twice = page.evaluate("""() => {
+            const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !e.closest('[hidden]'); };
+            const seen = {};
+            document.querySelectorAll('button, a[href], [role=menuitem]').forEach((e) => {
+                if (!vis(e) || e.matches('.side-item, .tabs button, .chip, [data-sel], .icon-btn[data-rowmenu]')) return;
+                const t = (e.getAttribute('aria-label') || e.innerText || '').replace(/\\s+/g, ' ').trim().split(' ').slice(0, 4).join(' ').toLowerCase();
+                const where = (e.closest('.side-foot, .top, .menu, #vWork, .pbar') || document.body).className.split(' ')[0] || 'page';
+                if (t.length > 2) (seen[t] = seen[t] || new Set()).add(where);
+            });
+            return Object.entries(seen).filter(([, w]) => w.size > 1).map(([t, w]) => t + ' in ' + [...w].join(' and '));
+        }""")
+        check("no action is offered in two places", not twice, "; ".join(twice))
+        page.keyboard.press("Escape")
         page.click("#vWork [data-act=selDelete]")
         page.wait_for_selector("#confirmDlg[open]")
         page.click("#cfYes")

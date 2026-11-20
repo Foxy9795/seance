@@ -474,6 +474,8 @@ class Searcher:
         """A nearby input with a few values replaced, or a record added."""
         cand = st.copy()
         coords = numeric_coords(self.model, cand)
+        if self.rng.random() < 0.3 and self._vary_text(cand):
+            return cand
         if coords and self.rng.random() < 0.85:
             for c in self.rng.sample(coords, min(len(coords), self.rng.choice([1, 1, 2, 3]))):
                 c.put(cand, c.random_value(self.rng))
@@ -482,6 +484,24 @@ class Searcher:
             if fname and cand.rows[fname]:
                 cand.rows[fname].append(dict(self.rng.choice(cand.rows[fname])))
         return cand
+
+    def _vary_text(self, st: State) -> bool:
+        """Give one text field a value seen elsewhere (another record, or a value the program compares it with)."""
+        spots = []
+        for f in self.model.inputs:
+            if f.record is None or f.name not in st.rows:
+                continue
+            for i, lf in enumerate(leaves(f.record)):
+                if lf.item.kind == "alpha" and lf.name != "FILLER":
+                    spots.append((f.name, i, lf.item.name))
+        if not spots:
+            return False
+        fname, i, name = self.rng.choice(spots)
+        pool = [r[i] for r in st.rows[fname] if isinstance(r.get(i), str)] + [h for h in self.hints.get(name, []) if isinstance(h, str)]
+        if not pool or not st.rows[fname]:
+            return False
+        st.rows[fname][self.rng.randrange(len(st.rows[fname]))][i] = self.rng.choice(pool)
+        return True
 
     def run(self) -> dict:
         try:
@@ -664,7 +684,7 @@ def _name_for(program: str, line, root: Path) -> str:
     return name
 
 
-def fill_gaps(program: str, implementation: str | None = None, limit: int = 12, budget: int = 500, seconds: int = SITE_SECONDS,
+def fill_gaps(program: str, implementation: str | None = None, limit: int = 12, budget: int = 2000, seconds: int = SITE_SECONDS,
               save: bool = True, again: bool = False, root: Path = ROOT) -> dict:
     from .verify import describe_case, load_implementation
 

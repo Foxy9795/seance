@@ -15,11 +15,39 @@ def _sha(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16] if path.exists() else None
 
 
+def source_sha(program: str, root: Path) -> str | None:
+    """Hash of the COBOL a check ran against: the main source plus every copybook and called program beside it.
+    A program that is one file keeps the plain hash of that file."""
+    base = root / "legacy" / program
+    head = next((p for p in (base / f"{program}.cbl", base / f"{program}.jcl") if p.exists()), None)
+    if head is None:
+        return None
+    others = sorted(p for p in base.iterdir() if p.is_file() and p != head and p.suffix.lower() in (".cbl", ".cob", ".cpy", ".copy", ".jcl"))
+    if not others:
+        return _sha(head)
+    h = hashlib.sha256(head.read_bytes())
+    for p in others:
+        h.update(b"\0" + p.name.lower().encode() + b"\0" + p.read_bytes())
+    return h.hexdigest()[:16]
+def source_sha(program: str, root: Path) -> str | None:
+    """Hash of the COBOL a check ran against: the main source plus every copybook and called program beside it.
+    A program that is one file keeps the plain hash of that file."""
+    base = root / "legacy" / program
+    head = next((p for p in (base / f"{program}.cbl", base / f"{program}.jcl") if p.exists()), None)
+    if head is None:
+        return None
+    others = sorted(p for p in base.iterdir() if p.is_file() and p != head and p.suffix.lower() in (".cbl", ".cob", ".cpy", ".copy", ".jcl"))
+    if not others:
+        return _sha(head)
+    h = hashlib.sha256(head.read_bytes())
+    for p in others:
+        h.update(b"\0" + p.name.lower().encode() + b"\0" + p.read_bytes())
+    return h.hexdigest()[:16]
 def receipt(r: Report, root: Path) -> dict:
     """What was checked: hashes of the COBOL and the Python, so the verdict cannot be reused for other code."""
     impl_path = root / (r.implementation.replace(".", "/") + ".py")
     return {
-        "cobol_sha256": _sha(root / "legacy" / r.program / f"{r.program}.cbl") or _sha(root / "legacy" / r.program / f"{r.program}.jcl"),
+        "cobol_sha256": source_sha(r.program, root),
         "python_sha256": _sha(impl_path) if not r.implementation.startswith("jobs.") else _job_python_sha(r, root),
         "checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "saved_records": sum(s["records"] for s in r.sets),

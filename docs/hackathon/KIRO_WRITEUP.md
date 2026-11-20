@@ -21,7 +21,7 @@ the same inputs and comparing every output byte. Category: Resurrection.
 
 ## How Kiro was used
 
-**IDE, CLI, Web, Crew**: Built in Kiro IDE. [Did you use another surface? What differed?]
+**IDE, CLI, Web, Crew**: Built in Kiro IDE.
 
 **Spec-driven development**: `.kiro/specs/seance/` holds `requirements.md` (WHEN/THEN, R1 to R9), `design.md` (pipeline,
 verification, gap filling, correctness properties, rejected alternatives) and `tasks.md` (status checked against the
@@ -51,4 +51,4 @@ filling closed one (a bracket edge between 1500 and 1501, caught by a new saved 
 other (`<=` changed to `<` at 500) never changes the output, because the tax is continuous there. It reports that as
 "likely equivalent", with the number of edge hits behind the claim, not as a pass.
 
-**Custom agents / Powers**: [None used so far. Add if you use any.]
+**Custom agents / Powers**: None. The project defines no custom agents (`.kiro/` has steering, a hook, a spec and an MCP server).

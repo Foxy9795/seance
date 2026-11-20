@@ -7,6 +7,7 @@ way: the editor saves Python that the checker then runs.
 from __future__ import annotations
 
 import functools
+import hashlib
 import hmac
 import json
 import secrets
@@ -15,9 +16,8 @@ import sys
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field, field_validator
-from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import __version__, config
 from .programs import (
@@ -41,7 +41,22 @@ app = FastAPI(title="Séance")
 # DNS rebinding; (2) every state-changing request must carry a random per-launch token that only
 # the page we serve knows, which stops cross-site requests.
 app.state.token = secrets.token_urlsafe(32)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
+
+def _host_name(header: str) -> str:
+    """The host in a Host header, without its port: 127.0.0.1:8000, localhost, [::1]:8000."""
+    h = header.strip().lower()
+    if h.startswith("["):
+        return h[1:h.find("]")] if "]" in h else ""
+    return h.rsplit(":", 1)[0] if h.count(":") == 1 else h
+
+
+@app.middleware("http")
+async def only_loopback(request: Request, call_next):
+    if _host_name(request.headers.get("host", "")) not in LOOPBACK:
+        return PlainTextResponse("Invalid host header", status_code=400)
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -195,6 +210,7 @@ def _cobc_version() -> str:
 def about():
     return {
         "version": __version__,
+        "build": _page_build(),
         "workspace": str(ROOT),
         "cobc": _cobc_version() if cobc_available() else "",
         "legacy_runtime": cobc_available(),
@@ -608,7 +624,12 @@ def download(program: str, what: str, implementation: str):
     raise HTTPException(400, "what must be bundle, python, report, html or json")
 
 
+def _page_build() -> str:
+    """A short id of the page being served. The page compares it with the server's on focus and offers a reload when they differ."""
+    return hashlib.sha1((ROOT / "web" / "index.html").read_bytes()).hexdigest()[:10]
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
-    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8").replace("__SESSION_TOKEN__", app.state.token)
+    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8").replace("__SESSION_TOKEN__", app.state.token).replace("__BUILD__", _page_build())
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})

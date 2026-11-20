@@ -21,7 +21,7 @@ Status is checked against the repository, not against intent. `[x]` means a test
 - [x] Rule-based translator writing `Decimal`-correct Python over `rt.py` (`translate.py`)
 - [x] COMP-3, COMP, COMP-5, COMP-1/2, tables, REDEFINES, SORT, CALL, indexed and relative files
 - [x] Embedded SQL and CICS through shared bridges
-- [x] Translator stress harness over GnuCOBOL's own test programs; first round of fixes (113 to 142 of 465 usable programs, `docs/STRESS.md`)
+- [x] Translator stress harness over GnuCOBOL's own test programs; first round of fixes (113 to 141 of 466 usable programs, `docs/STRESS.md`)
 - [ ] Next stress fixes: DECIMAL-POINT IS COMMA, compiler directives, display format of intrinsic function results, DELETE FILE
 
 ## R5 Verify
@@ -42,7 +42,7 @@ Status is checked against the repository, not against intent. `[x]` means a test
 ## R8 Product
 - [x] Empty workspace; sample library behind the guide; delete anything
 - [x] Command palette, shortcuts, guided tour, settings, reduced-motion support
-- [x] `scripts/ui_check.py` (80 checks) and `scripts/audit_ui.py` run against the live app
+- [x] `scripts/ui_check.py` (89 checks) and `scripts/audit_ui.py` run against the live app
 
 ## R9 Submission
 - [x] `.kiro/` committed with steering, hooks, spec (requirements, design, tasks) and MCP config

@@ -66,6 +66,10 @@ A survivor is a spot the tests cannot see.
 - A comparison reached exactly at its edge on several different inputs without the output ever changing is
   reported as equivalent, with the evidence. Anything else unresolved is reported as needing human review.
 - Each survivor is searched in its own process with a time limit, because a changed copy can loop forever.
+- "Equivalent" needs the changed comparison reached at its edge on several different inputs, and the search varies text fields
+  (record types, codes) as well as numbers, because a branch gated by a code can hide a difference from numbers alone.
+  Mutations that are not comparisons (a constant in arithmetic, ROUNDED, + and -) are never called equivalent: reaching the code
+  without a changed output says too little, so they stay "needs human review" until an input separates them.
 
 ## Embedded SQL, CICS and JCL
 
@@ -94,6 +98,8 @@ These are the properties the tests and the check assert.
 - P4. A mutation that survives is either closed by a new saved set, shown to be a real mismatch, judged equivalent
   with evidence, or listed for human review. It is never silently dropped.
 - P5. Exported packages run without Séance installed and produce the recorded output.
+- P6. Two programs that both stop with an error are the same only if the Python stopped with the runtime's own `CobolError`; any
+  other Python exception is a difference (`cases.compare`).
 
 ## Decisions and rejected alternatives
 

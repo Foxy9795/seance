@@ -9,6 +9,9 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
+from .cases import text_only
+from .cases import text_only
+from .cases import text_only
 from .recorder import ROOT, get_model
 
 RUNTIME_FILES = ("rt.py", "codec.py", "cobol_num.py")
@@ -55,11 +58,14 @@ import pytest
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import {module} as program  # noqa: E402
-from seance.rt import IO  # noqa: E402
+from seance.rt import IO, CobolError  # noqa: E402
 
 SETS = sorted(p for p in (HERE / "data").iterdir() if (p / "set.json").exists())
 TEXT_FILES = {text_files!r}  # line sequential files: a line ending is not part of the data
 RECORD_SIZE = {record_size!r}  # fixed-length record files
+PRINT_FILES = {print_files!r}  # record files made only of text: a print file carries line and page breaks between records
+PRINT_FILES = {print_files!r}  # record files made only of text: a print file carries line and page breaks between records
+PRINT_FILES = {print_files!r}  # record files made only of text: a print file carries line and page breaks between records
 
 
 def units(assign, data):
@@ -70,7 +76,7 @@ def units(assign, data):
             rows.pop()
         return rows
     size = RECORD_SIZE.get(assign) or len(data) or 1
-    if b"\\n" in data or b"\\f" in data:
+    if assign in PRINT_FILES and (b"\\n" in data or b"\\f" in data):
         out = []
         for piece in re.split(rb"[\\n\\f]", data):
             out += [piece[i:i + size] for i in range(0, len(piece), size)] or [b""]
@@ -91,7 +97,7 @@ def test_matches_the_cobol(folder):
     expected = {{assign: (folder / name).read_bytes() for assign, name in meta["outputs"].items()}}
     console = (folder / "console.txt").read_text(encoding="utf-8")
     if meta.get("error"):  # the COBOL itself stopped here (for example a missing file): so must the Python
-        with pytest.raises(Exception):
+        with pytest.raises(CobolError):  # the runtime's own error; any other exception is a crash, not a match
             program.main(IO(files, meta["stdin"]))
         return
     io = IO(files, meta["stdin"])
@@ -119,7 +125,8 @@ def _test_suite(program: str, model, root: Path) -> dict[str, bytes | str]:
                 files[f"tests/data/{d.name}/{f.name}"] = f.read_bytes()
     text_files = sorted(f.assign for f in model.all_files if f.organization == "line")
     files[f"tests/test_{program}.py"] = TEST_SUITE.format(pid=model.program_id, count=len(sets), module=program, text_files=text_files,
-                                                                record_size={f.assign: f.size for f in model.all_files if f.organization != "line"})
+                                                                record_size={f.assign: f.size for f in model.all_files if f.organization != "line"},
+                                                                print_files=sorted(f.assign for f in model.all_files if f.organization != "line" and text_only(f)))
     return files
 
 

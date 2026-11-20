@@ -833,6 +833,8 @@ class Parser:
             self.expect("GIVING")
             items = [(r, f"{a} / {divisor}", rd) for r, rd in self.targets()]
         if self.accept("REMAINDER"):
+            if dividend is None:
+                raise Unsupported("DIVIDE ... REMAINDER needs GIVING")
             rem = self.ref()
             q = items[0][0]
             remainder = (rem, f"{dividend} - {q.num} * {divisor}")
@@ -911,6 +913,11 @@ class Parser:
         return Node("loop", line, {"mode": mode, "body": body, "inline": True})
 
     def loop_mode(self):
+        if self.accept("FOREVER"):
+            return ("forever",)
+        if self.word() == "UNTIL" and self.word(1) == "EXIT":
+            self.i += 2
+            return ("forever",)
         if self.accept("WITH"):
             self.expect("TEST")
             after = self.accept("AFTER")
@@ -1657,6 +1664,9 @@ class Emitter:
         out: list[str] = []
         if mode[0] == "times":
             out.append(f"{pad}for _ in range(max(0, int({mode[1]}))):{tag}")
+            out += self.lines(body, ind + 1) or [pad + "    pass"]
+        elif mode[0] == "forever":
+            out.append(f"{pad}for _ in S.loop():{tag}")
             out += self.lines(body, ind + 1) or [pad + "    pass"]
         elif mode[0] == "until":
             cond, after = mode[1], mode[2]

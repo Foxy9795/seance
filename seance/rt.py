@@ -1165,7 +1165,12 @@ class Program:
     def unstring(self, src, delims: list, targets: list, pointer=None, tallying=None) -> bool:
         """UNSTRING: delims are (text, all); targets are (ref, delimiter_in, count_in)."""
         text = self._text(src)
-        pos = int(self.n(pointer)) - 1 if pointer is not None else 0
+        pos = 0
+        if pointer is not None:
+            start = int(self.n(pointer))
+            if start < 1 or start > len(text):
+                return False  # the pointer is outside the sending item: overflow, and nothing moves
+            pos = start - 1
         filled = 0
         for ref, delim_in, count_in in targets:
             if pos >= len(text):
@@ -1210,8 +1215,22 @@ class Program:
             return _lit_text(x)
         return str(x)
 
+    def _target_text(self, ref) -> str:
+        """The characters INSPECT works on. A DISPLAY number is its storage, so a separate sign or an overpunched digit is part of it."""
+        if isinstance(ref, Ref) and ref.start is None:
+            rec, off, size, spec = self._addr(ref)
+            if spec[3] == "num" and spec[4] == "display":
+                return bytes(self.mem[rec][off:off + size]).decode(ENC)
+        return self._text(ref)
+    def _put_target(self, ref, text: str) -> None:
+        if isinstance(ref, Ref) and ref.start is None:
+            rec, off, size, spec = self._addr(ref)
+            if spec[3] == "num" and spec[4] == "display":
+                self.mem[rec][off:off + size] = text.encode(ENC)[:size].ljust(size, b"0")
+                return
+        self.move(text, ref)
     def _region(self, ref, before=None, after=None) -> tuple[int, int]:
-        text = self._text(ref)
+        text = self._target_text(ref)
         lo, hi = 0, len(text)
         if after is not None:
             k = text.find(self._text(after))
@@ -1241,7 +1260,7 @@ class Program:
         self.move(self.n(counter) + count, counter)
 
     def inspect_replace(self, ref, mode: str, pattern, replacement, before=None, after=None) -> None:
-        text = self._text(ref)
+        text = self._target_text(ref)
         lo, hi = self._region(ref, before, after)
         region = list(text[lo:hi])
         new = self._text(replacement)
@@ -1264,14 +1283,14 @@ class Program:
                 out.append(s[i])
                 i += 1
             region = list("".join(out))
-        self.move(text[:lo] + "".join(region) + text[hi:], ref)
+        self._put_target(ref, text[:lo] + "".join(region) + text[hi:])
 
     def inspect_convert(self, ref, src, dst, before=None, after=None) -> None:
-        text = self._text(ref)
+        text = self._target_text(ref)
         lo, hi = self._region(ref, before, after)
         a, b = self._text(src), self._text(dst)
         table = {ch: b[i] if i < len(b) else ch for i, ch in enumerate(a)}
-        self.move(text[:lo] + "".join(table.get(c, c) for c in text[lo:hi]) + text[hi:], ref)
+        self._put_target(ref, text[:lo] + "".join(table.get(c, c) for c in text[lo:hi]) + text[hi:])
 
     # ---------------------------------------------------------- program flow
     def tick(self) -> None:
@@ -1446,13 +1465,26 @@ def _alpha_to_number(text: str, lenient_sign: bool = False) -> Decimal:
             return Decimal(s) if s else Decimal(0)
         except InvalidOperation:
             pass
-    digits = ""
+    # MOVE of text to a number, as libcob does it: blanks, then one optional sign, then digits with at most one decimal point.
+    # Blanks and commas inside are skipped; any other character makes the whole value zero.
+    negative = s[:1] == "-"
+    if s[:1] in ("+", "-"):
+        s = s[1:]
+    whole, frac, seen_point = "", "", False
     for ch in s:
-        if ch.isdigit():
-            digits += ch
+        if ch in "0123456789":
+            if seen_point:
+                frac += ch
+            else:
+                whole += ch
+        elif ch == "." and not seen_point:
+            seen_point = True
+        elif ch.isspace() or ch == ",":
+            continue
         else:
-            break
-    return Decimal(digits) if digits else Decimal(0)
+            return Decimal(0)
+    value = Decimal((whole or "0") + "." + (frac or "0"))
+    return value.copy_negate() if negative and value else value
 
 
 # intrinsic functions -----------------------------------------------------------

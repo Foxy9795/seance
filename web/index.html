@@ -120,7 +120,7 @@
   .dd-opt[aria-disabled=true] { opacity: .45; cursor: not-allowed; }
   .dd-ck { width: 16px; flex: none; color: var(--amber-text); display: inline-flex; }
   select:hover:not(:disabled) { border-color: var(--muted); } select[aria-expanded=true] { border-color: var(--amber); }
-  .selbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 12px; border: 1px solid rgba(233,168,62,.5); background: rgba(233,168,62,.08); border-radius: 8px; }
+  .selbar { display: flex; width: fit-content; max-width: 100%; align-items: center; justify-content: flex-start; gap: 14px; flex-wrap: wrap; padding: 4px 6px 4px 12px; margin-bottom: 10px; border: 1px solid rgba(233,168,62,.5); background: rgba(233,168,62,.08); border-radius: 8px; }
   td.chk, th.chk { width: 36px; padding-right: 0; } td.act, th.act { width: 44px; padding-left: 0; text-align: right; }
   .card { position: relative; } .card .cardtools { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 2px; }
   .card h3 { padding-right: 70px; }
@@ -417,7 +417,6 @@
     <button class="pill" id="runtimeBtn" data-menu="runtimeMenu" aria-haspopup="true" aria-expanded="false"><span class="dot" id="runtimeDot"></span><span id="runtimeText">Checking runtime</span></button>
     <div class="menu" id="runtimeMenu" role="menu" hidden>
       <div class="body sm" id="runtimeInfo"></div>
-      <hr><button role="menuitem" data-act="about"><i data-ic="info"></i>About and supported COBOL</button>
     </div>
   </div>
   <div class="menu-wrap">
@@ -442,8 +441,6 @@
     <nav class="side-list" id="sideList" aria-label="Program list"></nav>
     <div class="side-foot">
       <button data-act="assess"><i data-ic="layers"></i>Assessment</button>
-      <button data-act="guide"><i data-ic="compass"></i>Guide and samples</button>
-      <button data-act="keys"><i data-ic="keyboard"></i>Keyboard shortcuts</button>
     </div>
   </aside>
   <div class="scrim" id="scrim"></div>
@@ -578,6 +575,19 @@
 'use strict';
 /* ================================================================ foundations */
 const TOKEN = '__SESSION_TOKEN__';
+const BUILD = '__BUILD__';
+/* dialogs: focus goes to the main control when one opens, and back to the control that opened it when it closes */
+(() => {
+  const showModal = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function () {
+    this._opener = document.activeElement;
+    showModal.call(this);
+    const first = this.querySelector('[autofocus]') || this.querySelector('input:not([type=hidden]):not([type=checkbox]):not([disabled]), textarea, select')
+      || this.querySelector('.dlg-foot .btn.primary') || this.querySelector('.btn.primary') || this.querySelector('button:not([data-close])') || this.querySelector('button');
+    if (first) first.focus({ preventScroll: true });
+  };
+  document.addEventListener('close', (e) => { const d = e.target; if (d instanceof HTMLDialogElement && d._opener && document.contains(d._opener)) d._opener.focus({ preventScroll: true }); }, true);
+})();
 const $ = (id) => document.getElementById(id);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1058,7 +1068,7 @@ function emptyWorkspaceHtml() {
         <li><span><b>Séance records the real behaviour</b>It compiles the program with GnuCOBOL and runs it on edge values, random records and the values the code itself tests for.</span></li>
         <li><span><b>Check the Python</b>Every recorded run is replayed through the Python, and fresh random runs go through both. Differences shrink to the smallest input that shows them.</span></li>
       </ol>
-      <div class="row" style="margin-top:22px"><button class="btn primary lg" data-act="add">${ic('plus')}Add Your COBOL</button><button class="btn lg" data-act="tour">${ic('compass')}Take The Guided Tour</button></div>
+      <p class="muted" style="margin-top:22px">Press <b>Add Program</b> at the top right to bring in your COBOL, or open <b>Help</b> (the ? beside it) and choose <b>Guided tour</b> to try a sample first.</p>
     </div>
     <div>
       <h3>New here?</h3>
@@ -1095,7 +1105,7 @@ function renderWork() {
           <td class="num hide-sm${c.coverage != null && c.coverage < 100 ? ' warn' : ''}">${c.coverage != null ? c.coverage + '%' : '–'}</td><td class="act"><button class="icon-btn sm" data-rowmenu="${esc(p.name)}" aria-label="Actions for ${esc(p.title)}" aria-haspopup="menu">${ic('more', 16)}</button></td></tr>`; }).join('')}</tbody></table></div></div>`;
   el.innerHTML = `
     <div class="page-head"><div><h1 id="workTitle">Workspace</h1><p class="lede">Each program is your original COBOL, the Python for it, and the evidence that the two behave the same.</p></div>
-      <div class="row"><button class="btn" data-act="checkAll" ${ca ? 'disabled' : ''}>${ic('play')}Check All</button><button class="btn primary" data-act="add">${ic('plus')}Add Program</button></div></div>
+      <div class="row"><button class="btn" data-act="checkAll" ${ca ? 'disabled' : ''}>${ic('play')}Check All</button></div></div>
     ${ca ? `<div class="panel body" style="margin-bottom:14px"><div class="row between"><span><span class="spin" aria-hidden="true"></span> &nbsp;Checking <b>${ca.done + 1}</b> of ${ca.total}: ${esc(ca.current)}</span><button class="btn sm" id="stopAll">Stop After This One</button></div><div class="progress" style="margin-top:10px"><i style="width:${Math.round(ca.done / ca.total * 100)}%"></i></div></div>` : ''}
     <div class="stats"><div><b>${ps.length}</b><span>Programs</span></div><div><b class="good">${count('matched')}</b><span>Spirit matched</span></div><div><b class="${count('restless') ? 'bad' : ''}">${count('restless')}</b><span>Spirit restless</span></div><div><b>${count('new')}</b><span>Not checked</span></div><div><b>${lines.toLocaleString()}</b><span>Output lines compared</span></div><div><b>${cov.length ? Math.round(cov.reduce((a, c) => a + c, 0) / cov.length) + '%' : '–'}</b><span>Average coverage</span></div></div>
     ${S.sel.size ? `<div class="selbar" role="region" aria-label="Selected programs"><span><b>${S.sel.size}</b> selected</span><span class="row"><button class="btn sm" data-act="selCheck">${ic('play', 14)}Run Checks</button><button class="btn danger sm" data-act="selDelete">${ic('trash', 14)}Delete</button><button class="btn ghost sm" data-act="selClear">Clear</button></span></div>` : ''}
@@ -1458,7 +1468,7 @@ async function renderCheck() {
   if (running && running.kind === 'check') result = `<div class="sumhead"><div class="sumicon warn"><span class="spin" style="width:22px;height:22px"></span></div><div><div class="word">Running both programs…</div><p class="muted" style="margin-top:4px">Replaying the saved runs, then generating fresh input for the COBOL and the Python. You can leave this page; the result appears in the workspace when it is done.</p></div></div>`;
   else if (err) result = `<div class="body"><div class="note bad"><b>The check could not run.</b><br>${esc(err)}</div></div>`;
   else if (rep) result = reportHtml(rep, status, p);
-  else result = `<div class="empty-state"><p><b>No check yet for ${naive ? 'this hand-written port' : 'this Python'}.</b></p><p style="margin:6px 0 14px">A check replays every recorded run of the real COBOL through the Python, then runs both on fresh random input.</p><button class="btn primary" id="runInline" ${S.runtime ? '' : 'disabled'}>${ic('play')}Run Check</button></div>`;
+  else result = `<div class="empty-state"><p><b>No check yet for ${naive ? 'this hand-written port' : 'this Python'}.</b></p><p style="margin:6px 0 14px">A check replays every recorded run of the real COBOL through the Python, then runs both on fresh random input.</p><p class="muted sm">Press <b>Run Check</b> at the top right of this page.</p></div>`;
   const key = name + '|' + impl.module; const mut = S.mutants.get(key); const gaps = S.gaps.get(key);
   const mrun = running && running.kind === 'mutate'; const grun = running && running.kind === 'gaps';
   const live = mut && !mut.error ? mut.mutants : [];
@@ -1747,7 +1757,7 @@ function exportRules() { const a = document.createElement('a'); a.href = '/api/a
 /* ================================================================ assessment of the whole workspace */
 async function renderPort() {
   const el = $('vPort'); if (!S.loaded) return;
-  if (!S.programs.length) { el.innerHTML = '<div class="page-head"><div><h1 id="portTitle">Assessment</h1><p class="lede">Add programs to see how big they are, how complex, and how ready they are to migrate.</p></div></div>' + `<div class="panel"><div class="empty-state"><button class="btn primary" data-act="add">${ic('plus')}Add Program</button></div></div>`; return; }
+  if (!S.programs.length) { el.innerHTML = '<div class="page-head"><div><h1 id="portTitle">Assessment</h1><p class="lede">Add programs to see how big they are, how complex, and how ready they are to migrate.</p></div></div>' + `<div class="panel"><div class="empty-state">Press <b>Add Program</b> at the top right.</div></div>`; return; }
   if (!el.innerHTML) el.innerHTML = '<div class="page-head"><div><h1 id="portTitle">Assessment</h1></div></div>' + skeleton(5);
   let d; try { d = S.port = await api('/api/portfolio'); } catch (e) { el.innerHTML = `<div class="note bad">${esc(e.message)}</div>`; return; }
   if (S.view !== 'port') return;
@@ -2105,6 +2115,13 @@ async function init() {
   if (!prefs.guideSeen) openGuide();
 }
 init();
+let staleShown = false;
+async function checkBuild() {
+  if (staleShown) return;
+  try { const a = await api('/api/about'); if (a.build && a.build !== BUILD) { staleShown = true; say('Séance was updated while this page was open. Reload to use the new version.', 'error', { action: { label: 'Reload', run: () => location.reload() } }); } } catch { /* the server may be restarting */ }
+}
+window.addEventListener('focus', checkBuild);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkBuild(); });
 </script>
 </body>
 </html>

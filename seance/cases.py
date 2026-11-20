@@ -176,6 +176,18 @@ def run_python(module, case: Case) -> Result:
 
 # ---------------------------------------------------------------- comparing
 
+def text_only(f: FileDef | None) -> bool:
+    """True when every field of the record is text or DISPLAY digits. Only then can a 0x0A or 0x0C byte between records be the line
+    or page break of a print file; in a record with packed, binary or floating-point fields those bytes are data."""
+    return f is None or f.record is None or all(lf.item.usage == "display" for lf in leaves(f.record))
+def text_only(f: FileDef | None) -> bool:
+    """True when every field of the record is text or DISPLAY digits. Only then can a 0x0A or 0x0C byte between records be the line
+    or page break of a print file; in a record with packed, binary or floating-point fields those bytes are data."""
+    return f is None or f.record is None or all(lf.item.usage == "display" for lf in leaves(f.record))
+def text_only(f: FileDef | None) -> bool:
+    """True when every field of the record is text or DISPLAY digits. Only then can a 0x0A or 0x0C byte between records be the line
+    or page break of a print file; in a record with packed, binary or floating-point fields those bytes are data."""
+    return f is None or f.record is None or all(lf.item.usage == "display" for lf in leaves(f.record))
 def _units(f: FileDef | None, data: bytes) -> list[bytes]:
     """Split an output stream into records or lines."""
     if f is not None and f.organization in ("sqldb", "cicsdb"):
@@ -193,7 +205,7 @@ def _units(f: FileDef | None, data: bytes) -> list[bytes]:
             out.append(data[i + 4:i + 4 + n])
             i += 4 + n
         return out
-    if f is not None and f.organization != "line" and (b"\n" in data or b"\f" in data):
+    if f is not None and f.organization != "line" and (b"\n" in data or b"\f" in data) and text_only(f):
         return _record_units(f, data)
     if f is None or f.organization == "line":
         text = data.replace(b"\r\n", b"\n")
@@ -249,7 +261,13 @@ def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 
     units = 0
     if (expected.error is None) != (actual.error is None):
         diffs.append(Diff("run", -1, expected.error or "finished normally", actual.error or "finished normally"))
-    elif expected.return_code != actual.return_code and expected.error is None:
+    elif expected.error is not None:
+        # Both stopped with an error. The COBOL's message is libcob's wording and the Python's is the runtime's, so the words are not
+        # compared. What is compared is the kind of stop: the runtime's own CobolError stands for a libcob error, anything else
+        # (ZeroDivisionError, KeyError, NotImplementedError ...) is the Python crashing where the COBOL stopped in an orderly way.
+        if not actual.error.startswith("CobolError"):
+            diffs.append(Diff("run", -1, expected.error, actual.error))
+    elif expected.return_code != actual.return_code:
         diffs.append(Diff("run", -1, f"return code {expected.return_code}", f"return code {actual.return_code}"))
     streams = sorted(set(expected.outputs) | set(actual.outputs))
     for name in streams + [CONSOLE]:

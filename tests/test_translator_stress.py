@@ -98,6 +98,29 @@ PROGRAMS = {
            IF N-2 IS NUMERIC DISPLAY "a" ELSE DISPLAY "b" END-IF.
            STOP RUN.
 """,
+    "perform forever and until exit": HEAD + """       01  INDVAL       PIC 9(4).
+       PROCEDURE DIVISION.
+       A01.
+           MOVE 0 TO INDVAL
+           PERFORM UNTIL EXIT
+            ADD 1 TO INDVAL
+            IF INDVAL > 2
+               EXIT PERFORM
+            END-IF
+           END-PERFORM
+           DISPLAY "A " INDVAL.
+           PERFORM FOREVER
+            ADD 1 TO INDVAL
+            IF INDVAL < 4
+               EXIT PERFORM CYCLE
+            END-IF
+            IF INDVAL > 5
+               EXIT PERFORM
+            END-IF
+           END-PERFORM
+           DISPLAY "B " INDVAL.
+           STOP RUN.
+""",
     "star-greater comment in fixed format": HEAD + """       01  A   PIC X(9).
        *> a floating comment before the next entry must not join it
        01  B   PIC X(2) VALUE "ok".

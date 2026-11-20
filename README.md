@@ -201,6 +201,7 @@ In the app: **Settings** (gear icon), saved in the browser. For checks, in `sean
 
 `SEANCE_ROUNDS`, `SEANCE_MAX_ROUNDS`, `SEANCE_VERIFY_TIMEOUT`, `SEANCE_COMPARE_TIMEOUT`,
 `SEANCE_MUTANTS`, `SEANCE_MAX_DATA_RECORDS`, `SEANCE_RANDOM_RECORDS`, `SEANCE_RUN_TIMEOUT`.
+The server's address is `SEANCE_HOST` (default `127.0.0.1`; only `127.0.0.1`, `localhost` and `::1` are answered) and `SEANCE_PORT` (default `8000`).
 
 ## Your Workspace
 
@@ -234,7 +235,9 @@ Séance compiles and runs code you give it, so treat it like a local dev server.
 - **Spec** (`.kiro/specs/seance/`): requirements, design and tasks.
 - **Rules check** (`scripts/check_rules.py`, also run by the tests): the Kiroween submission rules and the steering rules, as code.
 
-The venv Python path in `.kiro/settings/mcp.json` is absolute. Edit it if you clone the repo elsewhere.
+`.kiro/settings/mcp.json` starts the MCP server with the virtual environment's Python. `docs/mcp.portable.json` is the same configuration with
+relative paths (`.venv/Scripts/python.exe`, Windows; use `.venv/bin/python` elsewhere), so it works from any clone: copy it over
+`.kiro/settings/mcp.json` if the path in that file is not yours.
 
 ## Command Line
 
@@ -249,10 +252,10 @@ python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
 python -m seance fill-gaps accounts       # find inputs that catch what the tests missed, and save them
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 161 tests, including differential tests against GnuCOBOL
+python -m pytest                          # 175 tests, including differential tests against GnuCOBOL
 python scripts\check_rules.py             # the submission and steering rules
 python scripts\stress_translate.py --fetch run_fundamental   # then: ... run_fundamental --workers 4  (see docs/STRESS.md)
-python scripts\ui_check.py                # 80 checks that drive the real UI in Edge (app must be running, workspace empty)
+python scripts\ui_check.py                # 89 checks that drive the real UI in Edge (app must be running, workspace empty)
 python scripts\audit_ui.py                # scripted audit of every screen: contrast, names, tap targets, dropdowns, errors
 python scripts\shots.py                   # screenshots of every main screen into build\shots
 ```
@@ -275,7 +278,7 @@ The tests load the sample library into the workspace for the run and remove it a
 - Gap filling does not cover SQL and CICS programs: their inputs are tables and screens, which the search cannot vary yet.
 - The translator does not do `DECIMAL-POINT IS COMMA`, compiler directives (`>>IF`), `REPLACE`, nested programs, or most intrinsic
   functions' display formats. A program that uses them is accepted and says so in its notes; the check shows where it differs.
-  `docs/STRESS.md` measures this against GnuCOBOL's own test programs (142 of 465 usable ones matched; the suite is deliberately hostile).
+  `docs/STRESS.md` measures this against GnuCOBOL's own test programs (141 of 466 usable ones matched; the suite is deliberately hostile).
 - IMS and the REPORT and SCREEN sections are the main things to add next.
 
 License: MIT.
