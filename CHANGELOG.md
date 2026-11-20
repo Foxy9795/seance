@@ -46,7 +46,9 @@ First release.
 ### Setup and tooling
 - `pip install -e .` gives a `seance` command. `scripts\setup.ps1` does everything on Windows: the virtual
   environment, GnuCOBOL 3.1.2 (downloaded and checked against a fixed SHA-256), and a setup check.
-- `seance setup`, `seance doctor`, `seance --version`.
+- `seance setup`, `seance doctor`, `seance --version`, and an overview of the commands when `seance` runs with no arguments.
+- Tested from a fresh clone with no GnuCOBOL on the machine: `scripts\setup.ps1` downloads, checks and unpacks it, then the
+  whole test suite passes.
 - An MCP server with 13 tools, so Kiro can describe programs, run the real COBOL, draft, check and strengthen tests.
   `seance setup --mcp-config` points Kiro's settings at the folder it runs in.
 - `scripts/check_rules.py` checks the repository against the Kiroween rules and the project's steering rules.

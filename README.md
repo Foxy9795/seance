@@ -39,7 +39,9 @@ python -m venv .venv
 .\.venv\Scripts\seance serve
 ```
 
-Any `cobc` already on PATH also works; on Linux or macOS, install GnuCOBOL 3.1.2 with your package manager. The workspace starts empty. The first time you open the app, the **guide** offers a
+Any `cobc` already on PATH also works; on Linux or macOS, install GnuCOBOL 3.1.2 with your package manager.
+Séance runs from the folder you cloned: that folder is its workspace, so install it in place (`pip install -e .`), not into
+another environment. `seance` with no arguments lists the commands. The workspace starts empty. The first time you open the app, the **guide** offers a
 two-minute tour with a sample program, or you can add your own COBOL straight away.
 
 ## The App
@@ -264,7 +266,7 @@ python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
 python -m seance fill-gaps accounts       # find inputs that catch what the tests missed, and save them
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 175 tests, including differential tests against GnuCOBOL
+python -m pytest                          # 189 tests, including differential tests against GnuCOBOL
 python scripts\check_rules.py             # the submission and steering rules
 python scripts\stress_translate.py --fetch run_fundamental   # then: ... run_fundamental --workers 4  (see docs/STRESS.md)
 python scripts\ui_check.py                # 89 checks that drive the real UI in Edge (app must be running, workspace empty)

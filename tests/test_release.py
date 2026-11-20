@@ -117,3 +117,15 @@ def test_the_app_runs_the_setup_check():
     assert c.post("/api/doctor").status_code == 403, "it compiles a program, so it needs the page's token"
     r = c.post("/api/doctor", json={}, headers={"x-seance-token": app.state.token})
     assert r.status_code == 200 and r.json()["ok"] is True
+
+def test_bare_command_shows_an_overview():
+    proc = subprocess.run([sys.executable, "-m", "seance"], capture_output=True, text=True, encoding="utf-8", cwd=ROOT, timeout=60)
+    assert proc.returncode == 0 and "seance serve" in proc.stdout and "seance doctor" in proc.stdout
+
+
+def test_an_installed_copy_without_its_folder_says_so(monkeypatch, tmp_path):
+    from seance import cli
+
+    monkeypatch.setattr(cli, "ROOT", tmp_path)
+    assert "pip install -e ." in cli._home_problem()
+    assert cli.main(["doctor"]) == 2

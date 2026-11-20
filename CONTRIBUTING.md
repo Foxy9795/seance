@@ -12,7 +12,7 @@
 ## Before you send a change
 
 ```powershell
-python -m pytest -q                 # about 190 tests, many of them against the real GnuCOBOL
+python -m pytest -q                 # 189 tests, many of them against the real GnuCOBOL
 python scripts\check_rules.py       # the Kiroween rules and the steering rules
 python -m seance serve --no-browser # then, in a second shell:
 python scripts\ui_check.py          # drives the real UI in Edge (start from an empty workspace)

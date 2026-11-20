@@ -232,8 +232,44 @@ def _setup(argv: list[str]) -> int:
     return 0
 
 
+OVERVIEW = """Séance {version}: rewrite COBOL in Python, and prove it gives the same answers.
+
+Start here
+  seance serve                     the app, at http://127.0.0.1:8000
+  seance setup [--mcp-config]      GnuCOBOL 3.1.2 (downloaded and checked on Windows); Kiro's MCP settings
+  seance doctor                    check this machine, with a fix for each problem
+
+Workspace
+  seance samples list|load|remove  the sample library (load NAME, or load --all)
+  seance check-all [--junit FILE]  check every program and job; exit code 1 if any is restless
+
+One program
+  seance COMMAND PROGRAM [--impl MODULE] [--rounds N] [--json]
+  COMMAND is one of: {commands}
+
+  seance COMMAND --help shows the options of a command. The README has the full guide."""
+
+
+def _home_problem() -> str | None:
+    """Séance works on the folder it was cloned into (its workspace, page and samples live there). An installed copy
+    without that folder cannot run, and says so instead of failing later."""
+    missing = [p for p in ("web/index.html", "samples/catalog.json") if not (ROOT / p).exists()]
+    if not missing:
+        return None
+    return (f"Séance could not find its folder: {', '.join(missing)} is missing under {ROOT}.\n"
+            "Séance runs from a clone of its repository. Clone it, then install it in place: pip install -e .")
+
+
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        from . import __version__
+
+        print(OVERVIEW.format(version=__version__, commands=", ".join(COMMANDS)))
+        return 0
+    if argv[0] not in ("--version", "-V") and (problem := _home_problem()):
+        print(problem, file=sys.stderr)
+        return 2
     if argv and argv[0] in ("--version", "-V"):
         from . import __version__
 

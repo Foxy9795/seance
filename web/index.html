@@ -2128,7 +2128,7 @@ async function init() {
     await loadPrograms();
   } catch (e) { $('vWork').hidden = false; $('vWork').innerHTML = `<div class="note bad"><b>Séance could not start.</b><br>${esc(e.message)}</div>`; return; }
   S.loaded = true; renderRuntime(); await route();
-  if (!prefs.guideSeen) openGuide();
+  if (!prefs.guideSeen) { openGuide(); setPref('guideSeen', true); } // seen once shown: closing it is asynchronous, and a reload must not bring it back
 }
 init();
 let staleShown = false;
