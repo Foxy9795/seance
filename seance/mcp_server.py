@@ -249,6 +249,20 @@ def fill_test_gaps(program: str, implementation: str = "") -> str:
 
 
 @mcp.tool()
+def where_used(name: str) -> str:
+    """Every line in the workspace that names a data item, condition, paragraph or file, and whether the line defines it,
+    changes it or only uses it. Use it to follow the impact of a change to a field across programs."""
+    from .xref import hits
+
+    found = hits(name)
+    if not found:
+        return f"No program in the workspace names {name.upper()}."
+    out = [f"{name.upper()}: {len(found)} line(s)"]
+    out += [f"  {h['program']} {h['file']}:{h['line']} [{h['role']}] {h['text']}" for h in found]
+    return "\n".join(out)
+
+
+@mcp.tool()
 def verify_migration(program: str, implementation: str = "", examples: int = 30) -> str:
     """Check a Python migration against the real COBOL program: saved test sets plus fresh random runs of both.
     `implementation` is a module path such as migrated.payroll (default: migrated.<program>).

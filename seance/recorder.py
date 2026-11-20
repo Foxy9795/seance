@@ -79,7 +79,7 @@ def _cobc(args: list[str], what: str) -> None:
 
 def _prepare(model: ProgramModel, out_dir: Path) -> Path:
     """A copy with the reported dialect fixes (the original is never changed; line numbers stay the same)."""
-    fixed_text, _ = source_fixes((model.source or model.path).read_text(encoding="utf-8", errors="replace"), model.fixed)
+    fixed_text, _ = source_fixes((model.compile_source or model.source or model.path).read_text(encoding="utf-8", errors="replace"), model.fixed)
     prepared = out_dir / "src" / model.path.name
     prepared.parent.mkdir(parents=True, exist_ok=True)
     prepared.write_text(fixed_text, encoding="utf-8")
@@ -93,7 +93,7 @@ def compile_legacy(program: str, root: Path = ROOT) -> Path:
     exe = root / "build" / program / f"{program}{'.exe' if os.name == 'nt' else ''}"
     exe.parent.mkdir(parents=True, exist_ok=True)
     newest = _newest(src_dir)
-    subs = model._every()[1:]
+    subs = [m for m in model._every()[1:] if not m.in_main]  # programs of the same file are inside the executable already
     module_ext = ".dll" if os.name == "nt" else ".so"
     modules = [exe.parent / f"{m.program_id}{module_ext}" for m in subs]
     if all(t.exists() and t.stat().st_mtime >= newest for t in [exe, *modules]):

@@ -251,7 +251,7 @@ class Program:
         val = self.v(ref, *subs)
         if isinstance(val, Decimal):
             return val
-        return deedit(val) if val.strip() else Decimal(0)
+        return deedit(self._std(val)) if val.strip() else Decimal(0)
 
     def idx_value(self, name: str) -> int:
         return self.idx[name]
@@ -311,9 +311,9 @@ class Program:
             elif tkind == "edited":
                 if kind in ("num", "lit"):
                     value = num[0] if kind == "num" else num
-                    buf[off:off + size] = encode(self._cspec(spec), value)
+                    buf[off:off + size] = self._shown(encode(self._cspec(spec), value))
                 elif kind == "fig":
-                    buf[off:off + size] = encode(self._cspec(spec), Decimal(0)) if raw is ZERO else raw.fill(size)
+                    buf[off:off + size] = self._shown(encode(self._cspec(spec), Decimal(0))) if raw is ZERO else raw.fill(size)
                 else:
                     buf[off:off + size] = raw[:size].ljust(size, b" ")
             else:  # numeric
@@ -324,7 +324,7 @@ class Program:
                 elif kind == "fig":
                     value = Decimal(0)
                 elif kind == "edited":
-                    value = deedit(raw.decode(ENC))
+                    value = deedit(self._std(raw.decode(ENC)))
                 else:
                     value = _alpha_to_number(raw.decode(ENC))
                 buf[off:off + size] = self._encode_value(spec, value)
@@ -396,7 +396,7 @@ class Program:
                 from .cobol_num import edited_digits, store
 
                 ints, decs = edited_digits(spec[9])
-                self.mem[rec][off:off + size] = encode(cs, store(value, ints + decs, decs, True, rounded))
+                self.mem[rec][off:off + size] = self._shown(encode(cs, store(value, ints + decs, decs, True, rounded)))
             else:
                 self.move(Decimal(int(value)), ref)
         return not error
@@ -475,6 +475,25 @@ class Program:
         return spec[10][-1][0] if spec[10] else 1
 
     # ---------------------------------------------------------- files
+    def length_of(self, ref) -> int:
+        """LENGTH OF: the bytes of an item (one occurrence of a table entry)."""
+        ref = ref if isinstance(ref, Ref) else Ref(self.resolve(ref))
+        return self._addr(ref)[2]
+
+    def delete_file(self, *names: str) -> bool:
+        """DELETE FILE: the files are gone afterwards, for this run and for any later OPEN. Status 00, or 41 when open."""
+        ok = True
+        for name in names:
+            f = self.files[name]
+            if f.mode:
+                self._status(f, "41")
+                ok = False
+                continue
+            self.io.inputs.pop(f.assign, None)
+            self.io.outputs.pop(f.assign, None)
+            self._status(f, "00")
+        return ok
+
     def open(self, name: str, mode: str) -> None:
         f = self.files[name]
         if f.organization in ("indexed", "relative"):
@@ -1113,12 +1132,22 @@ class Program:
             raw = bytes(self.mem[rec][off:off + size])
             if p.start is not None:
                 return raw.decode(ENC)
-            return display_text(self._cspec(spec), raw)
+            text = display_text(self._cspec(spec), raw)
+            return text.replace(".", ",") if self.comma and spec[3] == "num" else text
         if isinstance(p, Figurative):
             return p.text[:1] if p.text else ""
         if isinstance(p, Decimal):
-            return _lit_text(p)
+            return _lit_text(p).replace(".", ",") if self.comma else _lit_text(p)
         return str(p)
+
+    comma = False  # DECIMAL-POINT IS COMMA (set by the translated program)
+
+    def _shown(self, data: bytes) -> bytes:
+        """An edited field as the program writes it: with DECIMAL-POINT IS COMMA the . and , trade places."""
+        return data.translate(bytes.maketrans(b".,", b",.")) if self.comma else data
+
+    def _std(self, text: str) -> str:
+        return text.translate(str.maketrans(".,", ",.")) if self.comma else text
 
     def accept(self, target, source: str = "console") -> None:
         if source == "console":

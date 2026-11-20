@@ -33,6 +33,8 @@ what I read. It does not mean the product lacks it. Séance's column is what the
 | Migration order (waves) | ✓ | ✓ | · | · | · | · | · | · |
 | Data lineage | ✓ | ✓ | ✓ | · | ✓ | · | · | · |
 | Data dictionary | ✓ | ✓ | · | · | · | · | · | · |
+| Cross-reference: where a field is defined, changed and used, across programs | ✓ | · | ✓ | · | · | ✓ | · | · |
+| Data file viewer: records split by the copybook, CSV export | ✓ | · | · | · | · | ✓ | · | · |
 | Business rules extracted | ✓ | ✓ (Gherkin) | ✓ | ✓ | ✓ | ✓ | · | · |
 | Generated documentation | ✓ | ✓ | · | ✓ | · | ✓ | · | · |
 | Runs the original program for the expected answer | ✓ (GnuCOBOL, local) | · | · | ✓ (Dual Run, on the mainframe) | ✓ | · | · | · |
@@ -43,7 +45,7 @@ what I read. It does not mean the product lacks it. Séance's column is what the
 | Mutation testing, evidence coverage, hash receipt | ✓ | · | · | · | · | · | · | · |
 | CICS and embedded SQL programs | ✓ (replayed on SQLite) | ✓ | ✓ | · | · | · | ✓ | · |
 | JCL jobs | ✓ (every step run on both sides) | ✓ | ✓ | · | ✓ | · | ✓ | · |
-| Natural-language explanation, chat | · | ✓ | ✓ | ✓ | · | ✓ | · | · |
+| Natural-language explanation, chat | partly: every statement described in plain English; chat through Kiro over MCP | ✓ | ✓ | ✓ | · | ✓ | · | · |
 | Generates Java or C# | · | ✓ | ✓ | partners | ✓ | · | ✓ | .NET |
 | Check history and CI output (JUnit) | ✓ | · | · | · | · | · | · | · |
 | Works offline, no account | ✓ | · | · | · | · | · | · | · |
@@ -61,7 +63,8 @@ third-party comparison describes them as converters and analyzers.
   JCL schedulers or databases.
 - **GnuCOBOL is the stand-in for your compiler.** A parallel run against your mainframe's output exists so you can see
   where the two differ.
-- **No IMS, REPORT or SCREEN sections yet.**
+- **No IMS, REPORT or SCREEN sections yet**, and no POINTER arithmetic. Data declared GLOBAL in one program of a file is not
+  shared with the other programs of that file.
 
 ## What was added after reading these products
 
@@ -69,6 +72,12 @@ Static analysis (flow graph, dead code, complexity, cross-reference), a data dic
 Gherkin export, an assessment of the whole workspace with migration waves and CSV, parallel runs against mainframe output,
 a pytest suite in every exported package, an HTML report, a history of every check, and `check-all` with JUnit output for
 build pipelines.
+
+Release 1.1.0 added a workspace cross-reference (where a field is defined, changed and used, from the command bar, as in
+IBM ADDI and Rocket Enterprise Analyzer), a record viewer that splits any saved data file by its copybook with CSV export
+(as in Rocket's data file tools), and translator support for what those products' compilers accept and Séance did not:
+compiler directives, REPLACE, named constants, DECIMAL-POINT IS COMMA, several programs in one file, DELETE FILE and
+LENGTH OF.
 
 ## Sources
 

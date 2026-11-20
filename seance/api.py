@@ -559,6 +559,68 @@ async def run_mutate(req: MutateRequest):
     return await run_in_threadpool(_run_cli, ["mutate", req.program, "--impl", req.implementation, "--json"], config.VERIFY_TIMEOUT)
 
 
+@app.get("/api/xref")
+def cross_reference(q: str = "", name: str = ""):
+    """Where a name is used across the workspace. q: names that contain it, with counts; name: every line that names it."""
+    import re
+
+    from .xref import hits, names
+
+    if name:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,40}", name):
+            raise HTTPException(400, "That is not a COBOL name.")
+        return {"name": name.upper(), "hits": hits(name)}
+    return {"names": names(q[:40])}
+
+
+RECORD_LIMIT = 1000
+
+
+@app.get("/api/records")
+def records(program: str, dataset: str, side: str = "input", file: str = "", format: str = "json"):
+    """The records of one file of a saved set, split into the fields of its record layout. format=csv downloads them."""
+    import csv
+    import io
+
+    from .cases import _units, decode_fields, load_set, set_names, show
+    from .recorder import get_model
+
+    _require(program)
+    if _is_job(program):
+        raise HTTPException(400, "A job's data sets are shown step by step on its Test Data tab.")
+    if dataset not in set_names(program) or side not in ("input", "output"):
+        raise HTTPException(404, "There is no such saved set.")
+    case, result, _ = load_set(program, dataset)
+    data = dict(case.files if side == "input" else result.outputs)
+    data = {k: v for k, v in data.items() if k not in ("SQLDB", "CICSDB")}
+    if side == "output" and result.stdout:
+        data["console"] = result.stdout.encode("latin-1", errors="replace")
+    files = sorted(data)
+    if not files:
+        return {"dataset": dataset, "side": side, "file": "", "files": [], "fields": [], "rows": [], "total": 0, "truncated": False}
+    assign = file or files[0]
+    if assign not in data:
+        raise HTTPException(404, f"The set has no {side} file {assign}.")
+    model = get_model(program)
+    f = None if assign == "console" else next((x for x in model.all_files if x.assign == assign), None)
+    units = _units(f, data[assign])
+    if f is not None and f.record is not None:
+        fields = [n for n, _ in decode_fields(f, units[0] if units else b"")]
+        rows = [[v for _, v in decode_fields(f, u)] for u in units[:RECORD_LIMIT]]
+    else:
+        fields = ["Line"]
+        rows = [[show(u)] for u in units[:RECORD_LIMIT]]
+    if format == "csv":
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(fields)
+        w.writerows([[v for _, v in decode_fields(f, u)] for u in units] if f is not None and f.record is not None else [[show(u)] for u in units])
+        name = f"{program}-{dataset}-{side}-{assign}.csv".replace("/", "_")
+        return Response(buf.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+    return {"dataset": dataset, "side": side, "file": assign, "files": files, "fields": fields, "rows": rows,
+            "total": len(units), "truncated": len(units) > RECORD_LIMIT}
+
+
 @app.post("/api/doctor")
 async def setup_check():
     """The same checks as python -m seance doctor. A POST because it compiles a small program (in a temporary folder)."""

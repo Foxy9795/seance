@@ -87,6 +87,9 @@ class ProgramModel:
     cics: bool = False  # EXEC CICS: runs as a transaction
     using: list[str] = field(default_factory=list)  # PROCEDURE DIVISION USING: linkage records in order
     initial: bool = False  # PROGRAM-ID ... IS INITIAL: fresh storage on every CALL
+    decimal_comma: bool = False  # SPECIAL-NAMES. DECIMAL-POINT IS COMMA: numbers are written 1.234,50
+    compile_source: Path | None = None  # the whole file GnuCOBOL compiles, when the file holds several programs
+    in_main: bool = False  # a program of that same file: compiled with the main program, not on its own
     subprograms: list["ProgramModel"] = field(default_factory=list)  # other programs in the folder, reached by CALL
     calls: list[str] = field(default_factory=list)  # program names CALLed with a literal
 
@@ -235,11 +238,6 @@ SOURCE_EXTENSIONS = (".cbl", ".cob", ".cobol")
 
 
 LIMITS = (
-    (r"\bDECIMAL-POINT\s+IS\s+COMMA\b", "DECIMAL-POINT IS COMMA: the COBOL prints and reads numbers with a comma. The translator does not do this yet, "
-     "so the check will show differences wherever a number with decimals is printed."),
-    (r"(?:^|\s)>>\s*(?:IF|DEFINE|EVALUATE|ELSE|END-IF)\b", "Compiler directives (>>IF, >>DEFINE) are not evaluated by the translator. "
-     "GnuCOBOL compiles one branch; the Python reads both."),
-    (r"^REPLACE\s+==", "REPLACE changes the program text before it is compiled. The translator does not apply it, so check the Python against the COBOL."),
 )
 
 
@@ -249,8 +247,39 @@ def limit_notes(items: list[tuple[int, str]]) -> list[str]:
     for pattern, why in LIMITS:
         if any(re.search(pattern, s.strip(), re.I) for _, s in items):
             out.append(why)
-    if sum(bool(re.match(r"PROGRAM-ID\b", s.strip(), re.I)) for _, s in items) > 1:
-        out.append("The file holds more than one program. Only the first is translated; a CALL to the others needs their source in the program's folder.")
+    return out
+
+
+def split_programs(path: Path, out_dir: Path) -> dict[str, Path] | None:
+    """A file that holds several programs, one after another or nested, as one file per program: each copy keeps only
+    its own program's lines and leaves the others empty, so every line number stays the same. {program-id: file},
+    the first program first; None when the file holds one program."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    fixed = detect_fixed(text)
+    raw = text.splitlines()
+
+    def body(line: str) -> str:
+        line = line.expandtabs(8)
+        if fixed:
+            return "" if len(line) > 6 and line[6] in "*/" else line[7:72]
+        return "" if line.strip().startswith("*>") else line
+
+    starts = [i for i, l in enumerate(raw) if re.match(r"\s*(IDENTIFICATION|ID)\s+DIVISION\b", body(l), re.I)]
+    if len(starts) <= 1:
+        return None
+    bounds = [0] + starts[1:] + [len(raw)]
+    out: dict[str, Path] = {}
+    for k in range(len(bounds) - 1):
+        a, b = bounds[k], bounds[k + 1]
+        seg = [raw[i] if a <= i < b and not re.match(r"\s*END\s+PROGRAM\b", body(raw[i]), re.I) else "" for i in range(len(raw))]
+        pm = re.search(r"PROGRAM-ID\.?\s+['\"]?([A-Za-z0-9_-]+)", "\n".join(body(l) for l in raw[a:b]), re.I)
+        pid = (pm.group(1) if pm else f"part{k + 1}").lower()
+        target = out_dir / (path.name if k == 0 else f"{pid}.cbl")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        content = "\n".join(seg) + "\n"
+        if not target.exists() or target.read_text(encoding="utf-8") != content:  # keep the date of an unchanged copy
+            target.write_text(content, encoding="utf-8")
+        out.setdefault(pid, target)
     return out
 
 
@@ -278,7 +307,12 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
         except CicsError as exc:
             raise ModelError(f"CICS: {exc}") from exc
         src_dir = root / "build" / program / "cicssrc"
-    model = load_file(src_dir / path.name, program, shown=path)
+    split = split_programs(src_dir / path.name, root / "build" / program / "split")
+    model = load_file(split[next(iter(split))] if split else src_dir / path.name, program, shown=path, include_dir=src_dir)
+    if split:
+        model.compile_source = src_dir / path.name
+        model.notes.append(f"This file holds {len(split)} programs. Each is translated and compiled as a program of its own, so data "
+                           "declared GLOBAL in one is not seen by the others.")
     if cics:
         model.notes.append("CICS: commands precompiled to CALLs of Séance's CICS bridge; files, temporary storage, the terminal "
                            "and the COMMAREA are kept in SQLite, and the transaction runs pseudo-conversationally.")
@@ -301,6 +335,13 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
         except ModelError as exc:
             raise ModelError(f"{q.name}: {exc}") from exc
         subs[sub.program_id] = sub
+    for pid, q in list(split.items())[1:] if split else []:
+        try:
+            sub = load_file(q, pid, shown=path.parent / q.name, include_dir=src_dir)
+        except ModelError as exc:
+            raise ModelError(f"program {pid.upper()} in {path.name}: {exc}") from exc
+        sub.in_main = True
+        subs[sub.program_id] = sub
     # keep only the programs reachable through CALL, in call order
     seen: set[str] = set()
 
@@ -320,12 +361,12 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     return model
 
 
-def load_file(path: Path, program: str, shown: Path | None = None) -> ProgramModel:
-    """shown: the file people see (the original when path is a precompiled copy)."""
+def load_file(path: Path, program: str, shown: Path | None = None, include_dir: Path | None = None) -> ProgramModel:
+    """shown: the file people see (the original when path is a precompiled copy). include_dir: where COPY looks."""
     text = path.read_text(encoding="utf-8", errors="replace")
     fixed = detect_fixed(text)
     try:
-        items = _inline_copies(sentences(normalize(text, fixed)), path.parent)
+        items = _inline_copies(sentences(normalize(text, fixed)), include_dir or path.parent)
     except OSError as exc:
         raise ModelError(str(exc)) from exc
     files: dict[str, FileDef] = {}
@@ -442,6 +483,7 @@ def load_file(path: Path, program: str, shown: Path | None = None) -> ProgramMod
         raise ModelError(f"PROCEDURE DIVISION USING names {', '.join(missing)}, which is not a 01 or 77 item in the LINKAGE SECTION.")
     model.notes += source_fixes(text, fixed)[1]
     model.notes += limit_notes(items)
+    model.decimal_comma = any(re.search(r"\bDECIMAL-POINT\s+IS\s+COMMA\b", s, re.I) for _, s in items)
     for f in model.files:
         if f.organization == "line" and any(lf.item.usage != "display" for r in f.records for lf in leaves(r)):
             model.notes.append(f"{f.name} is a text (LINE SEQUENTIAL) file but its record has binary or packed fields.")

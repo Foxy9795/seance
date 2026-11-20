@@ -3,6 +3,31 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-11-20
+
+### Added
+- The command bar searches the code as well as programs and actions. Choosing a name opens **Where Used**: every line in
+  the workspace that defines, changes or reads it, grouped by program, each one a link into the code (`/api/xref`, and the
+  `where_used` MCP tool).
+- **View Records** on the Test Data tab: any saved input or output file split into the fields of its record layout, with
+  CSV export (`/api/records`).
+- Translator: compiler directives (`>>IF`, `>>ELIF`, `>>ELSE`, `>>DEFINE`, `>>SOURCE FORMAT`, `$SET`), `REPLACE` (with `ALSO`,
+  `LEADING`, `TRAILING` and `OFF`), level-78 and `CONSTANT` items, debugging lines under `WITH DEBUGGING MODE`,
+  `DECIMAL-POINT IS COMMA`, several programs in one source file, `DELETE FILE`, and `LENGTH OF`. GnuCOBOL's own test programs
+  now match 165 of 464 (36%), up from 141 (`docs/STRESS.md`).
+
+### Changed
+- The search button and the command bar are the same box: it opens in place, at the same size, font and position, and only
+  the results slide in beneath it. Dropdowns open at the size of their field. Motion is shorter and calmer everywhere.
+- A new look: layered surfaces, tinted stat tiles with a verification bar, a stronger verdict, larger titles.
+- The plain-English description follows `EVALUATE` of a field ("When IN-CLASS is "F": copies .050 into WS-RATE"), reads
+  cases written on one line, and covers GO TO, CALL, STRING, UNSTRING, INSPECT, SEARCH, SORT, SET and the GIVING forms.
+
+### Fixed
+- Deleting a program now also deletes its check history, so a new program of the same name starts clean.
+- A level-88 with one value was described as "'Y' to None".
+- The Overview cut long record layouts off after a few fields.
+
 ## [1.0.0] - 2026-11-20
 
 First release.

@@ -30,22 +30,34 @@ def detect_fixed(text: str) -> bool:
 def normalize(text: str, fixed: bool | None = None) -> list[Line]:
     """Return code and comment lines. Fixed format: columns 1-6 and 73+ are ignored, column 7 is the indicator."""
     fixed = detect_fixed(text) if fixed is None else fixed
+    debugging = bool(re.search(r"WITH\s+DEBUGGING\s+MODE", text, re.I))
     out: list[Line] = []
     for i, raw in enumerate(text.splitlines(), start=1):
         raw = raw.expandtabs(8).rstrip()
         if not raw.strip():
             continue
+        probe = (raw[6:] if fixed and len(raw) > 6 else raw).strip()
+        src = re.match(r">>\s*SOURCE\s+(?:FORMAT\s+)?(?:IS\s+)?(FREE|FIXED)\b", probe, re.I)
+        if src:  # the rest of the file is in the other format
+            fixed = src.group(1).upper() == "FIXED"
+            continue
         if fixed:
             indicator = raw[6] if len(raw) > 6 else " "
             body = raw[7:72] if len(raw) > 7 else ""
-            if indicator in "*/":
+            if raw[6:8] == ">>":  # a directive that starts in the indicator column
+                out.append(Line(i, raw[6:].strip()))
+            elif indicator == "$":
+                continue  # a Micro Focus compiler directive ($SET ...)
+            elif indicator in "*/":
                 out.append(Line(i, raw[7:].strip(), True))
             elif indicator == "-":
                 if out and not out[-1].comment:
                     prev = out[-1]
                     out[-1] = Line(prev.number, prev.text + body.strip().lstrip("\"'"))
             elif indicator in "dD":
-                continue  # debugging line
+                if debugging and body.strip():  # WITH DEBUGGING MODE compiles debugging lines
+                    out.append(Line(i, _strip_inline_comment(body).rstrip()))
+                continue
             elif body.strip():
                 code = _strip_inline_comment(body)  # GnuCOBOL accepts *> after column 7 in fixed format too
                 if code.strip():
@@ -58,7 +70,9 @@ def normalize(text: str, fixed: bool | None = None) -> list[Line]:
             code = _strip_inline_comment(raw)
             if code.strip():
                 out.append(Line(i, code.rstrip()))
-    return out
+    from .precompile import apply
+
+    return apply(out, Line, debugging)[0]
 
 
 _PROGRAM_ID = re.compile(r"^(?P<head>\s*PROGRAM-ID\.?\s+['\"]?[A-Za-z0-9-]+['\"]?)(?P<tail>\s*)$", re.I)

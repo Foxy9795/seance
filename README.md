@@ -86,6 +86,11 @@ text size, animation, code display, random runs per check and the workspace defa
 runs a hand-written port that has a bug so you can watch it being caught. The sample library is part of the guide. Samples
 become ordinary programs, and they can be deleted one at a time or all at once.
 
+**Find anything.** The command bar (Ctrl K) searches programs, actions and the code itself: type part of a field or
+paragraph name to see every program that uses it, then open **Where Used** for each line that defines, changes or reads it.
+**Look inside the data.** On Test Data, **View Records** splits any saved input or output file into the fields of its
+record layout, with CSV export.
+
 ## Adding Your Work
 
 - **A COBOL program:** drop it, the programs it CALLs and its copybooks anywhere on the page, or paste it. Fixed and free
@@ -266,7 +271,7 @@ python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
 python -m seance fill-gaps accounts       # find inputs that catch what the tests missed, and save them
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 189 tests, including differential tests against GnuCOBOL
+python -m pytest                          # 200 tests, including differential tests against GnuCOBOL
 python scripts\check_rules.py             # the submission and steering rules
 python scripts\stress_translate.py --fetch run_fundamental   # then: ... run_fundamental --workers 4  (see docs/STRESS.md)
 python scripts\ui_check.py                # 89 checks that drive the real UI in Edge (app must be running, workspace empty)
@@ -290,9 +295,10 @@ The tests load the sample library into the workspace for the run and remove it a
   CALL is reported as unreferenced or dynamic, and lineage follows MOVE, COMPUTE, arithmetic, STRING, UNSTRING, READ INTO and
   WRITE FROM but not SQL or CICS data movement.
 - Gap filling does not cover SQL and CICS programs: their inputs are tables and screens, which the search cannot vary yet.
-- The translator does not do `DECIMAL-POINT IS COMMA`, compiler directives (`>>IF`), `REPLACE`, nested programs, or most intrinsic
-  functions' display formats. A program that uses them is accepted and says so in its notes; the check shows where it differs.
-  `docs/STRESS.md` measures this against GnuCOBOL's own test programs (141 of 466 usable ones matched; the suite is deliberately hostile).
+- The translator does not do POINTER items, the exception functions (`EXCEPTION-STATUS`), the `FORMATTED-DATE` family, or
+  GLOBAL data shared between programs of one file. A program that uses them is accepted; an untranslatable statement raises
+  an error naming its line, so the check fails there. `docs/STRESS.md` measures the translator against GnuCOBOL's own test
+  programs (165 of 464 usable ones match; the suite is deliberately full of edge cases).
 - IMS and the REPORT and SCREEN sections are the main things to add next.
 
 ## Documentation

@@ -43,10 +43,14 @@ SUPPORTED = [
     "replayed screen by screen on both sides",
     "JCL jobs: steps that run programs, SORT, IEBGENER and IEFBR14, COND and IF/THEN, temporary data sets passed between steps",
     "Variable-length records (RECORD VARYING, RECORD CONTAINS n TO m)",
+    "Compiler directives (>>IF, >>ELIF, >>DEFINE, >>SOURCE FORMAT), REPLACE, level-78 and CONSTANT items, debugging lines WITH DEBUGGING MODE",
+    "DECIMAL-POINT IS COMMA, several programs in one source file, DELETE FILE, LENGTH OF",
 ]
 NOT_YET = [
     "IMS databases (EXEC DLI, CALL 'CBLTDLI')",
-    "REPORT SECTION and SCREEN SECTION",
+    "REPORT SECTION (Report Writer) and SCREEN SECTION",
+    "POINTER items, ADDRESS OF, and GLOBAL data shared between programs of one file",
+    "The exception functions (EXCEPTION-STATUS, EXCEPTION-LOCATION) and the FORMATTED-DATE/TIME family",
     "BMS map source (the symbolic map copybook is used instead) and CICS commands outside the list above",
     "Dynamic CALL of programs that are not in the folder, and PROCEDURE DIVISION RETURNING (GnuCOBOL 3.1.2 crashes on it)",
 ]

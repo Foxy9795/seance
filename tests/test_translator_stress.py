@@ -153,8 +153,142 @@ def test_the_suite_reader_finds_programs_and_skips_the_unusable():
     assert "extra files" in cases[1]["skip"] and "not to compile" in cases[2]["skip"]
 
 
-def test_known_limits_are_said_up_front():
-    notes = limit_notes([(1, "SPECIAL-NAMES"), (2, "DECIMAL-POINT IS COMMA"), (3, "PROGRAM-ID. a"), (4, "PROGRAM-ID. b"), (5, ">>IF X DEFINED")])
-    text = " ".join(notes)
-    assert "DECIMAL-POINT IS COMMA" in text and "more than one program" in text and "directives" in text
+def test_supported_constructs_raise_no_limit_note():
+    assert limit_notes([(1, "SPECIAL-NAMES"), (2, "DECIMAL-POINT IS COMMA")]) == [], "DECIMAL-POINT IS COMMA is supported"
     assert limit_notes([(1, "PROGRAM-ID. a"), (2, "DISPLAY 1")]) == []
+
+
+PRECOMPILED = {
+    "compiler directives": """       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       >>DEFINE LEVEL-NO AS 2
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       >>IF LEVEL-NO = 2
+       01  X   PIC X(4) VALUE "TWO ".
+       >>ELSE
+       01  X   PIC X(4) VALUE "ONE ".
+       >>END-IF
+       PROCEDURE DIVISION.
+       >>IF NOTSET IS DEFINED
+           DISPLAY "WRONG".
+       >>ELIF LEVEL-NO > 1
+           DISPLAY "RIGHT " X.
+       >>ELSE
+           DISPLAY "ALSO WRONG".
+       >>END-IF
+       >>IF LEVEL-NO IS NOT DEFINED
+           DISPLAY "NOT DEFINED".
+       >>ELSE
+           DISPLAY "DEFINED".
+       >>END-IF
+           STOP RUN.
+""",
+    "REPLACE": """       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       REPLACE ==LIMIT== BY ==5== ==:TAG:== BY ==WS==.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-I    PIC 99.
+       01  WS-T    PIC 9(4) VALUE 0.
+       PROCEDURE DIVISION.
+           PERFORM VARYING WS-I FROM 1 BY 1 UNTIL WS-I > LIMIT
+               ADD WS-I TO WS-T
+           END-PERFORM
+           DISPLAY "SUM " WS-T " LIMIT".
+       REPLACE OFF.
+           STOP RUN.
+""",
+    "decimal point is comma": """       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+           DECIMAL-POINT IS COMMA.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  N     PIC 9(4)V99 VALUE 1234,5.
+       01  M     PIC S9(3)V9 VALUE -12,3.
+       01  E     PIC Z.ZZ9,99.
+       01  F     PIC ---9,9.
+       01  T     PIC 9(5)V99.
+       PROCEDURE DIVISION.
+           DISPLAY N " " M.
+           MOVE N TO E. DISPLAY "[" E "]".
+           MOVE M TO F. DISPLAY "[" F "]".
+           COMPUTE T = N * 1,5.
+           DISPLAY T " " 2,25.
+           MOVE E TO T. DISPLAY T.
+           STOP RUN.
+""",
+    "named constants": """       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       78  MAX-ROWS   VALUE 3.
+       78  GREETING   VALUE "HELLO".
+       78  TWICE      VALUE MAX-ROWS * 2.
+       01  T.
+           05  ROW    PIC 9(3) OCCURS MAX-ROWS TIMES.
+       01  I          PIC 9.
+       PROCEDURE DIVISION.
+           PERFORM VARYING I FROM 1 BY 1 UNTIL I > MAX-ROWS
+               COMPUTE ROW (I) = I * TWICE
+           END-PERFORM
+           DISPLAY GREETING " " T " " MAX-ROWS.
+           STOP RUN.
+""",
+    "two programs in one file": """       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  N    PIC 9(3) VALUE 20.
+       PROCEDURE DIVISION.
+           CALL "doubler" USING N
+           DISPLAY "N=" N
+           STOP RUN.
+       END PROGRAM prog.
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. doubler.
+       DATA DIVISION.
+       LINKAGE SECTION.
+       01  V    PIC 9(3).
+       PROCEDURE DIVISION USING V.
+           COMPUTE V = V * 2
+           GOBACK.
+       END PROGRAM doubler.
+""",
+    "DELETE FILE and LENGTH OF": """       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT OPTIONAL F ASSIGN TO "WORK.DAT"
+               ORGANIZATION LINE SEQUENTIAL FILE STATUS FS.
+       DATA DIVISION.
+       FILE SECTION.
+       FD  F.
+       01  F-REC  PIC X(10).
+       WORKING-STORAGE SECTION.
+       01  FS     PIC XX.
+       01  REC    PIC X(17).
+       PROCEDURE DIVISION.
+           OPEN OUTPUT F
+           WRITE F-REC FROM "SOME DATA"
+           CLOSE F
+           DELETE FILE F
+           DISPLAY "DELETE " FS " LENGTH " LENGTH OF REC
+           OPEN INPUT F
+           DISPLAY "REOPEN " FS
+           CLOSE F
+           STOP RUN.
+""",
+}
+
+
+@pytest.mark.parametrize("label", sorted(PRECOMPILED))
+def test_precompiled_programs_match_gnucobol(tmp_path, label):
+    src = tmp_path / "prog.cob"
+    src.write_text(PRECOMPILED[label], encoding="utf-8")
+    result = stress.run_one(src, "stp", tmp_path)
+    assert result["stage"] == "match", result

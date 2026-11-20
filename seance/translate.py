@@ -157,6 +157,7 @@ class Names:
 
 def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
     names = Names()
+    names.comma = model.decimal_comma  # DECIMAL-POINT IS COMMA
     records: dict[str, int] = {}
     for f in model.files:
         if not f.records:
@@ -227,6 +228,7 @@ class Parser:
     def __init__(self, toks: list[Tok], names: Names, paragraphs: set[str]):
         self.t, self.i, self.names, self.paras = toks, 0, names, paragraphs
         self._last = None
+        self.comma = getattr(names, "comma", False)
 
     # -- token helpers
     def peek(self, k: int = 0) -> Tok:
@@ -373,6 +375,9 @@ class Parser:
             return f'D(S.idx_value("{self.take().value}"))'
         if self.word() in ("RETURN-CODE", "TALLY"):
             return f'S.r("{self.take().value}")'
+        if self.word() == "LENGTH" and self.word(1) == "OF":
+            self.i += 2
+            return f"D(S.length_of({self.ref().py}))"
         return self.ref().py
 
     def function(self) -> str:
@@ -478,6 +483,9 @@ class Parser:
         if tok.kind == "word" and tok.value in ("RETURN-CODE", "TALLY"):
             self.i += 1
             return f'S.n("{tok.value}")'
+        if tok.kind == "word" and tok.value == "LENGTH" and self.word(1) == "OF":
+            self.i += 2
+            return f"D(S.length_of({self.ref().py}))"
         if tok.kind == "str":
             raise Unsupported(f"a text literal {tok.value!r} where a number is needed")
         return self.ref().num
@@ -1104,6 +1112,14 @@ class Parser:
         return self.keyed(line, f'S.rewrite("{rec.key}", {src or "None"})', stop, "END-REWRITE")
 
     def s_DELETE(self, line, stop):
+        if self.accept("FILE"):  # DELETE FILE f ...: the files themselves go
+            names = []
+            while self.word() in self.names.files:
+                names.append(self.take().value)
+            if not names:
+                raise Unsupported(f"DELETE FILE of unknown file {self.peek().value}")
+            node = self.keyed(line, "S.delete_file(" + ", ".join(repr(n) for n in names) + ")", stop, "END-DELETE")
+            return node
         file = self.take().value
         if file not in self.names.files:
             raise Unsupported(f"DELETE of unknown file {file}")
@@ -1160,7 +1176,11 @@ class Parser:
                 if self.word() in ("REFERENCE", "CONTENT", "VALUE") and self.peek(1).kind != "end":
                     mode = self.take().value.lower()
                     continue
-                if self.word() in ("ADDRESS", "OMITTED", "LENGTH"):
+                if self.word() == "LENGTH" and self.word(1) == "OF":
+                    self.i += 2
+                    args.append(f'("content", D(S.length_of({self.ref().py})))')
+                    continue
+                if self.word() in ("ADDRESS", "OMITTED"):
                     raise Unsupported(f"CALL ... {self.word()} is not supported yet")
                 lit = self.literal()
                 if lit is not None:
@@ -1321,7 +1341,7 @@ class Parser:
             if tok.kind == "num" or (tok.kind == "op" and tok.value in "+-" and self.peek(1).kind == "num"):
                 text = tok.value if tok.kind == "num" else tok.value + self.peek(1).value
                 self.i += 1 if tok.kind == "num" else 2
-                parts.append(repr(text))
+                parts.append(repr(text.replace(".", ",") if self.comma else text))  # DECIMAL-POINT IS COMMA shows 2,25
                 continue
             parts.append(self.value())
         args = ", ".join(parts)
@@ -1859,7 +1879,9 @@ def translate(program: str, root: Path = ROOT) -> Translation:
         + "\nfrom decimal import Decimal as D\n\n"
         + "from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, NextSentence, Program, StopRun, run_cli\n\n"
         + main["data"]
-        + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={main['linkage']!r})\n\n\n"
+        + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={main['linkage']!r})\n"
+        + ("S.comma = True  # DECIMAL-POINT IS COMMA: numbers are shown and read as 1.234,50\n" if model.decimal_comma else "")
+        + "\n\n"
         + "\n\n".join(main["funcs"])
         + "\n\nPARAGRAPHS = [\n" + main["paras"] + ",\n]\n"
         + f"SECTIONS = {main['sections']!r}\n\n\n"

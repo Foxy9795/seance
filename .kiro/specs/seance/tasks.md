@@ -22,7 +22,8 @@ Status is checked against the repository, not against intent. `[x]` means a test
 - [x] COMP-3, COMP, COMP-5, COMP-1/2, tables, REDEFINES, SORT, CALL, indexed and relative files
 - [x] Embedded SQL and CICS through shared bridges
 - [x] Translator stress harness over GnuCOBOL's own test programs; first round of fixes (113 to 141 of 466 usable programs, `docs/STRESS.md`)
-- [ ] Next stress fixes: DECIMAL-POINT IS COMMA, compiler directives, display format of intrinsic function results, DELETE FILE
+- [x] Compiler directives, REPLACE, named constants, DECIMAL-POINT IS COMMA, several programs in one file, DELETE FILE, LENGTH OF (141 to 165 of 464)
+- [ ] Next: POINTER and ADDRESS OF, the exception functions, the FORMATTED-DATE family, GLOBAL data across programs of one file, Report Writer
 
 ## R5 Verify
 - [x] Replay saved sets byte for byte
@@ -42,6 +43,7 @@ Status is checked against the repository, not against intent. `[x]` means a test
 ## R8 Product
 - [x] Empty workspace; sample library behind the guide; delete anything
 - [x] Command palette, shortcuts, guided tour, settings, reduced-motion support
+- [x] Code search in the command bar, Where Used across programs, record viewer with CSV export
 - [x] `scripts/ui_check.py` (89 checks) and `scripts/audit_ui.py` run against the live app
 
 ## R9 Submission

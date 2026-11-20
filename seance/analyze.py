@@ -355,7 +355,7 @@ def _cond88(model: ProgramModel) -> dict[str, str]:
             for name, choices in it.conds:
                 vals = []
                 for lo, hi in choices:
-                    vals.append(_fmt(lo) if lo == hi else f"{_fmt(lo)} to {_fmt(hi)}")
+                    vals.append(_fmt(lo) if hi is None or lo == hi else f"{_fmt(lo)} to {_fmt(hi)}")
                 out[name.upper()] = f"{it.name} = {' or '.join(vals)}" if vals else it.name
     return out
 

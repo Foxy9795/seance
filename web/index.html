@@ -330,18 +330,20 @@
   .fname { color: var(--muted); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* palette */
-  dialog#palDlg { --prow: 36px; inset: auto; margin: 0; left: var(--pl, 50%); top: var(--pt, 11vh); width: var(--pw, min(640px, 94vw)); max-height: min(70vh, calc(100vh - var(--pt, 11vh) - 14px)); overflow: hidden; border-radius: 12px;
-    box-shadow: 0 18px 50px rgba(0,0,0,.55); background: var(--panel); transform: none; opacity: 0; clip-path: inset(0 0 calc(100% - var(--prow)) 0 round 8px);
-    transition: opacity .12s ease .08s, clip-path .12s cubic-bezier(.4,0,1,1), display .24s allow-discrete, overlay .24s allow-discrete; }
-  dialog#palDlg[open] { opacity: 1; clip-path: inset(-70px -70px -90px -70px round 12px); transition: opacity .12s ease, clip-path .34s cubic-bezier(.16,1,.3,1), display .24s allow-discrete, overlay .24s allow-discrete; }
-  @starting-style { dialog#palDlg[open] { opacity: 0; clip-path: inset(0 0 calc(100% - var(--prow)) 0 round 8px); } }
-  dialog#palDlg::backdrop { background: rgba(5,4,7,0); backdrop-filter: none; } dialog#palDlg[open]::backdrop { background: rgba(5,4,7,.5); backdrop-filter: blur(1.5px); }
-  @starting-style { dialog#palDlg[open]::backdrop { background: rgba(5,4,7,0); backdrop-filter: none; } }
-  .pal-in { display: flex; align-items: center; gap: 9px; height: var(--prow); padding: 0 8px 0 11px; border-bottom: 1px solid var(--line); color: var(--faint); flex: none; background: var(--sunk); }
-  .pal-in input { flex: 1; height: 30px; background: transparent; border: 0; font-size: 1rem; padding: 0; } .pal-in input:focus-visible { outline: 0; }
-  .pal-list { overflow: auto; padding: 6px; max-height: min(58vh, calc(100vh - var(--pt, 11vh) - var(--prow) - 64px)); }
-  .pal-list.fresh .pal-item { animation: palIn .26s cubic-bezier(.2,.9,.3,1) backwards; animation-delay: calc(var(--n, 0) * 16ms + 60ms); }
-  @keyframes palIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  dialog#palDlg { --prow: 36px; inset: auto; margin: 0; left: var(--pl, 50%); top: var(--pt, 11vh); width: var(--pw, min(640px, 94vw));
+    max-height: min(72vh, calc(100vh - var(--pt, 11vh) - 16px)); overflow: hidden; border-radius: 10px; border-color: rgba(233,168,62,.6); background: var(--panel);
+    box-shadow: 0 0 0 3px rgba(233,168,62,.13), 0 24px 60px rgba(0,0,0,.55); transform: none; opacity: 1; transition: opacity .1s ease, display .1s allow-discrete, overlay .1s allow-discrete; }
+  dialog#palDlg:not([open]) { opacity: 0; }
+  @starting-style { dialog#palDlg[open] { opacity: 1; transform: none; } }
+  dialog#palDlg::backdrop { background: rgba(5,4,7,.38); backdrop-filter: none; transition: background .16s ease, display .16s allow-discrete, overlay .16s allow-discrete; }
+  dialog#palDlg:not([open])::backdrop { background: rgba(5,4,7,0); }
+  @starting-style { dialog#palDlg[open]::backdrop { background: rgba(5,4,7,0); } }
+  .pal-in { display: flex; align-items: center; gap: 10px; height: var(--prow); padding: 0 8px 0 12px; border-bottom: 1px solid var(--line); color: var(--muted); flex: none; background: var(--sunk); font-size: .95rem; }
+  .pal-in input { flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; font-size: inherit; padding: 0; } .pal-in input:focus-visible { outline: 0; }
+  .pal-in input::placeholder { color: var(--muted); }
+  .pal-list { overflow: auto; padding: 6px; max-height: min(60vh, calc(100vh - var(--pt, 11vh) - var(--prow) - 64px)); }
+  dialog#palDlg[open] .pal-list, dialog#palDlg[open] .pal-foot { animation: palDrop .16s cubic-bezier(.2,.7,.2,1); }
+  @keyframes palDrop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
   .pal-group { padding: 8px 10px 3px; color: var(--faint); font-size: .76rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
   .pal-item { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 6px; cursor: pointer; } .pal-item[aria-selected=true] { background: var(--hover); }
   .pal-item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pal-item small { color: var(--faint); }
@@ -404,6 +406,107 @@
   @media (prefers-reduced-motion: reduce) { body[data-motion=system] dialog::backdrop { transition: none !important; backdrop-filter: none !important; } body[data-motion=system] .brand svg { animation: none; } }
   @media (max-width: 720px) { dialog#palDlg { border-radius: 10px; } }
   table.doctor td:first-child { width: 92px; vertical-align: top; } table.doctor td { overflow-wrap: anywhere; }
+
+/* ================= design layer: depth, hierarchy, calm motion ================= */
+  :root { --top: 56px; --edge: rgba(255,255,255,.07); --edge2: rgba(255,255,255,.11); --lift: inset 0 1px 0 rgba(255,255,255,.035), 0 1px 2px rgba(0,0,0,.35);
+    --lift2: inset 0 1px 0 rgba(255,255,255,.04), 0 14px 34px rgba(0,0,0,.38); --ease: cubic-bezier(.2,.7,.2,1); }
+  body { background-image: radial-gradient(1200px 520px at 62% -180px, rgba(233,168,62,.085), transparent 70%), radial-gradient(900px 640px at -10% 120%, rgba(111,211,174,.04), transparent 70%); }
+  /* header */
+  .top { background: rgba(21,19,26,.82); backdrop-filter: saturate(140%) blur(12px); border-bottom-color: var(--edge); gap: 12px; padding: 0 16px; }
+  .top::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, transparent, rgba(233,168,62,.32) 30%, rgba(233,168,62,.32) 70%, transparent); pointer-events: none; }
+  .brand { font-size: 1.28rem; }
+  .searchbtn { flex: 0 1 600px; height: 38px; border-radius: 10px; gap: 10px; padding: 0 8px 0 12px; font-size: .95rem; box-shadow: inset 0 1px 2px rgba(0,0,0,.35); transition: border-color .16s ease, box-shadow .16s ease; }
+  .searchbtn:hover { border-color: #5d5566; box-shadow: inset 0 1px 2px rgba(0,0,0,.35), 0 0 0 3px rgba(233,168,62,.08); color: var(--muted); }
+  @media (max-width: 900px) { .pal-esc { display: none; } }
+  @media (max-width: 720px) { .searchbtn { flex: 0 0 38px; width: 38px; padding: 0; justify-content: center; } .searchbtn span, .searchbtn kbd { display: none; } }
+  /* sidebar */
+  .side { background: linear-gradient(180deg, rgba(255,255,255,.018), transparent 260px), var(--panel); border-right-color: var(--edge); }
+  .side-item { position: relative; border-left: 0; padding: 7px 10px; border-radius: 8px; font-size: .95rem; transition: background-color .14s ease, color .14s ease; }
+  .side-item.on { background: linear-gradient(90deg, rgba(233,168,62,.15), rgba(233,168,62,.035)); color: var(--text); }
+  .side-item.on::before { content: ""; position: absolute; left: -6px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--amber); box-shadow: 0 0 10px rgba(233,168,62,.55); }
+  .side-head .label { letter-spacing: .08em; }
+  /* page */
+  main { padding: 28px 34px 96px; }
+  h1 { font-size: 2.05rem; letter-spacing: .004em; }
+  .lede { font-size: 1.02rem; line-height: 1.6; }
+  .page-head { margin-bottom: 18px; }
+  .pbar { background: rgba(13,11,15,.86); backdrop-filter: blur(10px) saturate(130%); border-bottom-color: var(--edge); margin-left: -34px; margin-right: -34px; padding-left: 34px; padding-right: 34px; }
+  .tabs button { font-size: .98rem; padding: 13px 14px 12px; }
+  .tabs button[aria-selected=true] { font-weight: 600; }
+  /* surfaces */
+  .panel { border-radius: 12px; border-color: var(--edge); background: linear-gradient(180deg, rgba(255,255,255,.024), rgba(255,255,255,0) 140px), var(--panel); box-shadow: var(--lift); }
+  .panel > .head { padding: 14px var(--pad) 13px; border-bottom-color: var(--edge); }
+  .panel > .head h2 { font-size: 1.1rem; }
+  th { font-size: .74rem; text-transform: uppercase; letter-spacing: .065em; padding-top: 10px; padding-bottom: 10px; border-bottom-color: var(--edge); }
+  td { padding-top: 10px; padding-bottom: 10px; border-bottom-color: rgba(255,255,255,.055); }
+  tbody tr.link:hover td, tbody tr.link.picked td { background: rgba(233,168,62,.05); }
+  .note { border-radius: 10px; }
+  .tag, .badge { border-radius: 999px; padding: 0 9px; }
+  .drop { border-radius: 12px; border-color: #5d5566; background: rgba(255,255,255,.012); transition: border-color .16s ease, background-color .16s ease; }
+  .drop:hover { border-color: rgba(233,168,62,.55); }
+  /* controls */
+  .btn { height: 34px; padding: 0 14px; border-radius: 8px; border-color: #3f3947; background: #1f1c25 linear-gradient(180deg, #232029, #1b1820); box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 1px 2px rgba(0,0,0,.3); }
+  .btn:hover:not(:disabled):not([aria-disabled=true]) { background: #26222c linear-gradient(180deg, #2a2631, #211d27); border-color: #5d5566; }
+  .btn.primary { background: var(--amber) linear-gradient(180deg, #f2b955, #e5a232); border-color: #e9a83e; color: var(--amber-ink); box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 4px 16px rgba(233,168,62,.2); }
+  .btn.primary:hover:not(:disabled) { background: var(--amber) linear-gradient(180deg, #f5c164, #e9a83e); border-color: #f2b955; filter: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 6px 20px rgba(233,168,62,.28); }
+  .btn.ghost { background: transparent; box-shadow: none; } .btn.danger { background: transparent; box-shadow: none; }
+  .btn.sm { height: 29px; padding: 0 10px; } .btn.lg { height: 40px; padding: 0 20px; }
+  .icon-btn { border-radius: 8px; }
+  select, input[type=text], input[type=search], input[type=number] { height: 34px; border-radius: 8px; }
+  textarea { border-radius: 8px; }
+  .seg { border-radius: 9px; }
+  .menu, .dd { border-radius: 12px; border-color: var(--edge2); background: rgba(31,27,36,.97); box-shadow: 0 18px 44px rgba(0,0,0,.55); }
+  .dd .dd-opt { font-size: inherit; }
+  .selbar { border-radius: 10px; }
+  /* stat tiles */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; border: 0; background: transparent; overflow: visible; margin-bottom: 12px; }
+  .stats > div, .stats > div:last-child { min-width: 0; padding: 14px 16px 13px; border: 1px solid var(--edge); border-radius: 12px; background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0)), var(--panel); box-shadow: var(--lift); }
+  .stats b { font: 600 1.8rem/1.12 var(--serif); }
+  .stats span { display: block; margin-top: 3px; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; }
+  .stats > div:has(> b.good) { border-color: rgba(111,211,174,.24); background: linear-gradient(180deg, rgba(111,211,174,.085), rgba(111,211,174,0) 80%), var(--panel); }
+  .stats > div:has(> b.bad) { border-color: rgba(255,143,126,.3); background: linear-gradient(180deg, rgba(255,143,126,.09), rgba(255,143,126,0) 80%), var(--panel); }
+  .stats > div:has(> b.warn) { border-color: rgba(242,198,109,.26); background: linear-gradient(180deg, rgba(242,198,109,.08), rgba(242,198,109,0) 80%), var(--panel); }
+  .mcard { border-radius: 12px; border-color: var(--edge); background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0)), var(--panel); box-shadow: var(--lift); }
+  .vsum { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 0 0 16px; }
+  .vbar { flex: 1 1 260px; display: flex; gap: 3px; height: 8px; border-radius: 99px; overflow: hidden; background: var(--sunk); box-shadow: inset 0 1px 2px rgba(0,0,0,.5); }
+  .vbar i { display: block; min-width: 6px; } .vbar i.good { background: linear-gradient(90deg, #4fb892, var(--good)); box-shadow: 0 0 12px rgba(111,211,174,.4); }
+  .vbar i.bad { background: linear-gradient(90deg, #e86f5e, var(--bad)); } .vbar i.new { background: #3d3746; }
+  /* cards */
+  .card { border-radius: 12px; border-color: var(--edge); background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0) 70%), var(--panel); box-shadow: var(--lift); }
+  .card:hover { border-color: rgba(233,168,62,.4); background: linear-gradient(180deg, rgba(233,168,62,.05), rgba(255,255,255,0) 70%), var(--panel); }
+  /* the verdict */
+  .sumhead { grid-template-columns: 66px minmax(0, 1fr); padding: 22px var(--pad) 20px; border-radius: 12px 12px 0 0; }
+  .sumhead:has(.sumicon.good) { background: radial-gradient(760px 240px at 0 0, rgba(111,211,174,.11), transparent 70%); }
+  .sumhead:has(.sumicon.bad) { background: radial-gradient(760px 240px at 0 0, rgba(255,143,126,.11), transparent 70%); }
+  .sumicon { width: 60px; height: 60px; }
+  .sumicon.good { box-shadow: 0 0 0 6px rgba(111,211,174,.06), 0 0 34px rgba(111,211,174,.2); }
+  .sumicon.bad { box-shadow: 0 0 0 6px rgba(255,143,126,.06), 0 0 34px rgba(255,143,126,.2); }
+  .word { font-size: 1.85rem; }
+  .metrics b { font: 600 1.3rem/1.25 var(--serif); }
+  /* first run */
+  .welcome { border-radius: 16px; border-color: var(--edge); background: radial-gradient(760px 320px at 12% -10%, rgba(233,168,62,.1), transparent 70%), var(--panel); box-shadow: var(--lift2); }
+  .welcome-mark { margin-bottom: 14px; filter: drop-shadow(0 0 14px rgba(233,168,62,.35)); }
+  /* dialogs and toasts */
+  dialog { border-radius: 14px; border-color: var(--edge2); background: linear-gradient(180deg, rgba(255,255,255,.026), rgba(255,255,255,0) 180px), var(--panel); }
+  .dlg-head { border-bottom-color: var(--edge); } .dlg-foot { border-top-color: var(--edge); }
+  .dlg-head h2 { font: 600 1.18rem/1.3 var(--serif); }
+  .toast { border-radius: 12px; background: rgba(31,27,36,.96); backdrop-filter: blur(8px); }
+  /* calm motion: short fades and a small slide, no scaling and no bounce */
+  .enter > .panel, .enter > .stats, .enter > .note, .enter .cards > .card, .enter > .sect, .enter > .vsum { animation: settle .24s var(--ease) backwards; }
+  @keyframes settle { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  .menu.floating, .dd { animation: drop .14s var(--ease); transform-origin: top center; }
+  .menu:not([hidden]):not(.floating) { animation: drop .14s var(--ease); transform-origin: top center; }
+  @keyframes drop { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+  dialog { transition: opacity .16s ease, transform .2s var(--ease), display .2s allow-discrete, overlay .2s allow-discrete; }
+  @starting-style { dialog[open] { opacity: 0; transform: translateY(8px); } }
+  @keyframes stamp { from { opacity: 0; transform: scale(1.18); } to { opacity: 1; transform: none; } }
+  .sumicon.stamp { animation: stamp .42s var(--ease) backwards; }
+  .card:hover { transform: translateY(-1px); }
+  @media (max-width: 900px) { main { padding: 18px 14px 80px; } h1 { font-size: 1.7rem; } .pbar { margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; } }
+  @media (max-width: 720px) { .top { gap: 6px; padding: 0 10px; } #addBtn { padding: 0 10px; } .brand { padding: 4px 2px; } }
+  tr.filler td { color: var(--faint); }
+  .rec-scroll { max-height: 58vh; overflow: auto; } table.rec td, table.rec th { white-space: pre; } table.rec td.mono { font-size: var(--code-fs); }
+  table.xref td:first-child { width: 120px; white-space: nowrap; } table.xref td:nth-child(2) { width: 104px; } table.xref td.mono { font-size: var(--code-fs); }
 </style>
 </head>
 <body data-density="comfortable" data-motion="system" data-side="on">
@@ -412,7 +515,7 @@
 <header class="top" role="banner">
   <button class="icon-btn" id="sideToggle" aria-label="Show or hide the program list" aria-controls="side" title="Program list (Ctrl+B)"><i data-ic="sidebar" data-size="18"></i></button>
   <a class="brand" href="#/" aria-label="Séance, workspace"><span id="logo"></span>Séance<small id="verTag"></small></a>
-  <button class="searchbtn" id="palOpen" aria-haspopup="dialog" title="Search programs and actions (Ctrl+K)"><i data-ic="search"></i><span>Search programs and actions</span><kbd>Ctrl K</kbd></button>
+  <button class="searchbtn" id="palOpen" aria-haspopup="dialog" title="Search programs, actions and code (Ctrl+K)"><i data-ic="search"></i><span>Search programs, actions and code</span><kbd>Ctrl K</kbd></button>
   <div class="grow"></div>
   <div class="menu-wrap">
     <button class="pill" id="runtimeBtn" data-menu="runtimeMenu" aria-haspopup="true" aria-expanded="false"><span class="dot" id="runtimeDot"></span><span id="runtimeText">Checking runtime</span></button>
@@ -563,8 +666,16 @@
   <div class="dlg-foot"><button class="btn" id="cfNo">Cancel</button><button class="btn primary" id="cfYes">OK</button></div>
 </dialog>
 
-<dialog id="palDlg" aria-label="Search programs and actions">
-  <div class="pal-in"><i data-ic="search" data-size="18"></i><input type="text" id="palInput" placeholder="Search programs and actions" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list"></div>
+<dialog id="xrefDlg" class="wide" aria-labelledby="xrefTitle">
+  <div class="dlg-head"><h2 id="xrefTitle">Where Used</h2><button class="icon-btn" data-close aria-label="Close"><i data-ic="x"></i></button></div>
+  <div class="dlg-body" id="xrefBody"></div>
+</dialog>
+<dialog id="recDlg" class="wide" aria-labelledby="recTitle">
+  <div class="dlg-head"><h2 id="recTitle">Records</h2><button class="icon-btn" data-close aria-label="Close"><i data-ic="x"></i></button></div>
+  <div class="dlg-body" id="recBody"></div>
+</dialog>
+<dialog id="palDlg" aria-label="Search programs, actions and code">
+  <div class="pal-in"><i data-ic="search"></i><input type="text" id="palInput" placeholder="Search programs, actions and code" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list"><kbd class="pal-esc">Esc</kbd></div>
   <div class="pal-list" id="palList" role="listbox"></div>
   <div class="pal-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span></div>
 </dialog>
@@ -773,6 +884,7 @@ function openDropdown(sel) {
   closeDropdown(false); closeMenus(); closeFloating();
   const el = document.createElement('div'); el.className = 'dd'; el.setAttribute('role', 'listbox'); el.id = 'ddList';
   el.innerHTML = [...sel.options].map((o, i) => `<div class="dd-opt" role="option" id="ddo${i}" data-i="${i}" aria-selected="${o.selected}" ${o.disabled ? 'aria-disabled="true"' : ''}><span class="dd-ck">${o.selected ? ic('check', 14) : ''}</span><span>${esc(o.textContent)}</span></div>`).join('');
+  el.style.fontSize = getComputedStyle(sel).fontSize; // the list reads at the size of the field it belongs to
   floatHost().appendChild(el); DD.el = el; DD.sel = sel; DD.idx = Math.max(0, sel.selectedIndex); sel.setAttribute('aria-expanded', 'true');
   placeFloating(el, sel, sel.offsetWidth); markDropdown();
 }
@@ -934,21 +1046,38 @@ function paletteItems() {
   return items.filter((i) => !i.skip);
 }
 function placePalette() {
+  // The bar opens exactly where the search button is, at its size; on a phone, where the button is only an icon, it takes the width of the window.
   const d = $('palDlg'), r = $('palOpen').getBoundingClientRect(); const set = (k, v) => d.style.setProperty(k, v);
-  if (!(r.width > 0)) { const w = Math.min(640, innerWidth - 16); set('--pl', (innerWidth - w) / 2 + 'px'); set('--pt', '11vh'); set('--pw', w + 'px'); set('--prow', '40px'); return; }
-  if (innerWidth < 720) { set('--pl', '8px'); set('--pt', Math.max(4, r.top - 1) + 'px'); set('--pw', innerWidth - 16 + 'px'); set('--prow', r.height + 2 + 'px'); return; }
-  const w = Math.min(Math.max(r.width, 620), innerWidth - 16); set('--pl', Math.min(Math.max(8, r.left - 1), innerWidth - w - 8) + 'px'); set('--pt', r.top - 1 + 'px'); set('--pw', w + 'px'); set('--prow', r.height + 2 + 'px');
+  if (!(r.width > 0)) { const w = Math.min(640, innerWidth - 16); set('--pl', (innerWidth - w) / 2 + 'px'); set('--pt', '11vh'); set('--pw', w + 'px'); set('--prow', '38px'); return; }
+  const narrow = r.width < 300;
+  set('--pl', (narrow ? 8 : r.left) + 'px'); set('--pt', r.top + 'px'); set('--pw', (narrow ? innerWidth - 16 : r.width) + 'px'); set('--prow', r.height - 2 + 'px');
 }
 function openPalette() {
   pal.items = paletteItems(); $('palInput').value = ''; placePalette(); filterPalette();
   const list = $('palList'); list.classList.add('fresh'); clearTimeout(openPalette.t); openPalette.t = setTimeout(() => list.classList.remove('fresh'), 700);
   $('palDlg').showModal(); $('palInput').focus();
 }
-function filterPalette() {
+function filterPalette(keepSel) {
   const toks = $('palInput').value.toLowerCase().split(/\s+/).filter(Boolean);
   const score = (i) => { const s = (i.t + ' ' + i.g).toLowerCase(); if (!toks.every((t) => s.includes(t))) return -1; return (i.t.toLowerCase().startsWith(toks[0] || '') ? 2 : 0) + (i.g === 'Programs' ? 0 : 1); };
   pal.shown = pal.items.map((i) => [score(i), i]).filter(([s]) => s >= 0).sort((a, b) => (toks.length ? b[0] - a[0] : 0)).map(([, i]) => i).slice(0, 40);
-  pal.sel = 0; renderPalette();
+  const q = $('palInput').value.trim();
+  if (pal.code && pal.code.q === q) pal.shown = pal.shown.concat(pal.code.items);
+  pal.sel = keepSel != null ? Math.min(keepSel, Math.max(0, pal.shown.length - 1)) : 0; renderPalette();
+  codeSearch(q);
+}
+function codeSearch(q) {
+  // names in the COBOL that contain what was typed: data items, conditions, paragraphs, files, across every program
+  clearTimeout(codeSearch.t);
+  if (q.length < 2 || !/^[A-Za-z0-9_-]+$/.test(q) || !S.programs.length) { pal.code = null; return; }
+  if (pal.code && pal.code.q === q) return;
+  codeSearch.t = setTimeout(async () => {
+    let r; try { r = await api('/api/xref?' + new URLSearchParams({ q })); } catch { return; }
+    if (!$('palDlg').open || $('palInput').value.trim() !== q) return;
+    pal.code = { q, items: r.names.map((n) => ({ g: 'In the code', t: n.name, icon: 'search', run: () => openWhereUsed(n.name),
+      sub: `${plural(n.total, 'place')} in ${n.programs.map((x) => prog(x.program)?.title || x.program).join(', ')}` })) };
+    filterPalette(pal.sel);
+  }, 140);
 }
 function renderPalette() {
   let last = '';
@@ -961,6 +1090,7 @@ function renderPalette() {
 }
 function runPalette(n) { const it = pal.shown[n]; if (!it) return; $('palDlg').close(); setTimeout(() => it.run(), 30); }
 $('palInput').addEventListener('input', () => { $('palList').classList.remove('fresh'); filterPalette(); });
+$('palDlg').addEventListener('close', () => { pal.code = null; clearTimeout(codeSearch.t); });
 window.addEventListener('resize', () => { if ($('palDlg').open) placePalette(); });
 $('palInput').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); pal.sel = Math.min(pal.sel + 1, pal.shown.length - 1); renderPalette(); }
@@ -1063,7 +1193,7 @@ function sortList(list) {
 function emptyWorkspaceHtml() {
   return `<div class="welcome">
     <div>
-      <h1 id="workTitle">Prove your COBOL migration is correct</h1>
+      <div class="welcome-mark">${WISP('calm', 54)}</div><h1 id="workTitle">Prove your COBOL migration is correct</h1>
       <p class="lede">Séance runs your original COBOL and the Python it writes for it on the same inputs, then compares every output byte for byte.</p>
       <ol>
         <li><span><b>Add your COBOL</b>Drop the program, the programs it CALLs and its copybooks. A JCL job works too.</span></li>
@@ -1110,6 +1240,7 @@ function renderWork() {
       <div class="row"><button class="btn" data-act="checkAll" ${ca ? 'disabled' : ''}>${ic('play')}Check All</button></div></div>
     ${ca ? `<div class="panel body" style="margin-bottom:14px"><div class="row between"><span><span class="spin" aria-hidden="true"></span> &nbsp;Checking <b>${ca.done + 1}</b> of ${ca.total}: ${esc(ca.current)}</span><button class="btn sm" id="stopAll">Stop After This One</button></div><div class="progress" style="margin-top:10px"><i style="width:${Math.round(ca.done / ca.total * 100)}%"></i></div></div>` : ''}
     <div class="stats"><div><b>${ps.length}</b><span>${per(ps.length, 'Program', 'Programs')}</span></div><div><b class="good">${count('matched')}</b><span>Spirit matched</span></div><div><b class="${count('restless') ? 'bad' : ''}">${count('restless')}</b><span>Spirit restless</span></div><div><b>${count('new')}</b><span>Not checked</span></div><div><b>${lines.toLocaleString()}</b><span>Output lines compared</span></div><div><b>${cov.length ? Math.round(cov.reduce((a, c) => a + c, 0) / cov.length) + '%' : '–'}</b><span>Average coverage</span></div></div>
+    ${ps.length ? `<div class="vsum"><div class="vbar" role="img" aria-label="${count('matched')} of ${ps.length} verified">${[['good', count('matched')], ['bad', count('attention')], ['new', count('new')]].map(([c, n]) => (n ? `<i class="${c}" style="flex:${n}"></i>` : '')).join('')}</div><span class="sm muted"><b class="good">${count('matched')}</b> of ${plural(ps.length, 'program')} verified${count('attention') ? ` · <b class="bad">${count('attention')}</b> need attention` : ''}${count('new') ? ` · ${count('new')} not checked yet` : ''}</span></div>` : ''}
     ${S.sel.size ? `<div class="selbar" role="region" aria-label="Selected programs"><span><b>${S.sel.size}</b> selected</span><span class="row"><button class="btn sm" data-act="selCheck">${ic('play', 14)}Run Checks</button><button class="btn danger sm" data-act="selDelete">${ic('trash', 14)}Delete</button><button class="btn ghost sm" data-act="selClear">Clear</button></span></div>` : ''}
     <div class="toolbar"><div class="chips" role="group" aria-label="Filter by result">${STATUS_FILTERS.map(([k, l]) => `<button class="chipbtn" data-filter="${k}" aria-pressed="${S.filter.status === k}">${l} <b>${count(k)}</b></button>`).join('')}</div>
       <div class="row"><div class="searchbox"><span aria-hidden="true">${ic('search', 15)}</span><input type="search" id="wsSearch" placeholder="Filter by name" aria-label="Filter programs" value="${esc(S.filter.q)}"></div>
@@ -1274,7 +1405,7 @@ async function renderOverview() {
   const notes = [...(lay.unsupported || []).map((u) => `<div class="note bad"><b>Not runnable yet:</b> ${esc(u)}. The Python marks those statements and the check reports them.</div>`), ...(lay.notes || []).map((n) => `<div class="note warn">${esc(n)}</div>`)];
   const org = (f) => f.lines ? 'Text lines' : 'Fixed-length records';
   const fileCard = (f) => `<div class="panel"><div class="head"><h3>${f.input && f.output ? 'Updates' : f.input ? 'Reads' : 'Writes'} <span class="mono">${esc(f.assign)}</span></h3><span class="faint sm">${org(f)} · ${f.size} bytes${f.record ? ' · ' + esc(f.record) : ''}</span></div>
-    <div class="body flush scroll" style="max-height:260px"><table><thead><tr><th>Field</th><th class="num">Bytes</th><th>Type</th></tr></thead><tbody>${f.fields.map((x) => `<tr><td class="mono" style="white-space:nowrap">${esc(x.name)}</td><td class="num">${x.start}–${x.end}</td><td class="muted">${esc(fieldType(x))}</td></tr>`).join('')}</tbody></table></div></div>`;
+    <div class="body flush scroll" style="max-height:520px"><table><thead><tr><th>Field</th><th class="num">Bytes</th><th>Type</th></tr></thead><tbody>${f.fields.map((x) => `<tr${x.name === 'FILLER' ? ' class="filler"' : ''}><td class="mono" style="white-space:nowrap">${esc(x.name)}</td><td class="num">${x.start}–${x.end}</td><td class="muted">${esc(fieldType(x))}</td></tr>`).join('')}</tbody></table></div></div>`;
   const real = lay.files.filter((f) => f.fields.length);
   el.innerHTML = `${notes.join('')}
     ${real.length ? `<div class="cols">${real.map(fileCard).join('')}</div>` : '<div class="note">This program has no record files. It works through the console, a database or a terminal.</div>'}
@@ -1349,6 +1480,44 @@ async function renderCode() {
 }
 function jumpToCobol(prog_, line) { S.jump = { prog: prog_, line }; goTo(S.name, 'code'); }
 
+/* ================================================================ where used */
+const ROLE = { defined: ['amber', 'Defined'], changed: ['bad', 'Changed'], used: ['', 'Used'], paragraph: ['good', 'Paragraph'] };
+async function openWhereUsed(name) {
+  const d = $('xrefDlg'); $('xrefTitle').textContent = `Where ${name} Is Used`; $('xrefBody').innerHTML = skeleton(4);
+  if (!d.open) d.showModal();
+  let r; try { r = await api('/api/xref?' + new URLSearchParams({ name })); } catch (e) { $('xrefBody').innerHTML = `<div class="note bad">${esc(e.message)}</div>`; return; }
+  const by = new Map(); r.hits.forEach((h) => { if (!by.has(h.program)) by.set(h.program, []); by.get(h.program).push(h); });
+  const changed = r.hits.filter((h) => h.role === 'changed').length;
+  $('xrefBody').innerHTML = !r.hits.length ? '<div class="empty-state">No program in the workspace names it.</div>'
+    : `<p class="muted">${plural(r.hits.length, 'line')} in ${plural(by.size, 'program')}${changed ? `, and ${changed} of them change it` : ''}. Read from the source the compiler reads, outside comments and literals. Choose a line to open it in the code.</p>
+    ${[...by].map(([pname, hs]) => { const p = prog(pname); return `<div class="panel"><div class="head"><h3>${esc(p ? p.title : pname)}</h3><span class="faint sm">${plural(hs.length, 'line')}</span></div><div class="body flush"><table class="sm xref"><tbody>${hs.map((h) => {
+      const [cls, word] = ROLE[h.role] || ROLE.used; const main = h.file.toLowerCase() === pname + '.cbl';
+      return `<tr${main ? ` class="link" tabindex="0" data-xprog="${esc(pname)}" data-xline="${h.line}"` : ''}><td class="num mono">${main ? '' : `<span class="faint">${esc(h.file)}</span> `}${h.line}</td><td><span class="tag ${cls}">${word}</span></td><td class="mono">${esc(h.text)}</td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}`;
+}
+$('xrefDlg').addEventListener('click', (e) => {
+  const row = e.target.closest('[data-xline]'); if (!row) return;
+  $('xrefDlg').close(); S.jump = { prog: '', line: +row.dataset.xline };
+  if (here(row.dataset.xprog, 'code')) renderCode(); else goTo(row.dataset.xprog, 'code');
+});
+$('xrefDlg').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest('[data-xline]')) e.target.closest('[data-xline]').click(); });
+/* ================================================================ record viewer */
+const recView = { name: null, dataset: null, label: '', side: 'input', file: '' };
+function openRecords(name, dataset, label) { Object.assign(recView, { name, dataset, label, side: 'input', file: '' }); if (!$('recDlg').open) $('recDlg').showModal(); renderRecords(); }
+async function renderRecords() {
+  const v = recView; const body = $('recBody'); $('recTitle').textContent = `Records: ${v.label}`; body.innerHTML = skeleton(5);
+  let r; try { r = await api('/api/records?' + new URLSearchParams({ program: v.name, dataset: v.dataset, side: v.side, file: v.file })); } catch (e) { body.innerHTML = `<div class="note bad">${esc(e.message)}</div>`; return; }
+  if (recView !== v || v.dataset !== r.dataset) return;
+  v.file = r.file;
+  const csv = '/api/records?' + new URLSearchParams({ program: v.name, dataset: v.dataset, side: v.side, file: r.file, format: 'csv' });
+  body.innerHTML = `<div class="row between"><div class="row"><div class="seg" role="group" aria-label="Input or output"><button data-rside="input" aria-pressed="${v.side === 'input'}">What The COBOL Read</button><button data-rside="output" aria-pressed="${v.side === 'output'}">What It Wrote</button></div>
+      ${r.files.length > 1 ? `<label class="inline" for="recFile">File <select id="recFile">${r.files.map((f) => `<option ${f === r.file ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></label>` : r.file ? `<span class="mono muted">${esc(r.file)}</span>` : ''}</div>
+      ${r.rows.length ? `<a class="btn sm" href="${csv}" download>${ic('download', 14)}Download CSV</a>` : ''}</div>
+    ${r.rows.length ? `<div class="panel"><div class="body flush rec-scroll"><table class="sm rec"><thead><tr><th class="num">#</th>${r.fields.map((f) => `<th>${esc(f)}</th>`).join('')}</tr></thead><tbody>${r.rows.map((row, i) => `<tr><td class="num faint">${i + 1}</td>${row.map((c) => `<td class="mono">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
+      <p class="faint sm">${r.truncated ? `The first ${r.rows.length.toLocaleString()} of ${r.total.toLocaleString()} records; the CSV has all of them.` : plural(r.total, 'record')}, split into the fields of the record layout.${v.side === 'output' ? ' The real COBOL wrote these; a check compares the Python with exactly these.' : ''}</p>`
+      : `<div class="empty-state">${v.side === 'input' ? 'This set gives the program no input files.' : 'The COBOL wrote nothing for this set.'}</div>`}`;
+}
+$('recDlg').addEventListener('click', (e) => { const s = e.target.closest('[data-rside]'); if (s && s.dataset.rside !== recView.side) { recView.side = s.dataset.rside; recView.file = ''; renderRecords(); } });
+$('recDlg').addEventListener('change', (e) => { if (e.target.id === 'recFile') { recView.file = e.target.value; renderRecords(); } });
 /* ================================================================ running checks */
 S.errors = new Map(); S.mutants = new Map(); S.gaps = new Map();
 async function startCheck(name, opts = {}) {
@@ -1576,7 +1745,7 @@ async function renderData() {
   const targets = job ? [] : lay.files.filter((f) => f.input).map((f) => `<option value="file:${esc(f.assign)}">${esc(PSEUDO[f.assign] || f.assign)}</option>`);
   if (lay?.console_input?.length) targets.push('<option value="console">Console input</option>');
   el.innerHTML = `<div class="panel"><div class="head"><div><h2>Saved test sets</h2><p class="muted sm">The real COBOL's output for each set is the expected answer.</p></div><button class="btn" id="recordAgain" title="Run the real COBOL again on the generated data and save its answers">${ic('refresh')}Record Again</button></div>
-      <div class="body flush"><table><thead><tr><th>Set</th><th class="num">Input</th><th></th></tr></thead><tbody>${sets.map((s) => `<tr><td>${esc(s.label)}${s.gap ? ' <span class="tag">Gap filler</span>' : ''}${s.golden ? ` <span class="tag amber">Mainframe</span> <span class="tag ${s.cobol_agrees ? 'good' : 'bad'}">${s.cobol_agrees ? 'GnuCOBOL agrees' : 'GnuCOBOL differs'}</span>${s.filled_from_cobol?.length ? `<br><span class="faint sm">${esc(s.filled_from_cobol.join(', '))} taken from the GnuCOBOL run</span>` : ''}` : ''}${s.cobol_error ? `<br><span class="faint sm">The COBOL stopped: ${esc(s.cobol_error)}</span>` : ''}</td><td class="num muted">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num">${s.removable ? `<button class="btn danger sm" data-rm="${esc(s.set)}">Remove</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No sets yet. Use Record Again.</td></tr>'}</tbody></table></div></div>
+      <div class="body flush"><table><thead><tr><th>Set</th><th class="num">Input</th><th></th></tr></thead><tbody>${sets.map((s) => `<tr><td>${esc(s.label)}${s.gap ? ' <span class="tag">Gap filler</span>' : ''}${s.golden ? ` <span class="tag amber">Mainframe</span> <span class="tag ${s.cobol_agrees ? 'good' : 'bad'}">${s.cobol_agrees ? 'GnuCOBOL agrees' : 'GnuCOBOL differs'}</span>${s.filled_from_cobol?.length ? `<br><span class="faint sm">${esc(s.filled_from_cobol.join(', '))} taken from the GnuCOBOL run</span>` : ''}` : ''}${s.cobol_error ? `<br><span class="faint sm">The COBOL stopped: ${esc(s.cobol_error)}</span>` : ''}</td><td class="num muted">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num"><span class="row" style="justify-content:flex-end;gap:6px;flex-wrap:nowrap">${isJob(prog(S.name)) ? '' : `<button class="btn sm" data-viewset="${esc(s.set)}" data-label="${esc(s.label)}">View Records</button>`}${s.removable ? `<button class="btn danger sm" data-rm="${esc(s.set)}">Remove</button>` : ''}</span></td></tr>`).join('') || '<tr><td colspan="3" class="muted">No sets yet. Use Record Again.</td></tr>'}</tbody></table></div></div>
     ${targets.length ? `<div class="panel"><div class="head"><div><h2>Add your own data</h2><p class="muted sm">A real input file makes the strongest test. The COBOL runs on it first; other inputs come from the first saved set.</p></div></div>
       <div class="body"><div class="drop" id="dataDrop"><p style="margin-bottom:10px">Drop a data file here, or choose one</p><div class="row" style="justify-content:center;align-items:flex-end;gap:14px">
         <label class="block" style="text-align:left">For <select id="uploadTarget">${targets.join('')}</select></label>
@@ -1599,6 +1768,7 @@ $('pData').addEventListener('keydown', (e) => { if (e.target.id === 'uploadLabel
 $('pData').addEventListener('dragover', (e) => { if (e.target.closest('#dataDrop')) { e.preventDefault(); $('dataDrop').classList.add('over'); } });
 $('pData').addEventListener('dragleave', () => $('dataDrop')?.classList.remove('over'));
 $('pData').addEventListener('drop', (e) => { if (e.target.closest('#dataDrop')) { e.preventDefault(); $('dataDrop').classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) uploadData(f); } });
+$('pData').addEventListener('click', (e) => { const v = e.target.closest('[data-viewset]'); if (v) openRecords(S.name, v.dataset.viewset, v.dataset.label); });
 $('pData').addEventListener('click', async (e) => {
   const rm = e.target.closest('[data-rm]');
   if (rm) { try { await api(`/api/data/${enc(S.name)}/${enc(rm.dataset.rm)}`, { method: 'DELETE' }); say('Removed.', 'ok'); forget(S.name, ['sets']); renderData(); } catch (err) { say(err.message, 'error'); } return; }

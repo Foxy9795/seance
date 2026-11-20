@@ -224,6 +224,7 @@ def _rm(path: Path) -> None:
 def clear_reports(name: str, root: Path = ROOT) -> None:
     """Remove the saved check reports of a program (its Python, its hand-written port, or a job of that name)."""
     for stem in (f"migrated_{name}", f"migrated_{name}_naive", f"jobs_{name}"):
+        _rm(root / "build" / "reports" / "history" / f"{stem}.jsonl")
         for ext in (".json", ".md"):
             _rm(root / "build" / "reports" / f"{stem}{ext}")
 
