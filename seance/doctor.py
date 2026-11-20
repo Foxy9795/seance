@@ -150,6 +150,7 @@ def check_round_trip() -> Check:
 
 
 def check_workspace(root: Path) -> Check:
+    from .jobs import job_names
     from .programs import program_names
 
     bad = []
@@ -164,8 +165,9 @@ def check_workspace(root: Path) -> Check:
             bad.append(f"{name}: {exc.strerror or exc}")
     if bad:
         return Check("fail", "Workspace", "; ".join(bad), "Run Séance from a folder you can write to.")
-    n = len(program_names(root))
-    return Check("ok", "Workspace", f"{root} is writable ({n} program{'s' if n != 1 else ''} in it)")
+    n, j = len(program_names(root)), len(job_names(root))
+    held = f"{n} program{'s' if n != 1 else ''}" + (f" and {j} job{'s' if j != 1 else ''}" if j else "")
+    return Check("ok", "Workspace", f"{root} is writable ({held} in it)")
 
 
 def check_app_files(root: Path) -> Check:
