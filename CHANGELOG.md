@@ -3,6 +3,23 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-11-21
+### Added
+- Home page: what Séance does, how to add a program, every feature with a one-click way to open it on a sample, the
+  sample library, MCP settings for nine clients, and what runs today.
+- MCP server for any client: a launcher with no machine paths (`python scripts/seance_mcp.py`), HTTP at `/mcp` in the
+  app and standalone (`seance mcp --http`), and `seance mcp-config --client NAME|all --mode local|portable|http [--write]`.
+- COPY and REPLACE done in one pass the way cobc does them, checked word for word against `cobc -E` on 470 programs.
+- 65 intrinsic functions ported from libcob, with `scripts/fuzz_functions.py` comparing them with GnuCOBOL.
+- ALPHABET, PROGRAM COLLATING SEQUENCE and SORT/MERGE COLLATING SEQUENCE; SAME RECORD AREA; DECLARATIVES; numeric
+  paragraph names; ALTER; CORRESPONDING; RENAMES; SPECIAL-NAMES; edited pictures rebuilt and measured.
+- The NIST COBOL-85 test suite as a harness (`scripts/stress_nist.py`): 294 of 366 programs match GnuCOBOL byte for
+  byte (`docs/STRESS_NIST.md`).
+### Changed
+- Menus, header, toasts and dialogs are opaque.
+- COBOL sources are read one character per byte, so literals with accented letters keep the bytes cobc compiled.
+- IDENTIFICATION DIVISION comment entries are left out as cobc leaves them out.
+
 ## [1.1.0] - 2026-11-20
 
 ### Added
