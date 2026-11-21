@@ -20,14 +20,16 @@ def encode(spec, value) -> bytes:
     kind, usage, digits, scale, signed, sign, pic, size, justified, blank_zero = spec
     if kind in ("alpha", "group"):
         text = str(value)
+        if kind == "alpha" and pic and any(c in "B0/" for c in pic):
+            from .editing import format_alpha
+
+            text = format_alpha(text, pic)  # alphanumeric-edited: X, A and 9 take the characters, B 0 / are inserted
         raw = text.encode(ENC, errors="replace")
         if justified:
             return raw[-size:].rjust(size, b" ") if size else b""
         return raw[:size].ljust(size, b" ")
     if kind == "edited":
-        if blank_zero and Decimal(value) == 0:
-            return b" " * size
-        return format_edited(Decimal(value), pic).encode(ENC)[:size].ljust(size, b" ")
+        return format_edited(Decimal(value), pic, "$", blank_zero).encode(ENC)[:size].ljust(size, b" ")
     value = Decimal(value)
     negative = value.is_signed() and signed
     if usage in ("float", "double"):

@@ -83,7 +83,8 @@ def test_edited_pictures_match_cobol():
     problems = []
     for v, line in zip(VALUES, lines):
         for pic, w, real in zip(EDITED, widths, split(line.ljust(sum(widths)), widths)):
-            ours = format_edited(Decimal(v), expand(pic))
+            # the value goes through W-V (two decimals) first, which is what the edited field is moved from
+            ours = format_edited(Decimal(v).quantize(Decimal("0.01"), rounding="ROUND_DOWN"), expand(pic))
             if ours != real:
                 problems.append(f"{pic:<16} value {v:>11}: cobol={real!r} ours={ours!r}")
     assert not problems, "\n" + "\n".join(problems[:25])

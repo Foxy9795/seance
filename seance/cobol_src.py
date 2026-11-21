@@ -32,6 +32,9 @@ def normalize(text: str, fixed: bool | None = None) -> list[Line]:
     fixed = detect_fixed(text) if fixed is None else fixed
     debugging = bool(re.search(r"WITH\s+DEBUGGING\s+MODE", text, re.I))
     out: list[Line] = []
+    # the last code line as written out to column 72, while a literal on it is still open: a continued literal keeps
+    # every character up to column 72, trailing spaces included, which the stripped text of the line has lost
+    open_tail: str | None = None
     for i, raw in enumerate(text.splitlines(), start=1):
         raw = raw.expandtabs(8).rstrip()
         if not raw.strip():
@@ -46,22 +49,38 @@ def normalize(text: str, fixed: bool | None = None) -> list[Line]:
             body = raw[7:72] if len(raw) > 7 else ""
             if raw[6:8] == ">>":  # a directive that starts in the indicator column
                 out.append(Line(i, raw[6:].strip()))
+                open_tail = None
             elif indicator == "$":
+                open_tail = None
                 continue  # a Micro Focus compiler directive ($SET ...)
             elif indicator in "*/":
                 out.append(Line(i, raw[7:].strip(), True))
             elif indicator == "-":
-                if out and not out[-1].comment:
-                    prev = out[-1]
-                    out[-1] = Line(prev.number, prev.text + body.strip().lstrip("\"'"))
+                at = next((k for k in range(len(out) - 1, -1, -1) if not out[k].comment), None)  # comment lines may come between
+                if at is not None:
+                    prev = out[at]
+                    full = body.ljust(65)
+                    first = len(full) - len(full.lstrip())
+                    if open_tail is not None:
+                        # a continued literal goes on after the quote that opens the continuation line, to column 72
+                        joined = open_tail + (full[first + 1:] if full[first:first + 1] in "\"'" else full[first:])
+                    else:
+                        # a continued word or number: the first character of the line follows the last one before it
+                        joined = prev.text.rstrip() + full[first:]
+                    open_tail = joined if _open_quote(joined) else None
+                    out[at] = Line(prev.number, joined if open_tail is not None else _strip_inline_comment(joined).rstrip())
+                continue
             elif indicator in "dD":
                 if debugging and body.strip():  # WITH DEBUGGING MODE compiles debugging lines
                     out.append(Line(i, _strip_inline_comment(body).rstrip()))
+                open_tail = None
                 continue
             elif body.strip():
                 code = _strip_inline_comment(body)  # GnuCOBOL accepts *> after column 7 in fixed format too
                 if code.strip():
                     out.append(Line(i, code.rstrip()))
+                    open_tail = body.ljust(65) if code == body and _open_quote(body) else None
+                continue
         else:
             stripped = raw.strip()
             if stripped.startswith("*>"):
@@ -104,6 +123,26 @@ def source_fixes(text: str, fixed: bool) -> tuple[str, list[str]]:
                 notes.append(f"line {no}: added the period after the PROGRAM-ID name, which IBM COBOL lets you leave out.")
         out.append(line + end)
     return "".join(out), notes
+
+
+def _open_quote(text: str) -> bool:
+    """Whether a literal is still open at the end of the text (a doubled quote inside a literal is one quote)."""
+    quote = ""
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch == quote:
+                if text[i + 1:i + 2] == quote:
+                    i += 2
+                    continue
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif text.startswith("*>", i):
+            break
+        i += 1
+    return bool(quote)
 
 
 def _strip_inline_comment(line: str) -> str:

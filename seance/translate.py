@@ -121,7 +121,8 @@ class Names:
     by_name: dict[str, list[Item]] = field(default_factory=dict)
     key: dict[int, str] = field(default_factory=dict)  # id(item) -> unique key
     items: dict[str, Item] = field(default_factory=dict)  # key -> item
-    conds: dict[str, tuple[str, list]] = field(default_factory=dict)
+    conds: dict[str, tuple] = field(default_factory=dict)  # condition key -> (item key, choices, FALSE value)
+    cond_items: dict[str, list] = field(default_factory=dict)  # condition name -> [(item, item key, condition key)]
     indexes: dict[str, str] = field(default_factory=dict)  # index name -> table item key
     files: dict[str, object] = field(default_factory=dict)  # FD name -> FileDef
 
@@ -153,6 +154,23 @@ class Names:
         if len(cands) > 1:
             raise Unsupported(f"{name} is defined more than once; qualify it with OF")
         return cands[0]
+
+    def resolve_cond(self, name: str, quals: list[str]) -> str:
+        """The key of a condition name, qualified by its item and the item's groups when the name is not unique."""
+        cands = self.cond_items.get(name, [])
+        if quals:
+            def ancestors(it):
+                node = it
+                while node is not None:
+                    yield node.name
+                    node = node.parent
+                yield it.record
+            cands = [c for c in cands if all(q in set(ancestors(c[0])) for q in quals)]
+        if not cands:
+            raise Unsupported(f"unknown condition name {name}{' OF ' + ' OF '.join(quals) if quals else ''}")
+        if len(cands) > 1:
+            raise Unsupported(f"the condition name {name} is defined more than once; qualify it with OF")
+        return cands[0][2]
 
 
 def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
@@ -189,12 +207,18 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
     sort_return = Item("SORT-RETURN", 1, kind="num", usage="binary", digits=9, signed=True, size=4, offset=6)
     names.add(sort_return, "_SPECIAL")
     names.finish()
+    found: dict[str, list] = {}
     for it in names.items.values():
         k = names.key[id(it)]
         for cname, choices in it.conds:
-            names.conds[cname] = (k, choices)
+            found.setdefault(cname, []).append((it, k, choices, it.cond_false.get(cname)))
         for ix in it.indexes:
             names.indexes[ix] = k
+    for cname, entries in found.items():
+        for it, k, choices, false in entries:
+            ck = cname if len(entries) == 1 else f"{cname}@{k}"
+            names.conds[ck] = (k, choices, false)
+            names.cond_items.setdefault(cname, []).append((it, k, ck))
     return names, records
 
 
@@ -225,8 +249,11 @@ class RefX:
 
 
 class Parser:
-    def __init__(self, toks: list[Tok], names: Names, paragraphs: set[str]):
+    def __init__(self, toks: list[Tok], names: Names, paragraphs: set[str], section: str | None = None,
+                 owner: dict | None = None, para: str | None = None, altered: set[str] | None = None):
         self.t, self.i, self.names, self.paras = toks, 0, names, paragraphs
+        self.section, self.owner = section, owner or {}
+        self.para, self.altered = para, altered or set()  # this paragraph, and the paragraphs some ALTER re-points
         self._last = None
         self.comma = getattr(names, "comma", False)
 
@@ -265,7 +292,7 @@ class Parser:
     # -- data references
     def is_data(self, k: int = 0) -> bool:
         tok = self.peek(k)
-        return tok.kind == "word" and tok.value in self.names.by_name and tok.value not in self.names.conds
+        return tok.kind == "word" and tok.value in self.names.by_name and tok.value not in self.names.cond_items
 
     def ref(self) -> RefX:
         tok = self.peek()
@@ -571,8 +598,8 @@ class Parser:
             self._last = (subject, op)
             return f'S.cmp({subject}, "{op}", {obj})'
         tok = self.peek()
-        if tok.kind == "word" and tok.value in self.names.conds:
-            self.i += 1
+        if tok.kind == "word" and tok.value in self.names.cond_items:
+            ck = self.cond_name()
             subs = ""
             if self.is_op("("):
                 self.i += 1
@@ -581,7 +608,7 @@ class Parser:
                     parts.append(self.subscript())
                 self.i += 1
                 subs = ", " + ", ".join(parts)
-            return f'S.cond("{tok.value}"{subs})'
+            return f'S.cond("{ck}"{subs})'
         if self.is_op("("):
             save = self.i
             try:
@@ -712,13 +739,37 @@ class Parser:
             raise Unsupported("INITIALIZE ... REPLACING is not supported yet")
         return self.code(line, f"S.initialize({', '.join(names)})")
 
+    def cond_name(self) -> str:
+        """A condition name with its qualifiers (A OF REC), as the key the runtime knows it by."""
+        name = self.take().value
+        quals = []
+        while self.word() in ("OF", "IN") and self.peek(1).kind == "word":
+            self.i += 1
+            quals.append(self.take().value)
+        return self.names.resolve_cond(name, quals)
+
     def s_SET(self, line, stop):
-        if self.word() in self.names.conds:
-            name = self.take().value
+        if self.word() in self.names.cond_items:
+            calls = []
+            while self.word() in self.names.cond_items:
+                ck = self.cond_name()
+                subs = ""
+                if self.is_op("("):
+                    self.i += 1
+                    parts = []
+                    while not self.is_op(")"):
+                        parts.append(self.subscript())
+                    self.i += 1
+                    subs = ", " + ", ".join(parts)
+                calls.append((ck, subs))
             self.expect("TO")
             if self.accept("TRUE"):
-                return self.code(line, f'S.set_true("{name}")')
-            raise Unsupported("SET condition TO FALSE is not supported yet")
+                return self.code(line, "; ".join(f'S.set_true("{ck}"{subs})' for ck, subs in calls))
+            self.expect("FALSE")
+            for ck, _ in calls:
+                if self.names.conds[ck][2] is None:
+                    raise Unsupported(f"SET {ck.split('@')[0]} TO FALSE: its 88 level has no FALSE value")
+            return self.code(line, "; ".join(f'S.set_false("{ck}"{subs})' for ck, subs in calls))
         tgts = []
         while self.word() in self.names.indexes or self.is_data():
             if self.word() in self.names.indexes:
@@ -804,8 +855,8 @@ class Parser:
     def s_MULTIPLY(self, line, stop):
         a = self.operand_num()
         self.expect("BY")
-        if self.is_data() and self.word(1) != "GIVING" and not (self.is_op("(", 1)):
-            dests = self.targets()
+        if self.is_data():
+            dests = self.targets()  # MULTIPLY A BY B C: B and C get the products; MULTIPLY A BY B GIVING C: B is an operand
             if self.accept("GIVING"):
                 items = [(r, f"{a} * {dests[0][0].num}", rd) for r, rd in self.targets()]
             else:
@@ -905,13 +956,32 @@ class Parser:
             test = f'S.cmp({subject}, "==", {lo})'
         return f"not ({test})" if negate else test
 
-    def s_PERFORM(self, line, stop):
-        target = self.word()
-        if target in self.paras:
+    def is_para(self, k: int = 0) -> bool:
+        return self.word(k) in self.paras or any(p.startswith(self.word(k) + "@") for p in self.paras if self.word(k))
+
+    def para_ref(self) -> str:
+        """A paragraph or section name, with OF/IN SECTION when given: the key it is filed under. Without a
+        qualifier, a name used in more than one section means the one in the current section."""
+        name = self.take().value
+        qual = None
+        if self.word() in ("OF", "IN") and self.peek(1).kind == "word":
             self.i += 1
+            qual = self.take().value
+        here = qual or self.section
+        if here and f"{name}@{here}" in self.paras:
+            return f"{name}@{here}"
+        if qual and self.owner.get(name) not in (qual, None):
+            raise Unsupported(f"there is no paragraph {name} in section {qual}")
+        if name not in self.paras:
+            raise Unsupported(f"unknown procedure {name}")
+        return name
+
+    def s_PERFORM(self, line, stop):
+        if self.is_para():
+            target = self.para_ref()
             last = None
             if self.accept("THRU", "THROUGH"):
-                last = self.take().value
+                last = self.para_ref()
             mode = self.loop_mode()
             call = f'S.perform("{target}"' + (f', "{last}"' if last else "") + ")"
             return Node("loop", line, {"mode": mode, "body": [self.code(line, call)]})
@@ -981,15 +1051,30 @@ class Parser:
     def s_GO(self, line, stop):
         self.accept("TO")
         targets = []
-        while self.word() in self.paras:
-            targets.append(self.take().value)
+        while self.is_para():
+            targets.append(self.para_ref())
+        if self.para in self.altered and not self.word() == "DEPENDING":
+            # the GO TO of a paragraph an ALTER names goes where the last ALTER pointed it
+            return Node("goto", line, {"targets": targets or [None], "alter": self.para})
         if not targets:
-            raise Unsupported("GO TO without a paragraph name (ALTER) is not supported")
+            raise Unsupported("GO TO without a paragraph name, in a paragraph no ALTER names")
         if self.accept("DEPENDING"):
             self.accept("ON")
             sel = self.operand_num()
             return Node("goto", line, {"targets": targets, "depending": sel})
         return Node("goto", line, {"targets": targets})
+
+    def s_ALTER(self, line, stop):
+        calls = []
+        while self.is_para():
+            src = self.para_ref()
+            self.expect("TO")
+            self.accept("PROCEED")
+            self.accept("TO")
+            calls.append(f'S.alter("{src}", "{self.para_ref()}")')
+        if not calls:
+            raise Unsupported("expected a paragraph name after ALTER")
+        return self.code(line, "; ".join(calls))
 
     def s_STOP(self, line, stop):
         if self.accept("RUN"):
@@ -1220,13 +1305,10 @@ class Parser:
     def _proc_range(self):
         self.accept("PROCEDURE")
         self.accept("IS")
-        first = self.take().value
+        first = self.para_ref()
         last = None
         if self.accept("THRU") or self.accept("THROUGH"):
-            last = self.take().value
-        for name in (first, last):
-            if name and name not in self.paras:
-                raise Unsupported(f"unknown procedure {name}")
+            last = self.para_ref()
         return f'("{first}", {repr(last)})'
 
     def s_SORT(self, line, stop, merge=False):
@@ -1519,10 +1601,11 @@ class Parser:
 
 # ---------------------------------------------------------------- program structure
 
-def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], dict[str, tuple[str, str]], dict[str, int]]:
+def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], dict[str, tuple[str, str]], dict[str, int], dict[str, str | None]]:
     """Paragraph headers are one-word sentences; NAME SECTION starts a section. DECLARATIVES are skipped."""
     order, paras, lines = ["(start)"], {"(start)": []}, {"(start)": 0}
     sections: dict[str, list[str]] = {}
+    owner: dict[str, str | None] = {"(start)": None}
     current, section = "(start)", None
     sentence: list[Tok] = []
     in_decl = False
@@ -1549,12 +1632,14 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
             order.append(current)
             paras[current], lines[current] = [], words[0].line
             sections[section] = [current]
+            owner[current] = None
             continue
         if len(words) == 1 and words[0].kind == "word" and vals[0] not in VERBS and vals[0] not in ENDERS:
             current = vals[0]
             if current in paras:
                 current = f"{current}@{section}"
             order.append(current)
+            owner[current] = section
             paras[current], lines[current] = [], words[0].line
             if section:
                 sections[section].append(current)
@@ -1564,7 +1649,7 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
         order.remove("(start)")
         del paras["(start)"]
     secs = {s: (members[0], members[-1]) for s, members in sections.items()}
-    return order, paras, secs, lines
+    return order, paras, secs, lines, owner  # owner: the section each paragraph is in
 
 
 @dataclass
@@ -1648,6 +1733,9 @@ class Emitter:
                     out.append(f"{pad}_k = int({d['depending']}){tag}")
                     out.append(f"{pad}if 1 <= _k <= {len(d['targets'])}:")
                     out.append(f"{pad}    return [{targets}][_k - 1]")
+                elif "alter" in d:
+                    first = d["targets"][0]
+                    out.append(f'{pad}return S.altered("{d["alter"]}", {first!r}){tag}  # GO TO, re-pointed by ALTER')
                 else:
                     out.append(f'{pad}return "{d["targets"][0]}"{tag}  # GO TO')
             elif k == "stop":
@@ -1744,8 +1832,9 @@ def _data_literals(names: Names, records: dict[str, int], model: ProgramModel) -
         in_ws = it.record in {r.name for r in model.ws_records}
         if it.value is not None and in_ws:
             values.append(f'    ("{key}", {_lit(it.value)}, {it.value_all}),')
-    for cname, (key, choices) in names.conds.items():
-        conds.append(f'    "{cname}": ("{key}", [{", ".join(f"({_lit(lo)}, {_lit(hi) if hi is not None else None})" for lo, hi in choices)}]),')
+    for cname, (key, choices, false) in names.conds.items():
+        tail = f", {_lit(false)}" if false is not None else ""
+        conds.append(f'    "{cname}": ("{key}", [{", ".join(f"({_lit(lo)}, {_lit(hi) if hi is not None else None})" for lo, hi in choices)}]{tail}),')
     files = []
     for f in model.files:
         if not f.records:
@@ -1801,11 +1890,12 @@ def _unit(model: ProgramModel, tag: str) -> dict:
         if toks[i].value == "END" and toks[i + 1].value == "PROGRAM":
             toks = toks[:i]
             break
-    order, ptoks, sections, plines = split_paragraphs(toks)
+    order, ptoks, sections, plines, owner = split_paragraphs(toks)
     known = set(order) | set(sections)
+    altered = {toks[i + 1].value for i in range(len(toks) - 1) if toks[i].value == "ALTER" and toks[i].kind == "word"}
     parsed: dict[str, list[Node]] = {}
     for p in order:
-        parser = Parser(ptoks[p], names, known)
+        parser = Parser(ptoks[p], names, known, owner.get(p) if p not in sections else p, owner, p, altered)
         nodes: list[Node] = []
         while parser.i < len(parser.t):
             sentence = parser.block(set())
@@ -1881,6 +1971,8 @@ def translate(program: str, root: Path = ROOT) -> Translation:
         + main["data"]
         + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={main['linkage']!r})\n"
         + ("S.comma = True  # DECIMAL-POINT IS COMMA: numbers are shown and read as 1.234,50\n" if model.decimal_comma else "")
+        + (f"S.currency = {model.currency!r}  # CURRENCY SIGN: edited fields show it where the picture has $\n"
+           if getattr(model, "currency", "$") != "$" else "")
         + "\n\n"
         + "\n\n".join(main["funcs"])
         + "\n\nPARAGRAPHS = [\n" + main["paras"] + ",\n]\n"

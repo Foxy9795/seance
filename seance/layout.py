@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from .cobol_num import edited_supported
+from .editing import EditError, alpha_edited_ok, parse_numeric
 
 _PIC_REPEAT = re.compile(r"([9XSVAPZB0*$+\-,./CRDN])\((\d+)\)")
 _ITEM = re.compile(r"^(\d{1,2})\s+([A-Z0-9][A-Z0-9-]*)(?:\s+(.*))?$", re.S | re.I)
@@ -58,6 +59,7 @@ class Item:
     redefines: str | None = None
     conds: list[tuple[str, list]] = field(default_factory=list)
     indexes: list[str] = field(default_factory=list)
+    cond_false: dict = field(default_factory=dict)  # condition name -> the value SET ... TO FALSE moves (88 ... FALSE IS)
 
     @property
     def is_table(self) -> bool:
@@ -80,6 +82,20 @@ class Item:
         """Compact form for the runtime (see seance.runtime.Program)."""
         return [self.record, self.offset, self.size, self.kind, self.usage, self.digits, self.scale, self.signed, self.sign,
                 self.pic, self.dims(), [c.name for c in self.children], self.justified, self.blank_zero]
+
+
+def _separators(text: str) -> str:
+    """A comma or semicolon followed by a space is a separator, the same as a space (outside literals)."""
+    out, quote = [], ""
+    for i, ch in enumerate(text):
+        if quote:
+            quote = "" if ch == quote else quote
+        elif ch in "\"'":
+            quote = ch
+        elif ch in ",;" and (i + 1 == len(text) or text[i + 1] in " \t"):
+            ch = " "
+        out.append(ch)
+    return "".join(out)
 
 
 def _tokens(text: str) -> list[str]:
@@ -136,7 +152,7 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
     last: Item | None = None
     fillers = 0
     for line, text in entries:
-        text = re.sub(r"\.\s*$", "", text.strip())
+        text = _separators(re.sub(r"\.\s*$", "", text.strip()))
         m = _ITEM.match(text)
         if not m:
             raise LayoutError(f"line {line}: cannot read this data description: {text[:70]!r}")
@@ -147,6 +163,9 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             vm = re.search(r"\bVALUES?\s+(?:IS\s+|ARE\s+)?(.*)$", rest, re.I | re.S)
             toks = _tokens(vm.group(1)) if vm else []
             choices, i = [], 0
+            fm = re.search(r"\bFALSE\s+(?:IS\s+)?(\"(?:[^\"]|\"\")*\"|'(?:[^']|'')*'|[^\s]+)", rest, re.I)
+            if fm:
+                last.cond_false[name] = parse_literal(fm.group(1))
             while i < len(toks):
                 if toks[i].upper() in ("FALSE",) or toks[i].upper() == "WHEN":
                     break
@@ -178,7 +197,7 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             it.occurs = int(om.group(2) or om.group(1))
             dm = re.search(r"\bDEPENDING\s+ON\s+([A-Z0-9-]+)", upper)
             it.depending = dm.group(1) if dm else None
-            im = re.search(r"\bINDEXED\s+BY\s+([A-Z0-9-]+(?:\s*,?\s*[A-Z0-9-]+)*)", upper)
+            im = re.search(r"\bINDEXED\s+(?:BY\s+)?([A-Z0-9-]+(?:\s*,?\s*[A-Z0-9-]+)*)", upper)
             if im:
                 stop = {"ASCENDING", "DESCENDING", "KEY", "VALUE", "PIC", "PICTURE", "USAGE", "COMP", "COMP-3"}
                 for w in re.split(r"[\s,]+", im.group(1)):
@@ -212,6 +231,8 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             tail = rest[pm.end():]
             if re.fullmatch(r"[XA9]+", p) and re.search(r"[XA]", p):
                 it.kind, it.size, it.pic = "alpha", len(p), p
+            elif alpha_edited_ok(p):  # alphanumeric-edited (XXBXX/XX): text with B, 0 and / inserted on a MOVE
+                it.kind, it.size, it.pic = "alpha", len(p), p
             elif re.fullmatch(r"N+", p):
                 raise LayoutError(f"{name}: national (PIC N) fields are not supported yet.")
             elif re.fullmatch(r"S?[9PV]+", p) and "9" in p and p.count("V") <= 1:
@@ -220,9 +241,14 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             elif edited_supported(p):
                 if it.usage != "display":
                     raise LayoutError(f"{name}: an edited picture must be USAGE DISPLAY.")
-                it.kind, it.size, it.pic = "edited", len(p) - p.count("V"), p
+                it.kind, it.size, it.pic = "edited", parse_numeric(p).size, p
             else:
-                raise LayoutError(f"{name}: the picture {pm.group(1)} is not supported yet.")
+                why = ""
+                try:
+                    parse_numeric(p)
+                except EditError as exc:
+                    why = f": {exc}"
+                raise LayoutError(f"{name}: the picture {pm.group(1)} is not supported yet{why}.")
             if it.kind == "num" and it.usage == "display" and it.digits > 38:
                 raise LayoutError(f"{name}: more than 38 digits.")
         elif it.usage in ("float", "double"):
@@ -267,6 +293,7 @@ def _place(it: Item, offset: int) -> int:
                     raise LayoutError(f"{c.name} REDEFINES {c.redefines}, which is not an earlier sibling.")
                 size = _place(c, base.offset)
                 end = max(end, base.offset + size * max(c.occurs, 1))
+                by_name[c.name] = c  # a later entry may redefine this one again
                 continue
             size = _place(c, pos)
             by_name[c.name] = c

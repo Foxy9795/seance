@@ -134,154 +134,33 @@ def format_alpha(value: str, width: int) -> str:
 
 # ---------------------------------------------------------------- edited pictures
 #
-# Supported grammar (checked against GnuCOBOL output in tests/test_edited.py):
-#   [floating or fixed $ + - ] [Z * 9 , B 0 /]* [. 9*] [+ - CR DB]
-# Anything else is rejected when the copybook is read.
-
-_SYMBOLS = "$+-"
-
-
-def split_edited(pic: str) -> tuple[str, str, bool, str]:
-    """-> (integer part, decimal part, has point, trailer). Trailer is '', '+', '-', 'CR' or 'DB'."""
-    pic = pic.upper()
-    trailer = ""
-    for t in ("CR", "DB"):
-        if pic.endswith(t):
-            pic, trailer = pic[:-2], t
-    int_pic, point, dec_pic = pic.partition(".")
-    tail = dec_pic if point else int_pic
-    if not trailer and len(tail) > 1 and tail[-1] in "+-" and tail[-2] not in "+-":
-        trailer = tail[-1]
-        if point:
-            dec_pic = dec_pic[:-1]
-        else:
-            int_pic = int_pic[:-1]
-    return int_pic, dec_pic, bool(point), trailer
-
+# Edited pictures live in seance/editing.py, measured against GnuCOBOL by scripts/fuzz_editing.py. These names are
+# kept for the code and the translated programs that use them.
 
 def edited_supported(pic: str) -> bool:
-    int_pic, dec_pic, point, trailer = split_edited(pic)
-    if not re.fullmatch(r"([$+\-][$+\-,]*)?[ZB*9,0/]*", int_pic) or not re.fullmatch(r"[9]*", dec_pic):
-        return False
-    if len({c for c in int_pic if c in _SYMBOLS}) > 1 or (trailer in "+-" and trailer and int_pic[:1] in "+-" ):
-        return False
-    return any(c in "9Z*" or c in _SYMBOLS for c in int_pic + dec_pic)
+    from .editing import numeric_edited_ok
 
-
-def _run_length(int_pic: str) -> int:
-    """How many $, + or - symbols start the picture (commas inside the run are insertions, not symbols)."""
-    m = re.match(r"[$+\-][$+\-,]*", int_pic)
-    return sum(1 for c in m.group() if c in _SYMBOLS) if m else 0
+    return numeric_edited_ok(pic)
 
 
 def edited_digits(pic: str) -> tuple[int, int]:
-    """(integer digit positions, decimal digit positions). The first symbol of a floating run holds no digit."""
-    int_pic, dec_pic, _, _ = split_edited(pic)
-    run = _run_length(int_pic)
-    ints = sum(1 for c in int_pic if c in "9Z*") + max(run - 1, 0)
-    return ints, len(dec_pic)
+    """(integer digits, decimal digits) the field can show: its capacity, for ON SIZE ERROR and arithmetic."""
+    from .editing import capacity
+
+    return capacity(pic)
 
 
 def edited_has_sign(pic: str) -> bool:
-    int_pic, _, _, trailer = split_edited(pic)
-    return bool(trailer) or any(c in "+-" for c in int_pic)
+    from .editing import parse_numeric
+
+    return parse_numeric(pic).signed
 
 
-def _symbol(c: str, negative: bool) -> str:
-    if c == "$":
-        return "$"
-    if c == "+":
-        return "-" if negative else "+"
-    return "-" if negative else " "
+def format_edited(value: Decimal | int | str, pic: str, currency: str = "$", blank_zero: bool = False) -> str:
+    """Apply a numeric-edited PICTURE to a value, the way GnuCOBOL does on a MOVE."""
+    from .editing import format_numeric
 
-
-def format_edited(value: Decimal | int | str, pic: str) -> str:
-    """Apply a numeric-edited PICTURE to a value, the way GnuCOBOL does on a MOVE.
-
-    As in GnuCOBOL (move.c), a leading $ + or - (the first symbol of a floating run) also takes a digit of the value. That digit is
-    never printed, but when it is not zero (a value too big for the picture) zero suppression ends there and the
-    symbol stays in the first cell: -1071699.76 in -(6)9.99 is "-071699.76". A picture with no 9 and no decimals
-    that prints no digit is all blanks. Measured against GnuCOBOL 3.1.2 (tests/test_edited.py).
-    """
-    int_pic, dec_pic, point, trailer = split_edited(pic)
-    n_int, n_dec = edited_digits(pic)
-    if _run_length(int_pic) >= 1:
-        n_int += 1  # the digit under the first (or only) leading symbol
-    d = Decimal(value)
-    quantum = Decimal(1).scaleb(-n_dec)
-    full = int((abs(d).quantize(quantum, rounding=ROUND_DOWN) * 10**n_dec).to_integral_value())
-    scaled = full % 10 ** (n_int + n_dec)
-    digits = str(scaled).zfill(n_int + n_dec)
-    int_digits, dec_digits = digits[:n_int], digits[n_int:]
-    negative = d < 0 and scaled != 0
-    fill = "*" if "*" in int_pic else " "
-
-    run = _run_length(int_pic)
-    floating = run > 1
-    symbol = int_pic[0] if run else ""
-    cells: list[str] = []
-    suppressing = True
-    placed = False
-    di = 0
-    seen_symbols = 0
-
-    def end_suppression() -> None:
-        """Called when the first digit is printed: the floating symbol goes in the cell just left of it."""
-        nonlocal suppressing, placed
-        if floating and not placed and cells:
-            cells[-1] = _symbol(symbol, negative)
-            placed = True
-        suppressing = False
-
-    for ch in int_pic:
-        if ch in _SYMBOLS and ch == symbol and seen_symbols < run:
-            seen_symbols += 1
-            if not floating:
-                if int_digits[di] != "0":
-                    suppressing = False  # a digit too many for the picture: nothing after it is suppressed
-                di += 1
-                cells.append(_symbol(ch, negative))
-            elif seen_symbols == 1:
-                digit = int_digits[di]; di += 1  # taken but never printed
-                if digit == "0":
-                    cells.append(" ")
-                else:
-                    cells.append(_symbol(ch, negative))
-                    placed, suppressing = True, False
-            else:
-                digit = int_digits[di]; di += 1
-                if suppressing and digit == "0":
-                    cells.append(" ")
-                else:
-                    end_suppression(); cells.append(digit)
-        elif ch in "Z*":
-            digit = int_digits[di]; di += 1
-            if suppressing and digit == "0":
-                cells.append(fill)
-            else:
-                end_suppression(); cells.append(digit)
-        elif ch == "9":
-            digit = int_digits[di]; di += 1
-            end_suppression(); cells.append(digit)
-        elif ch == ",":
-            cells.append(fill if suppressing else ",")
-        elif ch == "B":
-            cells.append(" ")
-        else:
-            cells.append(ch)  # '0' and '/' are inserted as written
-    if suppressing and not point and "9" not in int_pic and fill == " ":
-        return " " * (len(cells) + len(trailer))  # nothing printed: the whole field is blank
-    if floating and not placed:
-        end_suppression()
-
-    out = "".join(cells)
-    if point:
-        out += "." + dec_digits
-    if trailer in ("+", "-"):
-        out += _symbol(trailer, negative)
-    elif trailer:
-        out += trailer if negative else "  "
-    return out
+    return format_numeric(value, pic, currency, blank_zero)
 
 
 def deedit(text: str) -> Decimal:

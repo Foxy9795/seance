@@ -171,6 +171,7 @@ class Program:
         self.idx = {n: 1 for n in self.index_names}
         self.files = {f[0]: FileState(*f) for f in self.file_defs}
         self.steps = 0
+        self._alters: dict[str, str] = {}  # ALTER: paragraph -> where its GO TO goes now
 
     def _all_offsets(self, spec) -> list[int]:
         offs = [spec[1]]
@@ -251,6 +252,13 @@ class Program:
         val = self.v(ref, *subs)
         if isinstance(val, Decimal):
             return val
+        if isinstance(ref, str):
+            ref = Ref(self.resolve(ref), subs)
+        spec = self.items.get(ref.name) if ref.start is None else None
+        if spec is not None and spec[3] == "edited":
+            from .editing import deedit_numeric
+
+            return deedit_numeric(self._std(val), spec[9])
         return deedit(self._std(val)) if val.strip() else Decimal(0)
 
     def idx_value(self, name: str) -> int:
@@ -271,7 +279,7 @@ class Program:
             if src.start is not None or spec[3] in ("group", "alpha"):
                 return "alpha", raw, None
             if spec[3] == "edited":
-                return "edited", raw, None
+                return "edited", raw, spec
             value = decode(self._cspec(spec), raw)
             return "num", raw, (value, spec)
         if isinstance(src, Decimal):
@@ -306,7 +314,7 @@ class Program:
                         text = _lit_text(num).lstrip("+-")
                     else:
                         text = raw.decode(ENC)
-                    data = encode(("alpha", "display", 0, 0, False, "none", "", size, spec[12], False), text)
+                    data = encode(("alpha", "display", 0, 0, False, "none", spec[9] or "", size, spec[12], False), text)
                 buf[off:off + size] = data
             elif tkind == "edited":
                 if kind in ("num", "lit"):
@@ -324,7 +332,9 @@ class Program:
                 elif kind == "fig":
                     value = Decimal(0)
                 elif kind == "edited":
-                    value = deedit(self._std(raw.decode(ENC)))
+                    from .editing import deedit_numeric
+
+                    value = deedit_numeric(self._std(raw.decode(ENC)), num[9])
                 else:
                     value = _alpha_to_number(raw.decode(ENC))
                 buf[off:off + size] = self._encode_value(spec, value)
@@ -433,7 +443,7 @@ class Program:
         return sa, sb
 
     def cond(self, name: str, *subs) -> bool:
-        target, choices = self.conds[name]
+        target, choices = self.conds[name][:2]
         value = Ref(target, subs)
         for lo, hi in choices:
             if hi is None and self.cmp(value, "==", lo):
@@ -443,8 +453,24 @@ class Program:
         return False
 
     def set_true(self, name: str, *subs) -> None:
-        target, choices = self.conds[name]
+        target, choices = self.conds[name][:2]
         self.move(choices[0][0], Ref(target, subs))
+
+    def alter(self, para: str, target: str) -> None:
+        """ALTER para TO PROCEED TO target."""
+        self._alters[para] = target
+
+    def altered(self, para: str, target: str | None) -> str:
+        """Where the GO TO of an ALTERed paragraph goes now."""
+        where = self._alters.get(para, target)
+        if where is None:
+            raise CobolError(f"GO TO in {para} was never pointed anywhere by an ALTER")
+        return where
+
+    def set_false(self, name: str, *subs) -> None:
+        """SET condition TO FALSE: the value its 88 level names after FALSE IS."""
+        entry = self.conds[name]
+        self.move(entry[2], Ref(entry[0], subs))
 
     def is_numeric(self, ref) -> bool:
         val = self.v(ref)
@@ -1142,9 +1168,16 @@ class Program:
 
     comma = False  # DECIMAL-POINT IS COMMA (set by the translated program)
 
+    currency = "$"  # CURRENCY SIGN IS "W" (set by the translated program)
+
     def _shown(self, data: bytes) -> bytes:
-        """An edited field as the program writes it: with DECIMAL-POINT IS COMMA the . and , trade places."""
-        return data.translate(bytes.maketrans(b".,", b",.")) if self.comma else data
+        """An edited field as the program writes it: with DECIMAL-POINT IS COMMA the . and , trade places, and the
+        program's own currency sign stands where the picture has $."""
+        if self.comma:
+            data = data.translate(bytes.maketrans(b".,", b",."))
+        if self.currency != "$":
+            data = data.replace(b"$", self.currency.encode("latin-1"))
+        return data
 
     def _std(self, text: str) -> str:
         return text.translate(str.maketrans(".,", ",.")) if self.comma else text

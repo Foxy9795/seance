@@ -88,6 +88,7 @@ class ProgramModel:
     using: list[str] = field(default_factory=list)  # PROCEDURE DIVISION USING: linkage records in order
     initial: bool = False  # PROGRAM-ID ... IS INITIAL: fresh storage on every CALL
     decimal_comma: bool = False  # SPECIAL-NAMES. DECIMAL-POINT IS COMMA: numbers are written 1.234,50
+    currency: str = "$"  # SPECIAL-NAMES. CURRENCY SIGN IS "W": what edited fields show for the currency symbol
     compile_source: Path | None = None  # the whole file GnuCOBOL compiles, when the file holds several programs
     in_main: bool = False  # a program of that same file: compiled with the main program, not on its own
     subprograms: list["ProgramModel"] = field(default_factory=list)  # other programs in the folder, reached by CALL
@@ -484,6 +485,13 @@ def load_file(path: Path, program: str, shown: Path | None = None, include_dir: 
     model.notes += source_fixes(text, fixed)[1]
     model.notes += limit_notes(items)
     model.decimal_comma = any(re.search(r"\bDECIMAL-POINT\s+IS\s+COMMA\b", s, re.I) for _, s in items)
+    from .precompile import currency_symbol, currency_text
+
+    sign = currency_text(" ".join(s for _, s in items))
+    if sign and sign != "$":
+        if len(sign) != 1 or currency_symbol(" ".join(s for _, s in items)) is None:
+            raise ModelError(f"CURRENCY SIGN IS \"{sign}\": a currency sign of more than one character is not supported yet.")
+        model.currency = sign
     for f in model.files:
         if f.organization == "line" and any(lf.item.usage != "display" for r in f.records for lf in leaves(r)):
             model.notes.append(f"{f.name} is a text (LINE SEQUENTIAL) file but its record has binary or packed fields.")

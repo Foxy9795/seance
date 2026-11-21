@@ -253,6 +253,23 @@ def _comma_piece(piece: str) -> str:
     return "".join(out)
 
 
+_CURRENCY = re.compile(r"\bCURRENCY\s+(?:SIGN\s+)?(?:IS\s+)?([\"'])(.+?)\1(?:\s+WITH\s+PICTURE\s+SYMBOL\s+([\"'])(.)\3)?", re.I)
+
+
+def currency_symbol(text: str) -> str | None:
+    """The picture symbol a CURRENCY SIGN clause chooses ("W" in CURRENCY SIGN IS "W"), or None."""
+    m = _CURRENCY.search(text)
+    if not m:
+        return None
+    return m.group(4) or (m.group(2) if len(m.group(2)) == 1 else None)
+
+
+def currency_text(text: str) -> str | None:
+    """What the program prints for its currency sign."""
+    m = _CURRENCY.search(text)
+    return m.group(2) if m else None
+
+
 # ---------------------------------------------------------------- the pass
 
 def apply(lines: list, make_line, debugging: bool = False) -> tuple[list, list[str]]:
@@ -268,6 +285,8 @@ def apply(lines: list, make_line, debugging: bool = False) -> tuple[list, list[s
     notes: set[str] = set()
     out = []
     comma = any(not ln.comment and re.search(r"\bDECIMAL-POINT\s+IS\s+COMMA\b", ln.text, re.I) for ln in lines)
+    # CURRENCY SIGN IS "W": pictures get the standard $ back, and the runtime shows the program's own sign
+    currency = currency_symbol(" ".join(ln.text for ln in lines if not ln.comment))
 
     def active() -> bool:
         return all(s[0] for s in stack)
@@ -360,6 +379,8 @@ def apply(lines: list, make_line, debugging: bool = False) -> tuple[list, list[s
         text = substitute(ln.text)
         if comma and not re.search(r"\bDECIMAL-POINT\b", text, re.I):
             text = _outside_quotes(text, _comma_piece)
+        if currency and currency != "$":
+            text = _outside_quotes(text, lambda piece: _PIC.sub(lambda m: m.group(1) + m.group(2).replace(currency, "$"), piece))
         out.append(ln if text == ln.text else make_line(ln.number, text, False))
     done = []
     if "directives" in notes:
