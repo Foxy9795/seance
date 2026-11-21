@@ -146,11 +146,11 @@ def run_one(cob: Path, name: str, root: Path) -> dict:
     src = root / "legacy" / name
     src.mkdir(parents=True, exist_ok=True)
     (src / f"{name}.cbl").write_text(cob.read_text(encoding="latin-1"), encoding="latin-1")
-    if name[:2] == "SM":
+    if name[:2].upper() == "SM":
         for c in (HOME / "copy").glob("*"):
             (src / c.name).write_text(c.read_text(encoding="latin-1"), encoding="latin-1")
-    for sub in (cob.parent / "lib").glob("*.CBL") if name[:2] == "IC" else []:
-        (src / sub.name.lower().replace(".cbl", ".cbl")).write_text(sub.read_text(encoding="latin-1"), encoding="latin-1")
+    for sub in (cob.parent / "lib").glob("*.CBL") if name[:2].upper() == "IC" else []:
+        (src / sub.name.lower()).write_text(sub.read_text(encoding="latin-1"), encoding="latin-1")
     stdin = []
     dat = cob.with_suffix(".DAT")
     if dat.exists():

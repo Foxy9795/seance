@@ -1794,7 +1794,8 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
                 skip = {"AFTER", "STANDARD", "EXCEPTION", "ERROR", "PROCEDURE", "ON", "GLOBAL"}
                 decls.append((section, [v for v in vals[1:] if v not in skip]))
             continue
-        if len(words) == 2 and vals[1] == "SECTION" and words[0].kind == "word":
+        if (len(words) == 2 or (len(words) == 3 and words[2].kind == "num")) and vals[1] == "SECTION" and words[0].kind == "word":
+            # NAME SECTION, or NAME SECTION 50 with a segment number (a priority that only matters to overlays)
             section = vals[0]
             current = vals[0]
             order.append(current)

@@ -52,12 +52,15 @@ Status is checked against the repository, not against intent. `[x]` means a test
 - [ ] Demo video recorded from `docs/hackathon/DEMO.md` (under 3 minutes)
 - [ ] Devpost write-up questions answered in `docs/hackathon/KIRO_WRITEUP.md`
 
-## R10 Release 1.2 (plan, in order)
-- [ ] Every floating surface opaque: menus, dropdowns, command bar, toasts, header, program bar, tooltips
-- [ ] MCP that works on any machine and in any MCP client: stdlib launcher, portable Kiro config, `seance mcp-config --client`, HTTP endpoint at `/mcp`, `docs/MCP.md`
-- [ ] Home page that shows the product: workspace overview, how to add a program, every feature with a way to try it
-- [ ] Real programs from the web as test data: NIST COBOL-85 suite, AWS CardDemo, Open Mainframe Project course labs; fix what they expose
-- [ ] Language gaps: edited pictures, CORRESPONDING, abbreviated conditions, class conditions, exception functions, FORMATTED-DATE family, GLOBAL, POINTER and ADDRESS OF, Report Writer, SCREEN SECTION, BMS maps, IMS
+## R10 Release 1.2
+- [x] Every floating surface opaque: menus, dropdowns, command bar, toasts, header, program bar (`scripts/audit_ui.py` checks it)
+- [x] MCP for any machine and any MCP client: stdlib launcher `scripts/seance_mcp.py`, `seance mcp-config --client` for nine clients, HTTP at `/mcp` in the app and `seance mcp --http`, `docs/MCP.md`, `tests/test_mcp.py`
+- [x] Home page that shows the product: hero with how to add a program, how it works, every feature with a way to open it, the sample library, agent settings, what runs (`scripts/ui_check.py` 96 checks)
+- [x] Edited pictures measured against GnuCOBOL both ways on random pictures (`seance/editing.py`, `scripts/fuzz_editing.py`)
+- [x] NIST COBOL-85 harness (`scripts/stress_nist.py`); nucleus 1 to 58 of 92 so far
+- [x] Continued literals to column 72; qualified condition names; SET several / TO FALSE; paragraphs per section and PARA OF SECTION; ALTER; SPECIAL-NAMES (switches, CLASS, SYMBOLIC, devices); abbreviated conditions; EVALUATE of a condition; CORRESPONDING; RENAMES; INITIALIZE in full; SIGN and USAGE on groups; group moves; DISPLAY of numbers as stored (`tests/data/lang`)
+- [ ] Rest of NIST: SM IC SQ RL IX ST SG OB IF RW DB modules; AWS CardDemo; Open Mainframe Project labs
+- [ ] Language gaps left: exception functions, FORMATTED-DATE family, GLOBAL, POINTER and ADDRESS OF, Report Writer, SCREEN SECTION, BMS maps, IMS
 - [ ] Divergence locator: when a check is restless, name the first paragraph and field where the Python and the COBOL disagree
 - [ ] Antigravity review prompt for this release
-- [ ] Docs, version, tag, archive
+- [ ] Docs (README, COMPARISON, STRESS, CHANGELOG, about lists), version, tag, archive
