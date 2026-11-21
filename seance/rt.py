@@ -92,6 +92,8 @@ class FileState:
     cache: list | None = None  # sorted positions for the key of reference
     released: list = field(default_factory=list)  # SORT: records RELEASEd by an input procedure
     returning: list = field(default_factory=list)  # SORT: records left for RETURN
+    code: str = "00"  # the last I-O status, FILE STATUS or not
+    last_mode: str | None = None  # the mode of the last OPEN (tried): which USE ... ON INPUT / OUTPUT applies
 
 
 class IO:
@@ -173,6 +175,8 @@ class Program:
         self.steps = 0
         self._alters: dict[str, str] = {}  # ALTER: paragraph -> where its GO TO goes now
         self._switches: dict[int, bool] = {}  # SWITCH-n, read from the environment on first use
+        self._written: dict[str, bytes] = {}  # files this run wrote and closed, by name: a later OPEN reads these
+        self._in_decl = False
 
     def _all_offsets(self, spec) -> list[int]:
         offs = [spec[1]]
@@ -586,49 +590,101 @@ class Program:
                 continue
             self.io.inputs.pop(f.assign, None)
             self.io.outputs.pop(f.assign, None)
+            self._written.pop(f.assign, None)
             self._status(f, "00")
         return ok
 
     def open(self, name: str, mode: str) -> None:
         f = self.files[name]
+        if f.mode:
+            f.last_mode = f.mode
+            self._fail(f, "41", f"OPEN {name}: the file is already open")
+            return
+        f.last_mode = mode
         if f.organization in ("indexed", "relative"):
             return self._k_open(f, mode)
         f.mode = mode
         f.last_pos = -1
         f.at_end = False
         if mode in ("input", "io"):
-            if f.assign not in self.io.inputs:
+            if self._file_data(f.assign) is None:
                 if f.extra.get("optional"):
                     f.data, f.pos = b"", 0
                     self._status(f, "05")
                     if mode == "io":
                         f.out = bytearray()
                     return
-                self._status(f, "35")
                 f.mode = None
-                if not f.status:
-                    raise CobolError(f"OPEN INPUT {name}: file {f.assign} does not exist")
+                self._fail(f, "35", f"OPEN INPUT {name}: file {f.assign} does not exist")
                 return
-            f.data, f.pos = self.io.inputs[f.assign], 0
+            f.data, f.pos = self._file_data(f.assign), 0
         if mode in ("output", "extend", "io"):
-            f.out = bytearray(self.io.inputs.get(f.assign, b"")) if mode in ("extend", "io") else bytearray()
+            f.out = bytearray(self._file_data(f.assign) or b"") if mode in ("extend", "io") else bytearray()
         self._status(f, "00")
 
-    def close(self, name: str) -> None:
+    def _file_data(self, assign: str) -> bytes | None:
+        """What a file holds now: what this run last wrote to it, or else the input the run was given."""
+        if assign in self._written:
+            return self._written[assign]
+        return self.io.inputs.get(assign)
+
+    def close(self, name: str, how: str = "") -> None:
         f = self.files[name]
+        if not f.mode:
+            self._fail(f, "42", f"CLOSE {name}: the file is not open")
+            return
         if f.organization in ("indexed", "relative"):
             if f.mode in ("output", "extend", "io"):
-                self.io.outputs[f.assign] = self._k_dump(f)
+                self.io.outputs[f.assign] = self._written[f.assign] = self._k_dump(f)
         elif f.mode in ("output", "extend", "io"):
-            self.io.outputs[f.assign] = bytes(f.out)
+            self.io.outputs[f.assign] = self._written[f.assign] = bytes(f.out)
         f.mode = None
-        self._status(f, "00")
+        self._status(f, "07" if how == "reel" and f.organization in ("sequential", "line") else "00")
+
+    declaratives: list = []  # [(section, [file names or INPUT | OUTPUT | I-O | EXTEND])], set by the translated program
 
     def _status(self, f: FileState, code: str) -> None:
+        f.code = code
         if f.status:
             self.move(code, f.status)
 
-    def read(self, name: str, into=None, key=None) -> bool:
+    def _declarative(self, f: FileState) -> str | None:
+        """The USE AFTER ERROR section for a file: one that names it, else one for the mode it was last opened in."""
+        mode = {"input": "INPUT", "output": "OUTPUT", "io": "I-O", "extend": "EXTEND"}.get(getattr(f, "last_mode", None) or "")
+        named = None
+        for section, targets in self.declaratives:
+            if f.name in targets:
+                return section
+            if named is None and mode and mode in targets:
+                named = section
+        return named
+
+    def _run_declarative(self, f: FileState) -> bool:
+        section = self._declarative(f)
+        if section is None or self._in_decl:
+            return False
+        self._in_decl = True
+        try:
+            self.perform(section)
+        finally:
+            self._in_decl = False
+        return True
+
+    def _fail(self, f: FileState, code: str, message: str) -> bool:
+        """A file error (3x, 4x): set the status; then the declarative runs, or with a FILE STATUS the program goes
+        on; with neither the run stops, as GnuCOBOL's does."""
+        self._status(f, code)
+        if self._run_declarative(f) or f.status:
+            return False
+        raise CobolError(f"{message} (status = {code})")
+
+    def _done(self, f: FileState, ok: bool, phrase: bool) -> bool:
+        """After a READ, WRITE, REWRITE, DELETE or START: at end or invalid key with no phrase for it runs the declarative."""
+        if not ok and not phrase and getattr(f, "code", "00")[:1] in ("1", "2"):
+            self._run_declarative(f)
+        return ok
+
+    def read(self, name: str, into=None, key=None, phrase: bool = False) -> bool:
         """READ: True when a record was read, False at end of file (or INVALID KEY for a keyed READ)."""
         f = self.files[name]
         if f.organization in ("indexed", "relative"):
@@ -637,26 +693,22 @@ class Program:
             ok = self._seq_read(f)
         if ok and into is not None:
             self.move(Ref(f.record), into)
-        return ok
+        return self._done(f, ok, phrase)
 
-    def read_next(self, name: str, into=None) -> bool:
+    def read_next(self, name: str, into=None, phrase: bool = False) -> bool:
         f = self.files[name]
         ok = self._k_next(f) if f.organization in ("indexed", "relative") else self._seq_read(f)
         if ok and into is not None:
             self.move(Ref(f.record), into)
-        return ok
+        return self._done(f, ok, phrase)
 
     def _seq_read(self, f: FileState) -> bool:
         if f.mode not in ("input", "io"):
-            self._status(f, "47")
-            raise CobolError(f"READ {f.name}: the file is not open for input")
+            return self._fail(f, "47", f"READ {f.name}: the file is not open for input")
         buf = self.mem[f.record]
         if f.pos >= len(f.data):
             if f.at_end:  # reading again after the end was reported (measured: status 46, fatal without FILE STATUS)
-                self._status(f, "46")
-                if not f.status:
-                    raise CobolError(f"READ after unsuccessful READ/START (status = 46) for file {f.name}")
-                return False
+                return self._fail(f, "46", f"READ after unsuccessful READ/START for file {f.name}")
             f.at_end = True
             self._status(f, "10")
             return False
@@ -695,16 +747,15 @@ class Program:
             raise CobolError(f"{record}: no file has this record")
         return f, key
 
-    def write(self, record: str, src=None, advancing=None) -> bool:
+    def write(self, record: str, src=None, advancing=None, phrase: bool = False) -> bool:
         """WRITE. advancing: None, ("before" | "after", n) or ("before" | "after", "page"). False on INVALID KEY."""
         f, record = self._file_of(record)
         if src is not None:
             self.move(src, record)
         if f.organization in ("indexed", "relative"):
-            return self._k_write(f, record)
+            return self._done(f, self._k_write(f, record), phrase)
         if f.mode not in ("output", "extend", "io"):
-            self._status(f, "48")
-            raise CobolError(f"WRITE {record}: the file is not open for output")
+            return self._fail(f, "48", f"WRITE {record}: the file is not open for output")
         size = self.items[record][2] if record in self.items else f.size
         data = bytes(self.mem[f.record][0:size])
         if f.organization == "line":
@@ -726,15 +777,16 @@ class Program:
         self._status(f, "00")
         return True
 
-    def rewrite(self, record: str, src=None) -> bool:
+    def rewrite(self, record: str, src=None, phrase: bool = False) -> bool:
         f, record = self._file_of(record)
         if src is not None:
             self.move(src, record)
         if f.organization in ("indexed", "relative"):
-            return self._k_rewrite(f, record)
-        if f.mode != "io" or f.last_pos < 0:
-            self._status(f, "43" if f.mode == "io" else "49")
-            raise CobolError(f"REWRITE {record}: no record was read first, or the file is not open I-O")
+            return self._done(f, self._k_rewrite(f, record), phrase)
+        if f.mode != "io":
+            return self._fail(f, "49", f"REWRITE {record}: the file is not open I-O")
+        if f.last_pos < 0:
+            return self._fail(f, "43", f"REWRITE {record}: no record was read first")
         data = bytes(self.mem[f.record][0:f.size])
         if f.organization == "line":
             old_end = f.out.find(b"\n", f.last_pos)
@@ -746,11 +798,11 @@ class Program:
         self._status(f, "00")
         return True
 
-    def delete(self, name: str) -> bool:
+    def delete(self, name: str, phrase: bool = False) -> bool:
         f = self.files[name]
         if f.organization not in ("indexed", "relative"):
             raise CobolError(f"DELETE {name}: only indexed and relative files can delete records")
-        return self._k_delete(f)
+        return self._done(f, self._k_delete(f), phrase)
 
     # -- indexed and relative files (an in-memory copy of what GnuCOBOL keeps in its file)
     def _kspec(self, name):
@@ -786,16 +838,14 @@ class Program:
         f.keyref = f.extra.get("key")
         f.table, f.seq, f.extent = {}, 0, 0
         if mode in ("input", "io", "extend"):
-            if f.assign not in self.io.inputs:
+            if self._file_data(f.assign) is None:
                 if f.extra.get("optional") or mode == "extend":
                     self._status(f, "05")
                     return
                 f.mode = None
-                self._status(f, "35")
-                if not f.status:
-                    raise CobolError(f"OPEN {mode.upper()} {f.name}: file {f.assign} does not exist")
+                self._fail(f, "35", f"OPEN {mode.upper()} {f.name}: file {f.assign} does not exist")
                 return
-            data = self.io.inputs[f.assign]
+            data = self._file_data(f.assign)
             step = f.size + (9 if f.organization == "relative" else 0)
             for i in range(0, len(data) - step + 1, step):
                 chunk = data[i:i + step]
@@ -841,8 +891,7 @@ class Program:
 
     def _k_next(self, f: FileState) -> bool:
         if f.mode not in ("input", "io"):
-            self._status(f, "47")
-            raise CobolError(f"READ {f.name}: the file is not open for input")
+            return self._fail(f, "47", f"READ {f.name}: the file is not open for input")
         import bisect
 
         order = self._positions(f)
@@ -868,8 +917,7 @@ class Program:
         if f.extra.get("access", "sequential") == "sequential":
             return self._k_next(f)
         if f.mode not in ("input", "io"):
-            self._status(f, "47")
-            raise CobolError(f"READ {f.name}: the file is not open for input")
+            return self._fail(f, "47", f"READ {f.name}: the file is not open for input")
         if key is not None:
             f.keyref, f.cache = self.resolve(key), None
         rec = bytes(self.mem[f.record][0:f.size])
@@ -891,8 +939,7 @@ class Program:
 
     def _k_write(self, f: FileState, record: str) -> bool:
         if f.mode not in ("output", "extend", "io"):
-            self._status(f, "48")
-            raise CobolError(f"WRITE {record}: the file is not open for output")
+            return self._fail(f, "48", f"WRITE {record}: the file is not open for output")
         rec = bytes(self.mem[f.record][0:f.size])
         seq_access = f.extra.get("access", "sequential") == "sequential"
         if f.organization == "relative":
@@ -950,8 +997,7 @@ class Program:
 
     def _k_delete(self, f: FileState) -> bool:
         if f.mode != "io":
-            self._status(f, "49")
-            raise CobolError(f"DELETE {f.name}: the file is not open I-O")
+            return self._fail(f, "49", f"DELETE {f.name}: the file is not open I-O")
         if f.extra.get("access", "sequential") == "sequential":
             if f.last is None:
                 self._status(f, "43")
@@ -973,12 +1019,15 @@ class Program:
         self._status(f, "00")
         return True
 
-    def start(self, name: str, op: str = ">=", key=None) -> bool:
+    def start(self, name: str, op: str = ">=", key=None, phrase: bool = False) -> bool:
         """START: position the file so the next READ NEXT returns the first record whose key satisfies op."""
         f = self.files[name]
         if f.mode not in ("input", "io"):
-            self._status(f, "47")
-            raise CobolError(f"START {name}: the file is not open for input")
+            return self._fail(f, "47", f"START {name}: the file is not open for input")
+        return self._done(f, self._start(f, op, key), phrase)
+
+    def _start(self, f: FileState, op: str, key) -> bool:
+        name = f.name
         if op == "first":
             f.keyref, f.cache, f.last, f.pending = f.extra.get("key"), None, None, None
             self._status(f, "00" if f.table else "23")
@@ -1197,7 +1246,7 @@ class Program:
         self._paras, self._index, self._sections = paras, {n: i for i, (n, _) in enumerate(paras)}, secs
         self._called = True
         try:
-            self._execute(0, len(paras) - 1)
+            self._execute(self._first_statement(), len(paras) - 1)
         except GoBack:
             pass
         finally:
@@ -1450,7 +1499,7 @@ class Program:
         self._index = {name: i for i, (name, _) in enumerate(paragraphs)}
         self._sections = sections
         try:
-            self._execute(0, len(paragraphs) - 1)
+            self._execute(self._first_statement(), len(paragraphs) - 1)
         except StopRun:
             pass
         finally:
@@ -1468,6 +1517,15 @@ class Program:
         rc = self.items.get("RETURN-CODE")
         io.return_code = int(self.n("RETURN-CODE")) if rc else 0
         return io
+
+    def _first_statement(self) -> int:
+        """Where a run begins: the first paragraph that is not part of the DECLARATIVES."""
+        inside = set()
+        for section, _ in self.declaratives:
+            if section in self._sections:
+                a, b = self._range(section)
+                inside.update(range(a, b + 1))
+        return next((i for i in range(len(self._paras)) if i not in inside), 0)
 
     def _range(self, name: str) -> tuple[int, int]:
         if name in self._sections:

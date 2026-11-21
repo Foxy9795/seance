@@ -172,8 +172,119 @@ def _inline_copies(items: list[tuple[int, str]], include_dir: Path, depth: int =
 _SELECT = re.compile(r"^SELECT\s+(?:OPTIONAL\s+)?([A-Z0-9-]+)\s+ASSIGN\s+(?:TO\s+)?(.*)$", re.I | re.S)
 
 
+def _select_canonical(text: str) -> str:
+    """A SELECT entry with its clauses in the usual words and order: the clauses may come in any order, and most of
+    their keywords are optional (RECORD IX-KEY, STATUS IS FS OF GRP, a bare SEQUENTIAL, RESERVE 2 AREAS)."""
+    toks = re.findall(r"\"(?:[^\"]|\"\")*\"|'(?:[^']|'')*'|[^\s]+", text.strip())
+    up = [t.upper() for t in toks]
+    if not up or up[0] != "SELECT":
+        return text
+    i = 1
+    head = ["SELECT"]
+    if i < len(up) and up[i] == "OPTIONAL":
+        head.append("OPTIONAL")
+        i += 1
+    if i >= len(up):
+        return text
+    head.append(toks[i])
+    i += 1
+    assign = org = access = status = key = rel = ""
+    alts: list[str] = []
+    others: list[str] = []
+
+    def name_at(j: int) -> tuple[str, int]:
+        """A data name and its qualifiers (FS OF GROUP); the qualifiers are dropped."""
+        nm = up[j] if j < len(up) else ""
+        j += 1
+        while j + 1 < len(up) and up[j] in ("OF", "IN"):
+            j += 2
+        return nm, j
+
+    while i < len(up):
+        w = up[i]
+        if w == "ASSIGN":
+            i += 1
+            if i < len(up) and up[i] == "TO":
+                i += 1
+            while i < len(up) and up[i] in ("EXTERNAL", "DYNAMIC", "DISK", "PRINTER", "KEYBOARD", "DISPLAY", "USING"):
+                i += 1
+            assign = toks[i] if i < len(toks) else ""
+            i += 1
+        elif w in ("ORGANIZATION", "ORGANISATION"):
+            i += 1
+            if i < len(up) and up[i] == "IS":
+                i += 1
+        elif w in ("LINE", "RECORD") and i + 1 < len(up) and up[i + 1] == "SEQUENTIAL":
+            org = f"{w} SEQUENTIAL"
+            i += 2
+        elif w in ("SEQUENTIAL", "INDEXED") or (w == "RELATIVE" and not (i + 1 < len(up) and up[i + 1] == "KEY")):
+            org = w  # ORGANIZATION IS may be left out
+            i += 1
+        elif w == "ACCESS":
+            i += 1
+            while i < len(up) and up[i] in ("MODE", "IS"):
+                i += 1
+            access = up[i] if i < len(up) else ""
+            i += 1
+        elif w in ("FILE", "STATUS") and (w == "STATUS" or (i + 1 < len(up) and up[i + 1] == "STATUS")):
+            i += 1 if w == "STATUS" else 2
+            if i < len(up) and up[i] == "IS":
+                i += 1
+            status, i = name_at(i)
+            if i < len(up) and up[i] not in _SELECT_WORDS and re.fullmatch(r"[A-Z0-9-]+", up[i]):
+                i += 1  # a second status item (VSAM return codes)
+        elif w == "ALTERNATE":
+            i += 1
+            while i < len(up) and up[i] in ("RECORD", "KEY", "IS"):
+                i += 1
+            nm, i = name_at(i)
+            dup = ""
+            if i < len(up) and up[i] in ("WITH", "DUPLICATES"):
+                i += 2 if up[i] == "WITH" else 1
+                dup = " WITH DUPLICATES"
+            alts.append(f"ALTERNATE RECORD KEY IS {nm}{dup}")
+        elif w == "RECORD" and not (i + 1 < len(up) and up[i + 1] == "DELIMITER"):
+            i += 1
+            while i < len(up) and up[i] in ("KEY", "IS"):
+                i += 1
+            key, i = name_at(i)
+            if i < len(up) and up[i] in ("=", "SOURCE"):
+                others.append("SPLIT KEY")
+        elif w == "RELATIVE":
+            i += 1
+            while i < len(up) and up[i] in ("KEY", "IS"):
+                i += 1
+            rel, i = name_at(i)
+        elif w == "RESERVE":
+            i += 2
+            if i < len(up) and up[i] in ("AREA", "AREAS"):
+                i += 1
+        else:
+            others.append(toks[i])
+            i += 1
+    if not assign:
+        return text
+    parts = head + ["ASSIGN", "TO", assign]
+    if org:
+        parts += ["ORGANIZATION", "IS", org]
+    if access:
+        parts += ["ACCESS", "MODE", "IS", access]
+    if key:
+        parts += ["RECORD", "KEY", "IS", key]
+    parts += alts
+    if rel:
+        parts += ["RELATIVE", "KEY", "IS", rel]
+    if status:
+        parts += ["FILE", "STATUS", "IS", status]
+    return " ".join(parts + others)
+
+
+_SELECT_WORDS = {"ASSIGN", "ORGANIZATION", "ORGANISATION", "ACCESS", "FILE", "STATUS", "RECORD", "ALTERNATE", "RELATIVE", "RESERVE",
+                 "LINE", "SEQUENTIAL", "INDEXED", "PADDING", "LOCK", "SHARING", "COLLATING"}
+
+
 def _parse_select(text: str, line_no: int) -> FileDef:
-    m = _SELECT.match(text.strip())
+    m = _SELECT.match(_select_canonical(text).strip())
     if not m:
         raise ModelError(f"line {line_no}: cannot read this SELECT: {text.strip()[:70]!r}")
     name, rest = m.group(1).upper(), m.group(2).strip()

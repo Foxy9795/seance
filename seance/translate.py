@@ -1281,8 +1281,11 @@ class Parser:
         while not self.at_boundary(stop):
             w = self.take().value
             if w in self.names.files:
-                calls.append(f'S.close("{w}")')
-        return self.code(line, "; ".join(calls) or "pass")
+                calls.append([w, ""])
+            elif w in ("REEL", "UNIT") or (w == "REWIND" and calls):
+                if calls:
+                    calls[-1][1] = "reel"  # CLOSE REEL / UNIT / NO REWIND: a disk file answers 07
+        return self.code(line, "; ".join(f'S.close("{w}"' + (', how="reel")' if how else ")") for w, how in calls) or "pass")
 
     def s_READ(self, line, stop):
         file = self.take().value
@@ -1327,6 +1330,7 @@ class Parser:
         fail, ok = (at_end or []) + (inv or []), (not_at_end or []) + (not_inv or [])
         if at_end is None and not_at_end is None and inv is None and not_inv is None:
             return self.code(line, call)
+        call = call[:-1] + ", phrase=True)"
         return Node("if", line, {"cond": call, "then": ok, "else": fail})
 
     def key_phrases(self, stop, end_word):
@@ -1346,6 +1350,8 @@ class Parser:
     def keyed(self, line, call, stop, end_word) -> Node:
         inv, not_inv = self.key_phrases(stop, end_word)
         self.accept(end_word)
+        if inv is not None or not_inv is not None:
+            call = call[:-1] + ", phrase=True)"
         return self.guarded(line, call, inv, not_inv)
 
     def s_REWRITE(self, line, stop):
@@ -1764,6 +1770,7 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
     order, paras, lines = ["(start)"], {"(start)": []}, {"(start)": 0}
     sections: dict[str, list[str]] = {}
     owner: dict[str, str | None] = {"(start)": None}
+    decls: list[tuple[str, list[str]]] = []  # (declarative section, the files or open modes its USE names)
     current, section = "(start)", None
     sentence: list[Tok] = []
     in_decl = False
@@ -1782,7 +1789,10 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
         if vals[:2] == ["END", "DECLARATIVES"]:
             in_decl = False
             continue
-        if in_decl:
+        if in_decl and vals[0] == "USE":
+            if "DEBUGGING" not in vals and section:
+                skip = {"AFTER", "STANDARD", "EXCEPTION", "ERROR", "PROCEDURE", "ON", "GLOBAL"}
+                decls.append((section, [v for v in vals[1:] if v not in skip]))
             continue
         if len(words) == 2 and vals[1] == "SECTION" and words[0].kind == "word":
             section = vals[0]
@@ -1807,7 +1817,7 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
         order.remove("(start)")
         del paras["(start)"]
     secs = {s: (members[0], members[-1]) for s, members in sections.items()}
-    return order, paras, secs, lines, owner  # owner: the section each paragraph is in
+    return order, paras, secs, lines, owner, decls  # owner: the section each paragraph is in
 
 
 @dataclass
@@ -2048,7 +2058,7 @@ def _unit(model: ProgramModel, tag: str) -> dict:
         if toks[i].value == "END" and toks[i + 1].value == "PROGRAM":
             toks = toks[:i]
             break
-    order, ptoks, sections, plines, owner = split_paragraphs(toks)
+    order, ptoks, sections, plines, owner, decls = split_paragraphs(toks)
     known = set(order) | set(sections)
     altered = {toks[i + 1].value for i in range(len(toks) - 1) if toks[i].value == "ALTER" and toks[i].kind == "word"}
     parsed: dict[str, list[Node]] = {}
@@ -2076,7 +2086,7 @@ def _unit(model: ProgramModel, tag: str) -> dict:
     linkage = [names.key[id(r)] for r in model.linkage_records if r.name in model.using]
     linkage.sort(key=lambda k: model.using.index(names.items[k].name))
     return {"data": _data_literals(names, records, model), "funcs": funcs, "paras": para_list, "sections": sections,
-            "gaps": em.unsupported, "count": em.count, "linkage": linkage}
+            "gaps": em.unsupported, "count": em.count, "linkage": linkage, "decls": decls}
 
 
 def _indent(text: str, n: int = 1) -> str:
@@ -2105,6 +2115,7 @@ def translate(program: str, root: Path = ROOT) -> Translation:
                 + "\n\n".join(u["funcs"])
                 + "\n\nPARAGRAPHS = [\n" + u["paras"] + ",\n]\n"
                 + f"SECTIONS = {u['sections']!r}\n"
+                + (f"S.declaratives = {u['decls']!r}  # USE AFTER ERROR PROCEDURE: section, files or open modes\n" if u["decls"] else "")
                 + "return S, PARAGRAPHS, SECTIONS\n")
         subs_code.append(f"def {fn}():\n"
                          f'    """Called program {sub.program_id} (legacy/{program}/{sub.path.name}). Lines end with # {sub.program_id} Lnn."""\n'
@@ -2134,7 +2145,9 @@ def translate(program: str, root: Path = ROOT) -> Translation:
         + "\n\n"
         + "\n\n".join(main["funcs"])
         + "\n\nPARAGRAPHS = [\n" + main["paras"] + ",\n]\n"
-        + f"SECTIONS = {main['sections']!r}\n\n\n"
+        + f"SECTIONS = {main['sections']!r}\n"
+        + (f"S.declaratives = {main['decls']!r}  # USE AFTER ERROR PROCEDURE: section, files or open modes\n" if main["decls"] else "")
+        + "\n\n"
         + ("\n\n".join(subs_code) + f"\n\nS.link({registry})\n\n\n" if subs_code else "")
         + f"RUN_FILES = {all_files!r}  # every file the run touches, in this program and the programs it calls\n\n\n"
         + "def main(io=None):\n"
