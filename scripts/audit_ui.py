@@ -69,8 +69,6 @@ def cli(*args: str) -> None:
 
 def main() -> int:
     cli("samples", "remove")
-    for n in ("payroll", "customer_master", "nightly_batch", "customer_inquiry"):
-        cli("samples", "load", n)
     findings: dict[str, list] = {}
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="msedge")
@@ -78,6 +76,19 @@ def main() -> int:
         def run(label: str, page) -> None:
             for kind, detail in page.evaluate(PROBE):
                 findings.setdefault(label, []).append((kind, detail))
+
+        # the home page of an empty workspace, before any sample is loaded
+        for vw, vh, tag in ((1360, 900, "wide"), (400, 800, "narrow")):
+            ctx = browser.new_context(viewport={"width": vw, "height": vh})
+            ctx.add_init_script("localStorage.setItem('seance.prefs.v1', JSON.stringify({guideSeen: true}))")
+            page = ctx.new_page()
+            page.goto(URL + "/#/")
+            page.wait_for_selector("#vWork .h-sample", timeout=60000)
+            page.wait_for_timeout(350)
+            run(f"{tag} home (empty workspace)", page)
+            ctx.close()
+        for n in ("payroll", "customer_master", "nightly_batch", "customer_inquiry"):
+            cli("samples", "load", n)
 
         for vw, vh, tag in ((1360, 900, "wide"), (400, 800, "narrow")):
             ctx = browser.new_context(viewport={"width": vw, "height": vh})

@@ -235,6 +235,56 @@ def about():
     }
 
 
+class McpConfigIn(BaseModel):
+    client: str = Field(max_length=40)
+    mode: str = Field(default="portable", max_length=20)
+
+
+_MCP_NEXT = {
+    "kiro": "Kiro reconnects the server when the file changes; it is listed under MCP servers in the Kiro panel.",
+    "vscode": "Open the MCP view in VS Code (or the file) and start the seance server.",
+    "cursor": "Cursor lists it in Settings, MCP; switch it on there.",
+    "claude-code": "Claude Code asks once whether to trust the project's servers.",
+    "gemini": "Gemini CLI starts it the next time it runs in this folder.",
+}
+
+
+def _mcp_info(client: str, mode: str) -> dict:
+    from .mcp_clients import CLIENTS, MODES, render
+
+    c = CLIENTS.get(client)
+    if c is None or mode not in MODES:
+        raise HTTPException(400, f"client must be one of {', '.join(CLIENTS)}, and mode one of {', '.join(MODES)}")
+    if c.project_file and c.user_file:
+        where = f"{c.project_file} in this folder, or {c.user_file} for every project"
+    else:
+        where = c.project_file or f"paste into {c.user_file}"
+    note = c.note
+    if mode == "portable" and c.portable == "none":
+        note = f"{c.name} starts servers outside the project folder, so these settings use this machine's full paths. " + note
+    return {"clients": [{"key": k, "name": v.name} for k, v in CLIENTS.items()], "client": client, "mode": mode, "text": render(c, mode),
+            "where": where, "note": note.strip(), "can_write": bool(c.project_file), "project_file": c.project_file or ""}
+
+
+@app.get("/api/mcp-config")
+def mcp_config_info(client: str = "kiro", mode: str = "portable"):
+    """The settings that connect an MCP client to Séance's MCP server (docs/MCP.md)."""
+    return _mcp_info(client, mode)
+
+
+@app.post("/api/mcp-config")
+def mcp_config_write(body: McpConfigIn):
+    """Write a client's settings file inside this folder. Other servers and settings in it are kept."""
+    from .mcp_clients import CLIENTS, write
+
+    _mcp_info(body.client, body.mode)
+    try:
+        path = write(CLIENTS[body.client], body.mode, ROOT)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"path": path.relative_to(ROOT).as_posix(), "next": _MCP_NEXT.get(body.client, "")}
+
+
 @app.get("/api/programs")
 def programs():
     from .jobs import job_info, job_names
