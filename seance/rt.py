@@ -924,8 +924,12 @@ class Program:
         else:
             i = bisect.bisect_right(keys, f.last)
         if i >= len(order):
+            if f.at_end:  # reading again after the end was reported
+                return self._fail(f, "46", f"READ after unsuccessful READ/START for file {f.name}")
+            f.at_end = True
             self._status(f, "10")
             return False
+        f.at_end = False
         pk = order[i][1]
         self._deliver(f, pk)
         self._status(f, "00")  # GnuCOBOL (BDB) reports 00 even when more records share the alternate key (measured)
@@ -995,7 +999,14 @@ class Program:
         rec = bytes(self.mem[f.record][0:f.size])
         pk = self._primary(f, rec)
         if f.extra.get("access", "sequential") == "sequential":
-            if f.last is None or self._pos_of(f, pk) != f.last if pk in f.table else True:
+            if f.last is None or f.at_end:
+                return self._fail(f, "43", f"REWRITE {f.name}: no successful READ just before")
+            if f.organization == "relative":
+                # a relative file rewrites the record last read, whatever the relative key item holds now
+                pk = next((k for p, k in self._positions(f) if p == f.last), None)
+                if pk is None:
+                    return self._fail(f, "43", f"REWRITE {f.name}: the record read is gone")
+            elif self._pos_of(f, pk) != f.last if pk in f.table else True:
                 self._status(f, "21")
                 return False
         if pk not in f.table:

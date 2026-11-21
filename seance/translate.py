@@ -1476,6 +1476,8 @@ class Parser:
                     break
             else:
                 raise Unsupported("START: cannot read the comparison")
+            if op != "=":
+                self.accept("TO")  # GREATER OR EQUAL TO, NOT LESS THAN TO ...
             key = self.ref().key
         call = f'S.start("{file}", "{op}"' + (f', "{key}"' if key else "") + ")"
         if op == "first":

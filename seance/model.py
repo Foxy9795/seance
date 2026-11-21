@@ -225,7 +225,7 @@ def _select_canonical(text: str) -> str:
         elif w in ("LINE", "RECORD") and i + 1 < len(up) and up[i + 1] == "SEQUENTIAL":
             org = f"{w} SEQUENTIAL"
             i += 2
-        elif w in ("SEQUENTIAL", "INDEXED") or (w == "RELATIVE" and not (i + 1 < len(up) and up[i + 1] == "KEY")):
+        elif w in ("SEQUENTIAL", "INDEXED") or (w == "RELATIVE" and not org and not (i + 1 < len(up) and up[i + 1] == "KEY")):
             org = w  # ORGANIZATION IS may be left out
             i += 1
         elif w == "ACCESS":

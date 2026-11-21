@@ -3,6 +3,10 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-11-21
+### Fixed
+- Relative files: `RELATIVE key-name` without the word KEY, REWRITE of the record last read in sequential access (status 43 when no READ came first, as GnuCOBOL gives), status 46 on a second READ after the end, and `START ... KEY GREATER OR EQUAL TO`. NIST relative-file programs matching: 12 of 24 to 21.
+
 ## [1.2.0] - 2026-11-21
 ### Added
 - Home page: what Séance does, how to add a program, every feature with a one-click way to open it on a sample, the
@@ -13,7 +17,7 @@ version numbers follow [Semantic Versioning](https://semver.org/).
 - 65 intrinsic functions ported from libcob, with `scripts/fuzz_functions.py` comparing them with GnuCOBOL.
 - ALPHABET, PROGRAM COLLATING SEQUENCE and SORT/MERGE COLLATING SEQUENCE; SAME RECORD AREA; DECLARATIVES; numeric
   paragraph names; ALTER; CORRESPONDING; RENAMES; SPECIAL-NAMES; edited pictures rebuilt and measured.
-- The NIST COBOL-85 test suite as a harness (`scripts/stress_nist.py`): 294 of 366 programs match GnuCOBOL byte for
+- The NIST COBOL-85 test suite as a harness (`scripts/stress_nist.py`): 304 of 366 programs match GnuCOBOL byte for
   byte (`docs/STRESS_NIST.md`).
 ### Changed
 - Menus, header, toasts and dialogs are opaque.

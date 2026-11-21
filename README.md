@@ -274,7 +274,7 @@ python -m seance verify accounts          # check it against the real COBOL
 python -m seance mutate accounts          # measure test strength
 python -m seance fill-gaps accounts       # find inputs that catch what the tests missed, and save them
 python -m seance export accounts          # build\accounts_python.zip
-python -m pytest                          # 252 tests, including differential tests against GnuCOBOL
+python -m pytest                          # over 250 tests, including differential tests against GnuCOBOL
 python scripts\stress_nist.py --fetch     # then: python scripts\stress_nist.py NC SM IX ... (see docs/STRESS_NIST.md)
 python scripts\fuzz_functions.py --rounds 5   # intrinsic functions against GnuCOBOL on random arguments
 python scripts\check_rules.py             # the submission and steering rules
@@ -315,7 +315,7 @@ The tests load the sample library into the workspace for the run and remove it a
 | `SECURITY.md` | What Séance does that matters for security, and how to report a problem |
 | `docs/COMPARISON.md` | Ten products that do part of this job, and where Séance differs |
 | `docs/STRESS.md` | The translator measured against GnuCOBOL's own test programs |
-| `docs/STRESS_NIST.md` | The NIST COBOL-85 suite: 294 of 366 programs match GnuCOBOL byte for byte |
+| `docs/STRESS_NIST.md` | The NIST COBOL-85 suite: 304 of 366 programs match GnuCOBOL byte for byte |
 | `docs/review/ANTIGRAVITY_PROMPT_1.2.md` | The prompt for an independent bug hunt with Antigravity |
 | `docs/review/` | An independent review, the prompt that ran it, and how each finding was resolved |
 | `.kiro/specs/seance/` | Requirements, design and tasks |
