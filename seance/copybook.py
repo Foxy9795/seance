@@ -354,7 +354,7 @@ def parse(kind: str, after: str) -> tuple[Statement, int]:
         library = None
         if r.peek("kw", "OF") or r.peek("kw", "IN"):
             r.take()
-            if not r.peek("word"):
+            if not (r.peek("word") or r.peek("name")):  # a library name may have periods in it
                 raise CopyError(f"COPY {name} OF needs a library name")
             library = _unquote(r.take().text)
         if r.peek("kw", "SUPPRESS"):

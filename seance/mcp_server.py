@@ -34,7 +34,7 @@ INSTRUCTIONS = (
 mcp = FastMCP("seance", instructions=INSTRUCTIONS)
 
 MAX_LINES = 500
-LOOPBACK_HOSTS = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+LOOPBACK_HOSTS = ["127.0.0.1:*", "localhost:*", "[::1]:*", "127.0.0.1", "localhost", "[::1]"]  # a Host header may have no port
 LOOPBACK_ORIGINS = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
 
 
@@ -353,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         mcp.settings.port = a.port
         # no web page has any business calling it, so a request that carries an Origin header is refused
         mcp.settings.transport_security = TransportSecuritySettings(
-            enable_dns_rebinding_protection=True, allowed_hosts=[f"127.0.0.1:{a.port}", f"localhost:{a.port}", f"[::1]:{a.port}"], allowed_origins=[])
+            enable_dns_rebinding_protection=True, allowed_hosts=[f"127.0.0.1:{a.port}", f"localhost:{a.port}", f"[::1]:{a.port}", "127.0.0.1", "localhost", "[::1]"], allowed_origins=[])
         print(f"Séance MCP server: http://127.0.0.1:{a.port}/mcp", file=sys.stderr)
         mcp.run(transport="streamable-http")
     else:

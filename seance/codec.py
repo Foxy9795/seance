@@ -87,6 +87,8 @@ def _display_raw(spec, text: str) -> str:
         body = body[:ints] + "." + "".join(c if c.isdigit() or c in ",+-/B" else "0" for c in body[ints:])
     body = body.replace("B", " ")
     if signed:
+        if neg and not body.strip(" 0.,"):
+            neg = False  # a negative zero (stored by MOVE of a small negative) prints as +0 (measured)
         mark = "-" if neg else "+"
         return body + mark if sign == "trailing_sep" else mark + body
     return body
@@ -165,6 +167,8 @@ def display_text(spec, data: bytes) -> str:
     text = str(n % (10**width)).zfill(width)
     if scale < 0:  # PIC 999PP: the P positions print as zeros
         text = text + "0" * -scale
+    elif usage in ("native", "index"):
+        pass  # COMP-5 with V: DISPLAY prints the stored integer, no point (measured on 3.1.2)
     elif scale > width:  # PIC VPP99
         text = "." + text.zfill(scale)
     elif scale:

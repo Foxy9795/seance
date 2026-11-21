@@ -145,7 +145,24 @@ def run_cobol(exe: Path, model: ProgramModel, case: Case, timeout: int = 60) -> 
         return Result(outputs, proc.stdout.decode(ENC, errors="replace").replace("\r\n", "\n"), proc.returncode, error)
 
 
-def run_python(module, case: Case) -> Result:
+RUN_LIMIT_SECONDS = 120
+
+
+def run_python(module, case: Case, limit: float | None = None) -> Result:
+    """Run the Python on a case. It runs in a thread that is given `limit` seconds (RUN_LIMIT_SECONDS): an endless loop in the
+    Python is a failed run that says so, not a checker that never returns."""
+    import threading
+
+    box: list[Result] = []
+    t = threading.Thread(target=lambda: box.append(_run_python(module, case)), daemon=True)
+    t.start()
+    t.join(limit or RUN_LIMIT_SECONDS)
+    if box:
+        return box[0]
+    return Result(error=f"TimeoutError: the Python did not finish in {limit or RUN_LIMIT_SECONDS} seconds")
+
+
+def _run_python(module, case: Case) -> Result:
     from .rt import IO
 
     io = IO(dict(case.files), list(case.stdin))

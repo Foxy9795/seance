@@ -33,7 +33,10 @@ def read_source(path) -> str:
     too, and the Python side writes back exactly the bytes the COBOL side has."""
     from pathlib import Path
 
-    return Path(path).read_bytes().decode("latin-1")
+    data = Path(path).read_bytes()
+    if data.startswith(b"\xef\xbb\xbf"):  # an editor's UTF-8 byte order mark is not part of the program (cobc skips it)
+        data = data[3:]
+    return data.decode("latin-1")
 
 
 def write_source(path, text: str) -> None:
@@ -52,6 +55,42 @@ def read_for_people(path) -> str:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
         return data.decode("latin-1")
+
+
+def expand_tabs(line: str, fixed: bool) -> str:
+    """Tabs as cobc reads them (measured): in fixed format a tab inside the sequence area and indicator column moves to column 8,
+    where the program text starts; anywhere else it moves to the next multiple of 8."""
+    if "\t" not in line:
+        return line
+    if not fixed:
+        return line.expandtabs(8)
+    out = ""
+    for ch in line:
+        if ch != "\t":
+            out += ch
+        elif len(out) < 7:
+            out = out.ljust(7)
+        else:
+            out = out.ljust((len(out) // 8 + 1) * 8)
+    return out
+
+
+def expand_tabs(line: str, fixed: bool) -> str:
+    """Tabs as cobc reads them (measured): in fixed format a tab inside the sequence area and indicator column moves to column 8,
+    where the program text starts; anywhere else it moves to the next multiple of 8."""
+    if "\t" not in line:
+        return line
+    if not fixed:
+        return line.expandtabs(8)
+    out = ""
+    for ch in line:
+        if ch != "\t":
+            out += ch
+        elif len(out) < 7:
+            out = out.ljust(7)
+        else:
+            out = out.ljust((len(out) // 8 + 1) * 8)
+    return out
 
 
 def normalize(text: str, fixed: bool | None = None, copy_dirs: list | None = None) -> list[Line]:
@@ -100,7 +139,7 @@ def read_lines(text: str, fixed: bool, debugging: bool, entries: bool = True) ->
     # every character up to column 72, trailing spaces included, which the stripped text of the line has lost
     open_tail: str | None = None
     for i, raw in enumerate(text.splitlines(), start=1):
-        raw = raw.expandtabs(8).rstrip()
+        raw = expand_tabs(raw, fixed).rstrip()
         if not raw.strip():
             continue
         probe = (raw[6:] if fixed and len(raw) > 6 else raw).strip()

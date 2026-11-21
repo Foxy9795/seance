@@ -153,6 +153,8 @@ def _constant_value(raw: str, consts: dict[str, str]) -> str | None:
         return raw
     if re.fullmatch(r"(?i)(ZEROS?|ZEROES|SPACES?|HIGH-VALUES?|LOW-VALUES?|QUOTES?|NULLS?)", raw):
         return raw.upper()
+    if re.fullmatch(WORD, raw) and raw.upper() in consts:
+        return consts[raw.upper()]  # a constant defined as another constant: a string stays a string
     expr = re.sub(WORD, lambda m: consts.get(m.group(0).upper(), m.group(0)), raw)
     if not re.fullmatch(r"[\d\s.+\-*/()]+", expr):
         return None

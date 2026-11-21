@@ -17,6 +17,10 @@ from .cobol_num import NEG_DIGITS, deedit, size_error
 D = Decimal
 
 
+class Expr(Decimal):
+    """The value of an arithmetic expression given as a function argument (cobc keeps it in a temporary field)."""
+
+
 class Figurative:
     def __init__(self, name: str, text: str):
         self.name, self.text = name, text
@@ -180,7 +184,7 @@ class Program:
         self._alters: dict[str, str] = {}  # ALTER: paragraph -> where its GO TO goes now
         self._switches: dict[int, bool] = {}  # SWITCH-n, read from the environment on first use
         self._written: dict[str, bytes] = {}  # files this run wrote and closed, by name: a later OPEN reads these
-        self._in_decl = False
+        self._in_decl: set[str] = set()  # files whose declarative is running: an error in the same file inside it does not nest
 
     def _all_offsets(self, spec) -> list[int]:
         offs = [spec[1]]
@@ -429,6 +433,17 @@ class Program:
 
     # ---------------------------------------------------------- arithmetic
     @staticmethod
+    def pow(a, b) -> Decimal:
+        """a ** b as libcob's cob_decimal_pow does it: x ** 0 is 1 (even 0 ** 0), 0 ** y is 0, and a negative base with a fraction
+        for an exponent is the one case that is an error."""
+        from .intrinsics import Dec, power
+
+        r = power(Dec.of(Decimal(a)), Dec.of(Decimal(b)))
+        if r.nan:
+            raise InvalidOperation("negative base to a fractional power")
+        return r.decimal()
+
+    @staticmethod
     def trunc(x, scale: int) -> Decimal:
         """x cut (not rounded) to `scale` decimals: the quotient a REMAINDER is worked from."""
         return Decimal(x).quantize(Decimal(1).scaleb(-scale), rounding="ROUND_DOWN")
@@ -454,6 +469,8 @@ class Program:
                 lo, hi = (-(2 ** (bits - 1)), 2 ** (bits - 1) - 1) if spec[7] else (0, 2 ** bits - 1)
                 scaled = value.scaleb(spec[6]).to_integral_value(rounding="ROUND_HALF_UP" if rounded else "ROUND_DOWN")
                 over = not (lo <= scaled <= hi)
+            elif spec[3] == "num" and spec[4] in ("float", "double"):
+                over = False  # a COMP-1 / COMP-2 has no digits to run out of
             elif spec[3] == "num":
                 over = size_error(value, spec[5], spec[6], spec[7], rounded)
             elif spec[3] == "edited":
@@ -709,13 +726,13 @@ class Program:
 
     def _run_declarative(self, f: FileState) -> bool:
         section = self._declarative(f)
-        if section is None or self._in_decl:
+        if section is None or f.name in self._in_decl:
             return False
-        self._in_decl = True
+        self._in_decl.add(f.name)
         try:
             self.perform(section)
         finally:
-            self._in_decl = False
+            self._in_decl.discard(f.name)
         return True
 
     def _fail(self, f: FileState, code: str, message: str) -> bool:
@@ -1405,9 +1422,35 @@ class Program:
     def _alpha_spec(size: int) -> list:
         return ["_LIT", 0, size, "alpha", "display", 0, 0, False, "none", "", [], [], False, False]
 
+    @staticmethod
+    def xdiv(a, b) -> Decimal:
+        """cob_decimal_div for an expression inside a function argument."""
+        from .intrinsics import Dec, div
+
+        r = div(Dec.of(Decimal(a)), Dec.of(Decimal(b)))
+        if r.nan:
+            raise ZeroDivisionError("division by zero")
+        return r.decimal()
+
+    @staticmethod
+    def xarg(value) -> Decimal:
+        return Expr(value)
+
     def _fn_arg(self, x):
         from .intrinsics import Arg, from_float
 
+        if isinstance(x, Expr):  # laid out as cob_alloc_field lays out a computed number: 4 or 8 byte binary, else DISPLAY
+            from . import intrinsics
+
+            d = intrinsics.Dec.of(Decimal(x)).trim()
+            usage, size, digits, scale, signed = intrinsics.layout(d)
+            spec = ["_EXPR", 0, size, "num", usage, digits, scale, signed, "trailing_over" if signed else "none", "", [], [], False, False]
+            if usage == "display":
+                body = str(abs(d.v) * 10 ** (scale - d.s)).rjust(size, "0")[-size:]
+                data = (body[:-1] + NEG_DIGITS[int(body[-1])] if signed else body).encode(ENC)
+            else:
+                data = (d.v * 10 ** (scale - d.s)).to_bytes(size, "big", signed=signed)
+            return Arg(True, d.decimal(), data, spec, x)
         if isinstance(x, Ref):
             rec, off, size, spec = self._addr(x)
             raw = bytes(self.mem[rec][off:off + size])

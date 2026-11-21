@@ -460,6 +460,8 @@ class Parser:
             return f"D(S.length_of({self.ref().py}))"
         return self.ref().py
 
+    _in_fn_arg = False
+
     def function(self) -> str:
         """FUNCTION name(args): S.fn gives the result as a field, with the attributes libcob gives it (seance.intrinsics)."""
         self.expect("FUNCTION")
@@ -532,7 +534,11 @@ class Parser:
         nxt = self.peek()
         if out is None or (nxt.kind == "op" and nxt.value in ("+", "-", "*", "/", "**") and not out.startswith("*")):
             self.i = save
-            return self.expr()
+            self._in_fn_arg = True  # a division here keeps libcob's 38 extra decimals
+            try:
+                return f"S.xarg({self.expr()})"  # arithmetic as an argument is a temporary field of its own
+            finally:
+                self._in_fn_arg = False
         return out
 
     def _text_arg(self) -> str:
@@ -556,14 +562,15 @@ class Parser:
         left = self.factor()
         while self.peek().kind == "op" and self.peek().value in ("*", "/"):
             op = self.take().value
-            left = f"{left} {op} {self.factor()}"
+            right = self.factor()
+            left = f"S.xdiv({left}, {right})" if op == "/" and self._in_fn_arg else f"{left} {op} {right}"
         return left
 
     def factor(self) -> str:
         base = self.unary()
         if self.is_op("**"):
             self.i += 1
-            return f"{base} ** {self.factor()}"
+            return f"S.pow({base}, {self.factor()})"
         return base
 
     def unary(self) -> str:
@@ -1952,7 +1959,7 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
                 sections[section].append(current)
             continue
         paras[current].extend(words + [Tok("end", ".", words[-1].line)])
-    if not paras["(start)"]:
+    if not paras["(start)"] and len(order) > 1:  # (an empty PROCEDURE DIVISION keeps its one empty paragraph)
         order.remove("(start)")
         del paras["(start)"]
     secs = {s: (members[0], members[-1]) for s, members in sections.items()}

@@ -59,8 +59,17 @@ def _literal_chars(tok: str) -> str:
     if tok[:1] in "xX" and tok[1:2] in "\"'":
         return bytes.fromhex(tok[2:-1]).decode("latin-1")
     if tok.isdigit():  # an ordinal position in the collating sequence: 1 is the first character
-        return chr(int(tok) - 1)
+        return _from_ordinal(int(tok))
     return ""
+
+
+def _from_ordinal(n: int, weights: bytes | None = None) -> str:
+    """The character at ordinal position n (1 to 256) of an alphabet: the byte whose weight is n - 1."""
+    if not 1 <= n <= 256:
+        raise ValueError(f"the ordinal position {n} is outside 1 to 256")
+    if weights is None:
+        return chr(n - 1)
+    return chr(weights.index(n - 1))
 
 
 def parse(text: str) -> SpecialNames:
@@ -164,25 +173,29 @@ def parse(text: str) -> SpecialNames:
             i += 1
             if word() in ("CHARACTERS", "CHARACTER"):
                 i += 1
-            names, values = [], []
+            names, values, alpha = [], [], None
+
+            def flush() -> None:
+                for nm, n in zip(names, values):  # IN alphabet-name: the ordinal counts in that alphabet
+                    out.symbolic[nm] = _from_ordinal(n, out.alphabets.get(alpha) if alpha else None)
+
             while i < len(toks) and word() not in _STOP and not _SWITCH.match(word()) and word() not in DEVICES:
                 if word() in ("IS", "ARE"):
                     i += 1
                     continue
                 if word() == "IN":
-                    i += 2  # IN alphabet-name: the ordinal is in that alphabet, which Séance reads as the native one
+                    alpha = word(1)
+                    i += 2
                     continue
                 if toks[i].isdigit():
-                    values.append(chr(int(toks[i]) - 1))
+                    values.append(int(toks[i]))
                 else:
                     if values and len(values) == len(names):  # a new group of names starts
-                        for nm, ch in zip(names, values):
-                            out.symbolic[nm] = ch
-                        names, values = [], []
+                        flush()
+                        names, values, alpha = [], [], None
                     names.append(up[i])
                 i += 1
-            for nm, ch in zip(names, values):
-                out.symbolic[nm] = ch
+            flush()
             continue
         if w in DEVICES and word(1) == "IS" and i + 2 < len(toks):
             out.devices[up[i + 2]] = w

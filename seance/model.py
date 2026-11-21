@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .cobol_src import detect_fixed, normalize, read_source, sentences, source_fixes, write_source
+from .cobol_src import detect_fixed, expand_tabs, normalize, read_source, sentences, source_fixes, write_source
 from .layout import Item, LayoutError, leaves, parse_entries, walk
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -382,7 +382,7 @@ def split_programs(path: Path, out_dir: Path) -> dict[str, Path] | None:
     raw = text.splitlines()
 
     def body(line: str) -> str:
-        line = line.expandtabs(8)
+        line = expand_tabs(line, fixed)
         if fixed:
             return "" if len(line) > 6 and line[6] in "*/" else line[7:72]
         return "" if line.strip().startswith("*>") else line
@@ -509,6 +509,7 @@ def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Pa
     proc: list[tuple[int, str]] = []
     section, current_fd = "", ""
     unsupported: list[str] = []
+    saw_procedure = False
     using: list[str] = []
     for line_no, s in items:
         up = s.upper().strip()
@@ -526,6 +527,7 @@ def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Pa
             if um:
                 using = [w for w in re.findall(r"[A-Z0-9-]+", um.group(1)) if w not in ("BY", "REFERENCE", "VALUE", "CONTENT", "OPTIONAL")]
             section = "PROCEDURE"
+            saw_procedure = True
             continue
         if up == "FILE-CONTROL":
             section = "FILE-CONTROL"
@@ -630,8 +632,8 @@ def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Pa
     model = ProgramModel(program, shown or path, fixed, pid.strip("'\"").upper(), list(files.values()), fd_items, ws, proc, ws_records, accepts,
                          [], sorted(set(unsupported)), linkage_records=linkage, using=using, initial=initial,
                          calls=[c for c in calls if c not in ("SQLBRIDGE", "DSNTIAR", "CICSBRIDGE")], source=path, copy_dirs=dirs)
-    if not proc:
-        raise ModelError("No PROCEDURE DIVISION statements were found.")
+    if not proc and not saw_procedure:
+        raise ModelError("No PROCEDURE DIVISION was found.")  # an empty PROCEDURE DIVISION is a program that ends at once
     missing = [u for u in using if u not in {r.name for r in linkage}]
     if missing:
         raise ModelError(f"PROCEDURE DIVISION USING names {', '.join(missing)}, which is not a 01 or 77 item in the LINKAGE SECTION.")
@@ -647,7 +649,10 @@ def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Pa
     from .precompile import currency_symbol, currency_text
     from .special_names import from_sentences
 
-    model.special = from_sentences(items)
+    try:
+        model.special = from_sentences(items)
+    except ValueError as exc:
+        raise ModelError(f"SPECIAL-NAMES: {exc}") from exc
 
     sign = currency_text(" ".join(s for _, s in items))
     if sign and sign != "$":

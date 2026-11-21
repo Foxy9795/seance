@@ -10,8 +10,6 @@ from datetime import date
 from pathlib import Path
 
 from .cases import text_only
-from .cases import text_only
-from .cases import text_only
 from .recorder import ROOT, get_model
 
 RUNTIME_FILES = ("rt.py", "codec.py", "cobol_num.py", "editing.py", "intrinsics.py")  # everything rt.py imports
@@ -63,8 +61,6 @@ from seance.rt import IO, CobolError  # noqa: E402
 SETS = sorted(p for p in (HERE / "data").iterdir() if (p / "set.json").exists())
 TEXT_FILES = {text_files!r}  # line sequential files: a line ending is not part of the data
 RECORD_SIZE = {record_size!r}  # fixed-length record files
-PRINT_FILES = {print_files!r}  # record files made only of text: a print file carries line and page breaks between records
-PRINT_FILES = {print_files!r}  # record files made only of text: a print file carries line and page breaks between records
 PRINT_FILES = {print_files!r}  # record files made only of text: a print file carries line and page breaks between records
 
 
@@ -182,7 +178,7 @@ Python 3.10 or newer, no other packages.
         z.writestr(f"{folder}/README.md", readme)
         z.writestr(f"{folder}/seance/__init__.py", '"""COBOL runtime rules used by the migrated program."""\n')
         for name in RUNTIME_FILES:
-            z.writestr(f"{folder}/seance/{name}", (root / "seance" / name).read_text(encoding="utf-8-sig"))
+            z.writestr(f"{folder}/seance/{name}", (Path(__file__).resolve().parent / name).read_text(encoding="utf-8-sig"))
         if report_md.exists():
             z.writestr(f"{folder}/REPORT.md", report_md.read_text(encoding="utf-8"))
         for name, data in suite.items():
@@ -231,7 +227,7 @@ def report_html(program: str, implementation: str | None = None, root: Path = RO
 <h2>Saved test sets</h2><table><tr><th>Set<th class=n>Input records<th class=n>Compared<th class=n>Differ</tr>{rows}</table>
 {('<h2>Coverage</h2><p>' + str(cov.get('reached')) + ' of ' + str(cov.get('statements')) + ' COBOL statements are reached by the saved runs.' + (' Not reached: ' + e(missed) + '.' if missed else ' Every statement is reached.') + '</p>') if cov else ''}
 {shrunk}{'<h2>Differences in the saved runs</h2>' + shown if shown else ''}
-<h2>Needs human review</h2><ul>{review}</ul>
+<h2>Notes</h2><ul>{review}</ul>
 <p class=meta>Passing differential tests is strong evidence, not a proof for every input.</p></body></html>"""
 
 

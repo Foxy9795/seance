@@ -235,6 +235,8 @@ def run_mutants(program: str, implementation: str | None = None, limit: int = 12
     model = get_model(program, root)
     base = load_implementation(implementation)
     baseline, base_diffs = replay_sets(program, base, model, root)
+    if not baseline:
+        return {"error": f"{program} has no saved test runs (fixtures/{program}/ is missing or empty). Record the COBOL first with: python -m seance record {program}"}
     if base_diffs or any(s["differing"] for s in baseline):
         return {"error": "The Python does not match the COBOL yet. Make the check pass first, then measure test strength."}
 

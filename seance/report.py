@@ -29,20 +29,8 @@ def source_sha(program: str, root: Path) -> str | None:
     for p in others:
         h.update(b"\0" + p.name.lower().encode() + b"\0" + p.read_bytes())
     return h.hexdigest()[:16]
-def source_sha(program: str, root: Path) -> str | None:
-    """Hash of the COBOL a check ran against: the main source plus every copybook and called program beside it.
-    A program that is one file keeps the plain hash of that file."""
-    base = root / "legacy" / program
-    head = next((p for p in (base / f"{program}.cbl", base / f"{program}.jcl") if p.exists()), None)
-    if head is None:
-        return None
-    others = sorted(p for p in base.iterdir() if p.is_file() and p != head and p.suffix.lower() in (".cbl", ".cob", ".cpy", ".copy", ".jcl"))
-    if not others:
-        return _sha(head)
-    h = hashlib.sha256(head.read_bytes())
-    for p in others:
-        h.update(b"\0" + p.name.lower().encode() + b"\0" + p.read_bytes())
-    return h.hexdigest()[:16]
+
+
 def receipt(r: Report, root: Path) -> dict:
     """What was checked: hashes of the COBOL and the Python, so the verdict cannot be reused for other code."""
     impl_path = root / (r.implementation.replace(".", "/") + ".py")
@@ -127,7 +115,7 @@ def to_markdown(r: Report, root: Path | None = None) -> str:
         lines += ["", f"## Differences in saved sets ({total} lines differ, first {min(5, len(r.diffs))} shown)"]
         for d in r.diffs[:5]:
             lines += _diff_md(d)
-    lines += ["", "## Needs human review"]
+    lines += ["", "## Notes"]
     lines += [f"- {x}" for x in r.review] or ["- Nothing flagged"]
     return "\n".join(lines) + "\n"
 

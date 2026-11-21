@@ -3,6 +3,32 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.4] - 2026-11-22
+Everything still open from the 2026-11-21 review (`docs/review/2026-11-21/findings.md`), each measured against GnuCOBOL 3.1.2.
+### Fixed
+- Source: a UTF-8 byte order mark no longer stops a program loading; a tab in the first seven columns of fixed format moves the
+  text to column 8, as cobc reads it; an empty `PROCEDURE DIVISION.` is a program that ends at once.
+- `COPY x OF lib.name` accepts a library name with periods; a constant defined as another constant keeps its text value.
+- Arithmetic: `0 ** -1` and `0 ** 0` follow libcob (0 and 1, no size error); COMP-1 and COMP-2 never raise ON SIZE ERROR.
+  An expression inside a function argument is a temporary field laid out as `cob_alloc_field` does (zero padded binary, 38 extra
+  places on a division), so `FUNCTION MAX(A + 1, 2)` prints as the COBOL does.
+- DISPLAY: a negative zero (a small negative moved into a field with fewer decimals) prints as `+0`; a COMP-5 item with `V`
+  prints the stored integer with no point.
+- SPECIAL-NAMES: `SYMBOLIC CHARACTERS ... IN alphabet` counts the ordinal in that alphabet; an ordinal outside 1 to 256 is a
+  clear error, not a crash.
+- Declaratives: an error in file B inside file A's declarative runs B's declarative (only the same file is blocked from nesting).
+- Workers: `--rounds 0` checks the saved runs only; the export package finds its runtime files when run from another folder;
+  a Python run that never ends stops after 120 seconds and says so; `mutate` and `fill-gaps` say when a program has no saved runs.
+- MCP: a loopback `Host` header without a port is accepted.
+- Page: the home cards for Business rules, Data lineage and Record viewer open that view; the "smallest failing input" demo opens
+  the buggy port; focus goes to the nearest thing left after a delete; field and button borders pass WCAG 1.4.11 (3:1).
+- Reports say "Notes" where they said "Needs human review"; duplicated imports and templates in the export removed.
+### Checked, not changed
+- `CLOSE REEL` on an indexed or relative file, and `SAME RECORD AREA` for three files, already match GnuCOBOL 3.1.2 (measured with probes).
+- The NIST COBOL-85 suite: 322 of 366 programs match.
+### Not done
+- IEBGENER pads or cuts records to the output `LRECL` only; it does not read a later program's `RECORD CONTAINS`.
+- The 96th significant digit of the transcendental functions is rounded half up; no failing example has been found for GMP's own rounding.
 ## [1.2.3] - 2026-11-22
 ### Fixed (page)
 - One progress bar for Check All, drawn smoothly; re-drawing the workspace no longer replays the fade-in (the blink) or throws

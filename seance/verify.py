@@ -206,6 +206,8 @@ def describe_case(model: ProgramModel, case: Case) -> dict:
 
 
 def random_check(program: str, impl, model: ProgramModel, rounds: int) -> tuple[int, dict | None]:
+    if rounds <= 0:
+        return 0, None  # only the saved runs: fast, for a CI that has no time for random ones
     from .hints import value_hints
 
     if not model.inputs and not model.all_accepts and not model.cics:

@@ -579,6 +579,8 @@ body:has(dialog[open]) { overflow: hidden; }
 .vbar i.good { box-shadow: none; } .vbar i.good + i { box-shadow: inset 2px 0 0 var(--sunk); }
 @media (prefers-reduced-motion: reduce) { .vbar i { transition: none; } }
 body[data-samples="0"] .sample-only, body[data-samples="0"] [data-act="tour"], body[data-samples="0"] [data-act="samples"], body[data-samples="0"] .h-proof { display: none !important; }
+/* WCAG 1.4.11: the edge of a field or a button must be 3:1 against what is behind it */
+select, input[type=text], input[type=search], input[type=number], textarea, .btn:not(.ghost), .seg, .chipbtn { border-color: #7d7589; }
 </style>
 </head>
 <body data-density="comfortable" data-motion="system" data-side="on">
@@ -1280,9 +1282,9 @@ function sortList(list) {
 const FEATURES = [
   { group: 'Understand', icon: 'book', blurb: 'Read the program before you touch it.', items: [
     { id: 'spec', icon: 'book', title: 'Plain-English description', body: 'Every paragraph in words, with its COBOL lines and the values that silently round or truncate.', sample: 'payroll', tab: 'overview' },
-    { id: 'rules', icon: 'list', title: 'Business rules as Gherkin', body: 'Decisions and calculations with their rounding, read from the code and exported as scenarios.', sample: 'payroll', tab: 'analysis' },
-    { id: 'flow', icon: 'flow', title: 'Flow graph and dead code', body: 'PERFORM, GO TO and fall-through drawn as a graph, with the paragraphs nothing can reach.', sample: 'accounts', tab: 'analysis' },
-    { id: 'lineage', icon: 'link', title: 'Data lineage and dictionary', body: 'Where every output field comes from, and every field with its type and storage.', sample: 'payroll', tab: 'analysis' },
+    { id: 'rules', icon: 'list', title: 'Business rules as Gherkin', body: 'Decisions and calculations with their rounding, read from the code and exported as scenarios.', sample: 'payroll', tab: 'analysis', ana: 'rules' },
+    { id: 'flow', icon: 'flow', title: 'Flow graph and dead code', body: 'PERFORM, GO TO and fall-through drawn as a graph, with the paragraphs nothing can reach.', sample: 'accounts', tab: 'analysis', ana: 'flow' },
+    { id: 'lineage', icon: 'link', title: 'Data lineage and dictionary', body: 'Where every output field comes from, and every field with its type and storage.', sample: 'payroll', tab: 'analysis', ana: 'lineage' },
     { id: 'xref', icon: 'target', title: 'Where Used', body: 'Every line in every program that defines, changes or reads a field.', sample: 'payroll', tab: 'code', after: 'xref' },
     { id: 'assess', icon: 'chart', title: 'Assessment and migration waves', body: 'Size, complexity and readiness of the whole workspace, and an order to migrate it in.', sample: 'nightly_batch', route: 'assessment' },
   ] },
@@ -1292,11 +1294,11 @@ const FEATURES = [
     { id: 'sql', icon: 'db', title: 'Embedded SQL', body: 'EXEC SQL with cursors and SQLCODE, run on SQLite on both sides.', sample: 'payment_posting', tab: 'overview' },
     { id: 'jcl', icon: 'layers', title: 'JCL jobs', body: 'Every step on both sides: programs, SORT, IEBGENER, COND and passed data sets.', sample: 'nightly_batch', tab: 'overview' },
     { id: 'files', icon: 'box', title: 'Indexed and relative files', body: 'VSAM-style keyed files, alternate keys, relative files, SORT and MERGE.', sample: 'customer_master', tab: 'overview' },
-    { id: 'records', icon: 'table', title: 'Record viewer', body: 'Any data file split into the fields of its copybook, with CSV export.', sample: 'payroll', tab: 'data' },
+    { id: 'records', icon: 'table', title: 'Record viewer', body: 'Any data file split into the fields of its copybook, with CSV export.', sample: 'payroll', tab: 'data', after: 'records' },
   ] },
   { group: 'Prove', icon: 'shield', blurb: 'Evidence, not a promise.', items: [
     { id: 'check', icon: 'shield', title: 'Byte-for-byte check', body: 'Every recorded run of the real COBOL replayed through the Python, then fresh random runs of both.', sample: 'payroll', tab: 'check' },
-    { id: 'shrink', icon: 'bug', title: 'Smallest failing input', body: 'A difference shrinks to the smallest input that shows it. Watch a float bug get caught.', sample: 'loan', tab: 'check' },
+    { id: 'shrink', icon: 'bug', title: 'Smallest failing input', body: 'A difference shrinks to the smallest input that shows it. Watch a float bug get caught.', sample: 'loan', tab: 'check', impl: 'naive' },
     { id: 'mutate', icon: 'flask', title: 'Test strength', body: 'Small bugs planted in the Python one at a time show whether the tests would notice.', sample: 'payroll', tab: 'check' },
     { id: 'gaps', icon: 'zap', title: 'Gap filling', body: 'Inputs that catch what the tests missed, confirmed by the COBOL and saved as new tests.', sample: 'payroll', tab: 'check' },
     { id: 'parallel', icon: 'upload', title: 'Parallel run', body: 'Compare with output from your own mainframe, not only with GnuCOBOL.', sample: 'payroll', tab: 'data' },
@@ -1400,17 +1402,22 @@ async function loadSampleThen(name, btn) {
     say(`${prog(name)?.title || name} is loaded. It is an ordinary program now; delete it any time.`, 'ok'); return true;
   } catch (e) { done(); say(e.message, 'error'); if (btn) { btn.disabled = false; btn.innerHTML = old; } return false; }
 }
+function openFirstDataSet() { setTimeout(() => { $('pData')?.querySelector('[data-viewset]')?.click(); }, 600); }
 async function tryFeature(id, btn) {
   const f = allFeatures().find((x) => x.id === id); if (!f) return;
   if (document.body.dataset.samples === '0') { /* no sample library: open the feature on one of your own programs */
     if (f.route === 'assessment' && S.programs.length) { goAssessment(); return; }
     const own = S.programs.find((p) => !p.error && (isJob(p) ? ['overview', 'code', 'analysis', 'check', 'data'].includes(f.tab || 'overview') : true));
     if (!own) { say('Add a program first, then open this on it.'); openAdd(); return; }
-    goTo(own.name, f.tab || 'overview'); return;
+    if (f.ana) S.ana.section = isJob(own) && ['rules', 'dict', 'lineage'].includes(f.ana) ? 'flow' : f.ana;
+    goTo(own.name, f.tab || 'overview'); if (f.after === 'records') openFirstDataSet(); return;
   }
   if (!(await loadSampleThen(f.sample, btn))) return;
   if (f.route === 'assessment') { goAssessment(); return; }
+  if (f.ana) S.ana.section = f.ana;
+  if (f.impl) { const q = prog(f.sample); const alt = q?.implementations.find((i) => i.role === f.impl); if (alt) { S.impl[f.sample] = alt.module; } }
   goTo(f.sample, f.tab || 'overview');
+  if (f.after === 'records') openFirstDataSet();
   if (f.after === 'xref') setTimeout(() => openWhereUsed('WS-GROSS'), 450);
 }
 document.addEventListener('click', async (e) => {
@@ -2016,7 +2023,7 @@ $('pData').addEventListener('drop', (e) => { if (e.target.closest('#dataDrop')) 
 $('pData').addEventListener('click', (e) => { const v = e.target.closest('[data-viewset]'); if (v) openRecords(S.name, v.dataset.viewset, v.dataset.label); });
 $('pData').addEventListener('click', async (e) => {
   const rm = e.target.closest('[data-rm]');
-  if (rm) { try { await api(`/api/data/${enc(S.name)}/${enc(rm.dataset.rm)}`, { method: 'DELETE' }); say('Removed.', 'ok'); forget(S.name, ['sets']); renderData(); } catch (err) { say(err.message, 'error'); } return; }
+  if (rm) { try { await api(`/api/data/${enc(S.name)}/${enc(rm.dataset.rm)}`, { method: 'DELETE' }); say('Removed.', 'ok'); forget(S.name, ['sets']); await renderData(); keepFocus('#uploadLabel'); } catch (err) { say(err.message, 'error'); } return; }
   if (e.target.closest('#recordAgain')) recordAgain(S.name, e.target.closest('#recordAgain'));
 });
 
@@ -2032,17 +2039,24 @@ async function redraft(name) {
     say(r.translated ? `Translated. ${r.gaps.length ? plural(r.gaps.length, 'statement') + ' could not be translated.' : 'Every statement was translated.'}` : r.reason, r.translated ? 'ok' : 'error');
   } catch (e) { say(e.message, 'error'); }
 }
+/* After a delete the focused button is gone: put focus on the nearest thing that is left instead of the page body. */
+function keepFocus(fallback) {
+  setTimeout(() => {
+    const a = document.activeElement; if (a && a !== document.body && a.isConnected) return;
+    const t = (fallback && document.querySelector(fallback)) || $('main'); t?.focus?.({ preventScroll: true });
+  }, 60);
+}
 async function deleteProgram(name) {
   const p = prog(name); if (!p) return;
   if (prefs.confirmDelete && !(await confirmBox({ title: `Delete ${p.title}?`, body: 'This removes its COBOL, Python and saved test data from the workspace. It cannot be undone.', ok: 'Delete', danger: true }))) return;
-  try { await api('/api/programs/' + enc(name), { method: 'DELETE' }); forget(name); delete S.lastTab[name]; S.sel.delete(name); await loadPrograms(); if (S.name === name) goWork(); say(`Deleted ${p.title}.`, 'ok'); } catch (e) { say(e.message, 'error'); }
+  try { await api('/api/programs/' + enc(name), { method: 'DELETE' }); forget(name); delete S.lastTab[name]; S.sel.delete(name); await loadPrograms(); if (S.name === name) goWork(); say(`Deleted ${p.title}.`, 'ok'); keepFocus(); } catch (e) { say(e.message, 'error'); }
 }
 async function deleteSelected() {
   const names = [...S.sel].filter((n) => prog(n)); if (!names.length) return;
   const titles = names.map((n) => prog(n).title);
   if (!(await confirmBox({ title: `Delete ${plural(names.length, 'program')}?`, body: `${titles.slice(0, 8).join(', ')}${titles.length > 8 ? ' and ' + (titles.length - 8) + ' more' : ''}\n\nThis removes their COBOL, Python and saved test data from the workspace. It cannot be undone.`, ok: 'Delete', danger: true }))) return;
   let gone = 0; for (const n of names) { try { await api('/api/programs/' + enc(n), { method: 'DELETE' }); forget(n); delete S.lastTab[n]; S.sel.delete(n); gone++; } catch (e) { say(`${n}: ${e.message}`, 'error'); } }
-  await loadPrograms(); say(`Deleted ${plural(gone, 'program')}.`, 'ok');
+  await loadPrograms(); say(`Deleted ${plural(gone, 'program')}.`, 'ok'); keepFocus('#selAll');
 }
 function doExport(what, name = S.name) {
   const p = prog(name); if (!p) return; const impl = name === S.name ? curImpl(p) : primary(p); const c = impl.last_check;
