@@ -46,6 +46,8 @@ class FileDef:
     optional: bool = False
     raw_assign: str = ""  # the name as written (UT-S-REPORT), which GnuCOBOL also looks up
     contains: tuple[int, int] | None = None  # RECORD CONTAINS / IS VARYING: (smallest, largest) record
+    linage: dict | None = None  # LINAGE clause: lines, foot, top, bottom (each a number, or the name of a data item)
+    depending: str | None = None  # RECORD VARYING ... DEPENDING ON item: holds the length of each record read or to write
     same_record: int = 0  # I-O-CONTROL SAME RECORD AREA: files with the same number share one record area
 
     @property
@@ -498,6 +500,8 @@ def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Pa
     files: dict[str, FileDef] = {}
     fd_items: dict[str, list[tuple[int, str]]] = {}
     fd_contains: dict[str, tuple[int, int]] = {}
+    fd_depending: dict[str, str] = {}
+    fd_linage: dict[str, dict] = {}
     sd_names: set[str] = set()
     io_control: list[str] = []
     ws: list[tuple[int, str]] = []
@@ -542,6 +546,17 @@ def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Pa
             fd_items.setdefault(current_fd, [])
             vm = re.search(r"\bRECORD\s+(?:IS\s+)?VARYING\s+(?:IN\s+SIZE\s+)?(?:FROM\s+)?(\d+)?\s*(?:TO\s+(\d+))?", up)
             cm = re.search(r"\bRECORD\s+(?:CONTAINS\s+)?(\d+)(?:\s+TO\s+(\d+))?\s+CHARACTERS", up)
+            lm = re.search(r"\bLINAGE\s+(?:IS\s+)?([A-Z0-9-]+)", up)
+            if lm:
+                def _lin(rx):
+                    m = re.search(rx, up)
+                    return None if not m else (int(m.group(1)) if m.group(1).isdigit() else m.group(1))
+                fd_linage[current_fd] = {"lines": _lin(r"\bLINAGE\s+(?:IS\s+)?([A-Z0-9-]+)"),
+                                         "foot": _lin(r"\bFOOTING(?:\s+AT)?\s+([A-Z0-9-]+)"),
+                                         "top": _lin(r"\bTOP\s+([A-Z0-9-]+)"), "bottom": _lin(r"\bBOTTOM\s+([A-Z0-9-]+)")}
+            dm = re.search(r"\bDEPENDING\s+(?:ON\s+)?([A-Z0-9-]+)", up)
+            if dm and re.search(r"\bRECORD\b", up):
+                fd_depending[current_fd] = dm.group(1)
             if vm and (vm.group(1) or vm.group(2)):
                 fd_contains[current_fd] = (int(vm.group(1) or 1), int(vm.group(2) or vm.group(1)))
             elif cm:
@@ -564,6 +579,12 @@ def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Pa
     for name, c in fd_contains.items():
         if name in files:
             files[name].contains = c
+    for name, d in fd_depending.items():
+        if name in files:
+            files[name].depending = d
+    for name, d in fd_linage.items():
+        if name in files:
+            files[name].linage = d
     try:
         for name, f in files.items():
             if name in fd_items:

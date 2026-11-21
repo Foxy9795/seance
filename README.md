@@ -315,7 +315,7 @@ The tests load the sample library into the workspace for the run and remove it a
 | `SECURITY.md` | What Séance does that matters for security, and how to report a problem |
 | `docs/COMPARISON.md` | Ten products that do part of this job, and where Séance differs |
 | `docs/STRESS.md` | The translator measured against GnuCOBOL's own test programs |
-| `docs/STRESS_NIST.md` | The NIST COBOL-85 suite: 304 of 366 programs match GnuCOBOL byte for byte |
+| `docs/STRESS_NIST.md` | The NIST COBOL-85 suite: 319 of 366 programs match GnuCOBOL byte for byte |
 | `docs/review/ANTIGRAVITY_PROMPT_1.2.md` | The prompt for an independent bug hunt with Antigravity |
 | `docs/review/` | An independent review, the prompt that ran it, and how each finding was resolved |
 | `.kiro/specs/seance/` | Requirements, design and tasks |

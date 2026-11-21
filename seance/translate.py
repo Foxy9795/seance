@@ -132,6 +132,7 @@ class Names:
     files: dict[str, object] = field(default_factory=dict)  # FD name -> FileDef
     file_buffer: dict[str, str] = field(default_factory=dict)  # FD name -> its record area (shared by SAME RECORD AREA)
     debug_sections: set = field(default_factory=set)  # USE FOR DEBUGGING sections, where DEBUG-ITEM may be read
+    linage_items: dict = field(default_factory=dict)  # file name -> its LINAGE-COUNTER item
     alphabets: dict = field(default_factory=dict)  # SPECIAL-NAMES ALPHABET name -> weights of the 256 bytes (None: native)
 
     def add(self, it: Item, buffer: str) -> None:
@@ -208,6 +209,14 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
         for r in f.records:
             for it in [*walk(r), *r.renames]:  # level 66 RENAMES are names in the record too
                 names.add(it, buffer)
+    for f in model.files:  # LINAGE-COUNTER: one 4-byte counter for each file with a LINAGE clause
+        if f.linage:
+            holder = Item(f.name, 1, kind="group")  # so that LINAGE-COUNTER OF file finds it
+            counter = Item("LINAGE-COUNTER", 1, kind="num", usage="native", digits=9, signed=False, size=4, offset=0)
+            counter.parent = holder
+            records[f"_LC_{f.name}"] = 4
+            names.add(counter, f"_LC_{f.name}")
+            names.linage_items[f.name] = counter
     for r in model.linkage_records:  # storage that belongs to the caller; CALL points it at the caller's data
         records[r.name] = max(r.size, 1)
         for it in [*walk(r), *r.renames]:  # level 66 RENAMES are names in the record too
@@ -332,6 +341,9 @@ class Parser:
         while self.word() in ("OF", "IN") and self.peek(1).kind == "word":
             self.i += 1
             quals.append(self.take().value)
+        # WRITE rec IN file: the file qualifies the record; LINAGE-COUNTER OF file is a name qualified by its file
+        quals = [q for q in quals if q not in self.names.files or q in self.names.by_name
+                 or any(getattr(c.parent, "name", None) == q for c in self.names.by_name.get(tok.value, []))]
         item = self.names.resolve(tok.value, quals)
         if item.record == "DEBUG-ITEM" and self.section not in self.names.debug_sections:
             raise Unsupported("DEBUG-ITEM outside a USE FOR DEBUGGING procedure: GnuCOBOL updates it as the program "
@@ -1369,8 +1381,7 @@ class Parser:
         if file not in self.names.files:
             raise Unsupported(f"READ of unknown file {file}")
         nxt = bool(self.accept("NEXT"))
-        if self.word() == "PREVIOUS":
-            raise Unsupported("READ PREVIOUS is not supported yet")
+        prev = bool(self.accept("PREVIOUS"))
         self.accept("RECORD")
         into = None
         if self.accept("INTO"):
@@ -1403,7 +1414,7 @@ class Parser:
                 not_at_end = self.block(inner)
         self.accept("END-READ")
         args = f'"{file}"' + (f", {into}" if into else (", None" if key else "")) + (f', key="{key}"' if key else "")
-        call = (f"S.read_next({args})" if nxt else f"S.read({args})")
+        call = (f"S.read_next({args}, previous=True)" if prev else f"S.read_next({args})" if nxt else f"S.read({args})")
         fail, ok = (at_end or []) + (inv or []), (not_at_end or []) + (not_inv or [])
         if at_end is None and not_at_end is None and inv is None and not_inv is None:
             return self.code(line, call)
@@ -1466,7 +1477,7 @@ class Parser:
         if self.accept("FIRST"):
             op = "first"
         elif self.accept("LAST"):
-            raise Unsupported("START LAST is not supported yet")
+            op = "last"
         elif self.accept("KEY"):
             self.accept("IS")
             for words, sym in self._START_OPS:
@@ -1480,8 +1491,8 @@ class Parser:
                 self.accept("TO")  # GREATER OR EQUAL TO, NOT LESS THAN TO ...
             key = self.ref().key
         call = f'S.start("{file}", "{op}"' + (f', "{key}"' if key else "") + ")"
-        if op == "first":
-            call = f'S.start("{file}", "first")'
+        if op in ("first", "last"):
+            call = f'S.start("{file}", "{op}")'
         return self.keyed(line, call, stop, "END-START")
 
     # CALL -------------------------------------------------------------------
@@ -1655,8 +1666,22 @@ class Parser:
             else:
                 self.take()  # a mnemonic name such as TOP-OF-PAGE
                 adv = f'("{when}", "page")'
-        if self.word() in ("AT", "END-OF-PAGE", "EOP") or (self.word() == "NOT" and self.word(1) in ("AT", "END-OF-PAGE", "EOP")):
-            raise Unsupported("WRITE ... AT END-OF-PAGE (LINAGE) is not supported yet")
+        eops = ("END-OF-PAGE", "EOP")
+        inner = stop | {"NOT", "END-WRITE"}
+        eop_blk = not_eop_blk = None
+        if self.word() in eops or (self.word() == "AT" and self.word(1) in eops):
+            self.accept("AT")
+            self.i += 1
+            eop_blk = self.block(inner)
+        if self.word() == "NOT" and (self.word(1) in eops or (self.word(1) == "AT" and self.word(2) in eops)):
+            self.i += 1
+            self.accept("AT")
+            self.i += 1
+            not_eop_blk = self.block(inner)
+        if eop_blk is not None or not_eop_blk is not None:
+            self.accept("END-WRITE")
+            call = f'S.write("{rec.key}", {src or "None"}, {adv}, eop=True)'
+            return Node("if", line, {"cond": call, "then": not_eop_blk or [], "else": eop_blk or []})
         return self.keyed(line, f'S.write("{rec.key}", {src or "None"}, {adv})', stop, "END-WRITE")
 
     def s_DISPLAY(self, line, stop):
@@ -2136,6 +2161,12 @@ def _data_literals(names: Names, records: dict[str, int], model: ProgramModel) -
             extra["alt"] = [[key_of(k), d] for k, d in f.alt_keys]
         if f.organization == "relative" and f.relative_key:
             extra["relkey"] = key_of(f.relative_key)
+        if f.linage:
+            lin = {k: (key_of(v) if isinstance(v, str) else v) for k, v in f.linage.items()}
+            lin["counter"] = names.key[id(names.linage_items[f.name])]
+            extra["linage"] = lin
+        if f.depending and f.depending in names.by_name:
+            extra["depending"] = key_of(f.depending)  # RECORD VARYING ... DEPENDING ON
         if f.same_record:  # SAME RECORD AREA: the buffer is shared, so WRITE finds the file by its own records
             extra["records"] = [names.key[id(r)] for r in f.records]
         buffer = names.file_buffer.get(f.name, f.records[0].name)

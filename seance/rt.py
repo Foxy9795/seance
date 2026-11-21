@@ -94,6 +94,9 @@ class FileState:
     returning: list = field(default_factory=list)  # SORT: records left for RETURN
     code: str = "00"  # the last I-O status, FILE STATUS or not
     last_mode: str | None = None  # the mode of the last OPEN (tried): which USE ... ON INPUT / OUTPUT applies
+    lin: list = field(default_factory=lambda: [0, 0, 0, 0])  # LINAGE: lines, footing, top, bottom as last checked
+    lin_top_due: bool = False  # LINAGE: the top lines have not been written yet
+    needs_nl: bool = False  # the last line written AFTER ADVANCING has no line end yet
     locked: bool = False  # CLOSE ... WITH LOCK: no OPEN again in this run (status 38)
 
 
@@ -627,8 +630,25 @@ class Program:
                 self._fail(f, "35", f"OPEN INPUT {name}: file {f.assign} does not exist")
                 return
             f.data, f.pos = self._file_data(f.assign), 0
+        absent_extend = False
+        if mode == "extend" and self._file_data(f.assign) is None:
+            if not f.extra.get("optional"):
+                f.mode = None
+                self._fail(f, "35", f"OPEN EXTEND {name}: file {f.assign} does not exist")  # measured: 35, not created
+                return
+            absent_extend = True
         if mode in ("output", "extend", "io"):
             f.out = bytearray(self._file_data(f.assign) or b"") if mode in ("extend", "io") else bytearray()
+        if absent_extend:
+            self._status(f, "05")
+            return
+        if f.extra.get("linage") and mode in ("output", "extend"):
+            if not self._lin_check(f):
+                f.mode = None
+                self._fail(f, "57", f"OPEN {name}: the LINAGE values are not usable")
+                return
+            f.lin_top_due = True
+            self.move(Decimal(1), f.extra["linage"]["counter"])
         self._status(f, "00")
 
     def _file_data(self, assign: str) -> bytes | None:
@@ -653,6 +673,9 @@ class Program:
             if f.mode in ("output", "extend", "io"):
                 self.io.outputs[f.assign] = self._written[f.assign] = self._k_dump(f)
         elif f.mode in ("output", "extend", "io"):
+            if f.needs_nl:
+                f.needs_nl = False
+                f.out += b"\n"
             self.io.outputs[f.assign] = self._written[f.assign] = bytes(f.out)
         f.mode = None
         self._status(f, "07" if how == "norewind" and f.organization in ("sequential", "line", "relative") else "00")
@@ -711,14 +734,16 @@ class Program:
             self.move(Ref(f.record), into)
         return self._done(f, ok, phrase)
 
-    def read_next(self, name: str, into=None, phrase: bool = False) -> bool:
+    def read_next(self, name: str, into=None, phrase: bool = False, previous: bool = False) -> bool:
+        """READ NEXT, or READ PREVIOUS (a keyed file: the record before the one last read, in key order)."""
         f = self.files[name]
-        ok = self._k_next(f) if f.organization in ("indexed", "relative") else self._seq_read(f)
+        ok = self._k_next(f, previous) if f.organization in ("indexed", "relative") else self._seq_read(f)
         if ok and into is not None:
             self.move(Ref(f.record), into)
         return self._done(f, ok, phrase)
 
     def _seq_read(self, f: FileState) -> bool:
+        f.last_pos = -1  # no record is current until this READ delivers one (REWRITE after a failed READ: status 43)
         if f.mode not in ("input", "io"):
             return self._fail(f, "47", f"READ {f.name}: the file is not open for input")
         buf = self.mem[f.record]
@@ -735,6 +760,7 @@ class Program:
             f.pos = len(f.data) if end < 0 else end + 1
             line = line.rstrip(b"\r")
             buf[0:f.size] = line[:f.size].ljust(f.size, b" ")
+            self._set_depending(f, min(len(line), f.size))
             self._status(f, "00")
         elif f.extra.get("variable"):  # 4-byte header: 2-byte big-endian length, 2 zero bytes
             while f.pos < len(f.data) and f.data[f.pos:f.pos + 1] in (b"\n", b"\r", b"\f"):
@@ -747,13 +773,107 @@ class Program:
             chunk = f.data[f.pos + 4:f.pos + 4 + n]
             f.pos += 4 + n
             buf[0:f.size] = chunk[:f.size].ljust(f.size, b" ")
+            self._set_depending(f, min(len(chunk), f.size))
             self._status(f, "00")
         else:
             chunk = f.data[f.pos:f.pos + f.size]
             f.pos += f.size
             buf[0:len(chunk)] = chunk
+            self._set_depending(f, len(chunk))
             self._status(f, "00" if len(chunk) == f.size else "04")
         return True
+
+    # ---------------------------------------------------------- LINAGE
+    def _lin_check(self, f: FileState) -> bool:
+        """file_linage_check: read the LINAGE values; False (and the counter set to 0) when they are not usable."""
+        lin = f.extra["linage"]
+
+        def val(x):
+            return 0 if x is None else int(x) if isinstance(x, int) else int(self.n(x))
+        lines, foot, top, bot = val(lin["lines"]), val(lin["foot"]), val(lin["top"]), val(lin["bottom"])
+        f.lin = [lines, foot, top, bot]
+        if lines < 1 or (lin["foot"] is not None and not 1 <= foot <= lines) or top < 0 or bot < 0:
+            self.move(Decimal(0), lin["counter"])
+            return False
+        return True
+
+    def _linage_write(self, f: FileState, record: str, advancing, eop: bool) -> bool:
+        """WRITE on a file with a LINAGE clause (libcob's cob_linage_write_opt, measured on 3.1.2): the top lines come
+        before the first record, a WRITE with no ADVANCING is AFTER ADVANCING 1, the counter starts at 1, and a page
+        that overflows is padded to its length, closed by the bottom lines and opened with the top lines."""
+        import sys
+
+        lin = f.extra["linage"]
+        counter = lin["counter"]
+        # a LINAGE file is written as text: on Windows GnuCOBOL's C library turns each \n into \r\n (a LINE SEQUENTIAL
+        # file's lines are compared without the CR, so it keeps \n)
+        nl = b"\r\n" if sys.platform == "win32" and f.organization != "line" else b"\n"
+        size = self.items[record][2] if record in self.items else f.size
+        data = bytes(self.mem[f.record][0:size]).rstrip(b" ")
+        out = bytearray()
+        if f.lin_top_due:
+            f.lin_top_due = False
+            out += nl * f.lin[2]
+        when, amount = advancing if advancing else ("after", 1)
+        end_of_page = False
+        failed = False
+
+        def advance() -> None:
+            nonlocal end_of_page, failed
+            lines, foot, top, bot = f.lin
+            ctr = int(self.n(counter))
+            if ctr == 0:
+                failed = True
+                return
+            if amount == "page":
+                out.extend(nl * max(0, lines - ctr) + nl * bot)
+                if not self._lin_check(f):
+                    failed = True
+                    return
+                out.extend(nl * f.lin[2])
+                self.move(Decimal(1), counter)
+                return
+            self.move(Decimal(ctr + int(amount)), counter)
+            now = ctr + int(amount)
+            if eop and foot and now >= foot:
+                end_of_page = True
+            if now > lines:
+                if eop:
+                    end_of_page = True
+                out.extend(nl * max(0, lines - ctr) + nl * bot)
+                if not self._lin_check(f):
+                    failed = True
+                    return
+                self.move(Decimal(1), counter)
+                out.extend(nl * f.lin[2])
+            else:
+                out.extend(nl * max(0, int(amount) - 1))
+
+        if when == "after":
+            advance()
+            out += data + nl
+        else:
+            out += data + nl
+            advance()
+        if failed:
+            return self._fail(f, "57", f"WRITE {f.name}: the LINAGE values are not usable")
+        f.out += out
+        self._status(f, "00")
+        return not end_of_page if eop else True
+
+    def _dep_len(self, f: FileState) -> int:
+        """The record length the DEPENDING ON item holds now. The item may sit inside the record area (and so hold
+        record data): cob_get_int reads what digits it finds, and Séance does the same."""
+        try:
+            return int(self.n(f.extra["depending"]))
+        except (ValueError, InvalidOperation):
+            raw = bytes(self._bytes(self.r(f.extra["depending"]))).decode(ENC)
+            digits = "".join(c if c.isdigit() else str(ord(c) & 0x0F if (ord(c) & 0x0F) < 10 else 0) for c in raw)
+            return int(digits or "0")
+
+    def _set_depending(self, f: FileState, n: int) -> None:
+        if f.extra.get("depending"):
+            self.move(Decimal(n), f.extra["depending"])
 
     def _file_of(self, record: str) -> tuple[FileState, str]:
         key = self.resolve(record)
@@ -765,7 +885,7 @@ class Program:
             raise CobolError(f"{record}: no file has this record")
         return f, key
 
-    def write(self, record: str, src=None, advancing=None, phrase: bool = False, file: str | None = None) -> bool:
+    def write(self, record: str, src=None, advancing=None, phrase: bool = False, file: str | None = None, eop: bool = False) -> bool:
         """WRITE. advancing: None, ("before" | "after", n) or ("before" | "after", "page"). False on INVALID KEY.
         file: the file to write, when the record area is shared (SORT ... GIVING writes each output file)."""
         f, record = (self.files[file], self.resolve(record)) if file else self._file_of(record)
@@ -773,9 +893,13 @@ class Program:
             self.move(src, record)
         if f.organization in ("indexed", "relative"):
             return self._done(f, self._k_write(f, record), phrase)
-        if f.mode not in ("output", "extend", "io"):
+        if f.mode not in ("output", "extend"):  # a sequential file opened I-O can be read and rewritten, not written (48)
             return self._fail(f, "48", f"WRITE {record}: the file is not open for output")
+        if f.extra.get("linage"):
+            return self._linage_write(f, record, advancing, eop)
         size = self.items[record][2] if record in self.items else f.size
+        if f.extra.get("depending"):  # RECORD VARYING ... DEPENDING ON: the item gives this record's length
+            size = max(0, min(self._dep_len(f), f.size))
         data = bytes(self.mem[f.record][0:size])
         if f.organization == "line":
             data = data.rstrip(b" ")
@@ -785,7 +909,7 @@ class Program:
         pre = post = b""
         if advancing:
             when, amount = advancing
-            gap = b"\f" if amount == "page" else nl * int(amount)
+            gap = b"\f" if amount == "page" else (nl * int(amount) if int(amount) else b"\r")  # ADVANCING 0 returns to the line start
             if when == "after":
                 pre = gap
             else:
@@ -793,6 +917,12 @@ class Program:
         elif f.organization == "line":
             post = nl
         f.out += pre + data + post
+        # libcob (flag_needs_nl): a WRITE AFTER ADVANCING leaves the last line unended, and CLOSE ends it; a WRITE BEFORE
+        # ADVANCING ends it, and so does a plain WRITE to a LINE SEQUENTIAL file
+        if advancing and advancing[0] == "after":
+            f.needs_nl = True
+        elif advancing or f.organization == "line":
+            f.needs_nl = False
         self._status(f, "00")
         return True
 
@@ -802,10 +932,16 @@ class Program:
             self.move(src, record)
         if f.organization in ("indexed", "relative"):
             return self._done(f, self._k_rewrite(f, record), phrase)
+        read_at, f.last_pos = f.last_pos, -1  # a REWRITE (or a failed READ) uses up the READ it follows
         if f.mode != "io":
             return self._fail(f, "49", f"REWRITE {record}: the file is not open I-O")
-        if f.last_pos < 0:
+        if read_at < 0:
             return self._fail(f, "43", f"REWRITE {record}: no record was read first")
+        if f.organization == "sequential":  # a record sequential file rewrites a record of exactly the size read (cob_rewrite)
+            own = self.items[record][2] if record in self.items else f.size
+            if own != f.size or (f.extra.get("depending") and self._dep_len(f) != f.size):
+                return self._fail(f, "44", f"REWRITE {record}: the record is not the size of the record read")
+        f.last_pos = read_at
         data = bytes(self.mem[f.record][0:f.size])
         if f.organization == "line":
             old_end = f.out.find(b"\n", f.last_pos)
@@ -880,8 +1016,8 @@ class Program:
 
     def _k_dump(self, f: FileState) -> bytes:
         if f.organization == "relative":
-            return b"".join(b"%09d" % slot + f.table[slot][1] for slot in sorted(f.table))
-        return b"".join(f.table[k][1] for k in sorted(f.table))
+            return b"".join(b"%09d" % slot + f.table[slot][1].ljust(f.size, b" ") for slot in sorted(f.table))
+        return b"".join(f.table[k][1].ljust(f.size, b" ") for k in sorted(f.table))  # shorter records (DEPENDING ON) padded
 
     def _positions(self, f: FileState) -> list:
         """(position, primary key) in the order of the key of reference."""
@@ -904,18 +1040,30 @@ class Program:
         rec = f.table[pk][1]
         buf = self.mem[f.record]
         buf[0:len(rec)] = rec
+        if f.extra.get("depending"):
+            buf[len(rec):f.size] = b" " * (f.size - len(rec))  # the rest of the area after a short record is spaces
+        self._set_depending(f, len(rec))
         if f.organization == "relative" and f.extra.get("relkey"):
             self.move(Decimal(pk), f.extra["relkey"])
         f.last = self._pos_of(f, pk)
 
-    def _k_next(self, f: FileState) -> bool:
+    def _k_next(self, f: FileState, previous: bool = False) -> bool:
         if f.mode not in ("input", "io"):
             return self._fail(f, "47", f"READ {f.name}: the file is not open for input")
         import bisect
 
         order = self._positions(f)
         keys = [p for p, _ in order]
-        if f.pending is not None:
+        if previous:
+            if f.pending is not None:
+                pos, inclusive = f.pending
+                i = bisect.bisect_right(keys, pos) - 1 if inclusive else bisect.bisect_left(keys, pos) - 1
+                f.pending = None
+            elif f.last is None:
+                i = len(order) - 1
+            else:
+                i = bisect.bisect_left(keys, f.last) - 1
+        elif f.pending is not None:
             pos, inclusive = f.pending
             i = bisect.bisect_left(keys, pos) if inclusive else bisect.bisect_right(keys, pos)
             f.pending = None
@@ -923,7 +1071,7 @@ class Program:
             i = 0
         else:
             i = bisect.bisect_right(keys, f.last)
-        if i >= len(order):
+        if i >= len(order) or i < 0:
             if f.at_end:  # reading again after the end was reported
                 return self._fail(f, "46", f"READ after unsuccessful READ/START for file {f.name}")
             f.at_end = True
@@ -964,6 +1112,8 @@ class Program:
         if f.mode not in ("output", "extend", "io"):
             return self._fail(f, "48", f"WRITE {record}: the file is not open for output")
         rec = bytes(self.mem[f.record][0:f.size])
+        if f.extra.get("depending"):
+            rec = rec[:max(0, min(self._dep_len(f), f.size))]
         seq_access = f.extra.get("access", "sequential") == "sequential"
         if f.organization == "relative":
             if seq_access and f.mode in ("output", "extend"):
@@ -1062,6 +1212,15 @@ class Program:
             f.keyref, f.cache, f.last, f.pending = f.extra.get("key"), None, None, None
             self._status(f, "00" if f.table else "23")
             return bool(f.table)
+        if op == "last":  # START LAST: the next READ PREVIOUS (or READ NEXT) delivers the last record in key order
+            f.keyref, f.cache, f.last, f.pending = f.extra.get("key"), None, None, None
+            order = self._positions(f)
+            if not order:
+                self._status(f, "23")
+                return False
+            f.pending = (order[-1][0], True)
+            self._status(f, "00")
+            return True
         rec = bytes(self.mem[f.record][0:f.size])
         if f.organization == "relative":
             f.keyref = None

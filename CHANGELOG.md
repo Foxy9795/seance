@@ -3,6 +3,17 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.2] - 2026-11-22
+### Added
+- LINAGE, LINAGE-COUNTER (qualified by file) and `WRITE ... AT END-OF-PAGE / NOT AT END-OF-PAGE`, following libcob's
+  page logic: top lines before the first record, a plain WRITE is AFTER ADVANCING 1, overflow pads the page, writes the
+  bottom lines and opens the next with the top lines.
+- READ PREVIOUS and START LAST (indexed and relative files), `WRITE record IN file`, RECORD VARYING ... DEPENDING ON.
+### Fixed
+- Sequential files: OPEN EXTEND of a file that does not exist gives 35; WRITE after OPEN I-O gives 48; REWRITE needs a
+  successful READ just before (43) and a record of the size read (44); WRITE AFTER ADVANCING leaves the last line open
+  and CLOSE ends it; ADVANCING 0 writes a carriage return.
+
 ## [1.2.1] - 2026-11-21
 ### Fixed
 - Relative files: `RELATIVE key-name` without the word KEY, REWRITE of the record last read in sequential access (status 43 when no READ came first, as GnuCOBOL gives), status 46 on a second READ after the end, and `START ... KEY GREATER OR EQUAL TO`. NIST relative-file programs matching: 12 of 24 to 21.
@@ -17,7 +28,7 @@ version numbers follow [Semantic Versioning](https://semver.org/).
 - 65 intrinsic functions ported from libcob, with `scripts/fuzz_functions.py` comparing them with GnuCOBOL.
 - ALPHABET, PROGRAM COLLATING SEQUENCE and SORT/MERGE COLLATING SEQUENCE; SAME RECORD AREA; DECLARATIVES; numeric
   paragraph names; ALTER; CORRESPONDING; RENAMES; SPECIAL-NAMES; edited pictures rebuilt and measured.
-- The NIST COBOL-85 test suite as a harness (`scripts/stress_nist.py`): 304 of 366 programs match GnuCOBOL byte for
+- The NIST COBOL-85 test suite as a harness (`scripts/stress_nist.py`): 319 of 366 programs match GnuCOBOL byte for
   byte (`docs/STRESS_NIST.md`).
 ### Changed
 - Menus, header, toasts and dialogs are opaque.
