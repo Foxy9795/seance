@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .cicsbridge import RESP
-from .cobol_src import detect_fixed
+from .cobol_src import detect_fixed, read_source, write_source
 
 _EXEC = re.compile(r"EXEC\s+CICS\b(.*?)\bEND-EXEC(\s*\.)?", re.I | re.S)
 ABEND_FOR = {"QZERO": "AEYG", "NOTFND": "AEIM", "DUPREC": "AEIN", "ENDFILE": "AEIL", "LENGERR": "AEIV", "QIDERR": "AEYH", "ITEMERR": "AEYJ",
@@ -504,11 +504,11 @@ def precompile_folder(src_dir: Path, main: str, out_dir: Path) -> list[str]:
         if p.is_file() and p.name != ".user":
             shutil.copy(p, out_dir / p.name)
     for name, text in (("DFHEIBLK.cpy", DFHEIBLK), ("CIBWORK.cpy", CIBWORK), ("DFHAID.cpy", DFHAID), ("DFHBMSCA.cpy", DFHBMSCA)):
-        (out_dir / name).write_text(text, encoding="utf-8")
+        write_source(out_dir / name, text)
     for p in sorted(out_dir.iterdir()):
         if p.suffix.lower() not in (".cbl", ".cob", ".cobol"):
             continue
-        text = p.read_text(encoding="utf-8", errors="replace")
+        text = read_source(p)
         if not has_cics(text):
             continue
         fixed = detect_fixed(text)
@@ -530,7 +530,7 @@ def precompile_folder(src_dir: Path, main: str, out_dir: Path) -> list[str]:
             has_area = re.search(r"\b01\s+DFHCOMMAREA\b", staged, re.I)
             staged = re.sub(r"(PROCEDURE\s+DIVISION)(\s+USING\s+[^.]*)?\.", r"\1 USING DFHEIBLK" + (" DFHCOMMAREA" if has_area else "") + ".",
                             staged, count=1, flags=re.I)
-        p.write_text(staged, encoding="utf-8")
+        write_source(p, staged)
         items = _data_items(p, fixed)
         gen = Generator(fixed, items)
         gen.main = is_main
@@ -548,7 +548,7 @@ def precompile_folder(src_dir: Path, main: str, out_dir: Path) -> list[str]:
             em = re.search(r"^.*\bEND\s+PROGRAM\b.*$", new, re.I | re.M)
             new = (new[:em.start()] + tail + new[em.start():]) if em else (new.rstrip("\n") + "\n" + tail)
         notes += gen.notes
-        p.write_text(new, encoding="utf-8")
+        write_source(p, new)
     return notes
 
 

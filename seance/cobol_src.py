@@ -27,6 +27,33 @@ def detect_fixed(text: str) -> bool:
     return bool(sample) and fixedish >= max(1, int(0.8 * len(sample))) and all(len(l) < 7 or l[6] in " *-/D" for l in sample)
 
 
+def read_source(path) -> str:
+    """A COBOL file as the compiler reads it: one character for each byte. GnuCOBOL has no source encoding: it counts
+    columns and literal lengths in bytes, and a literal holds the bytes written, so a UTF-8 é is two characters here
+    too, and the Python side writes back exactly the bytes the COBOL side has."""
+    from pathlib import Path
+
+    return Path(path).read_bytes().decode("latin-1")
+
+
+def write_source(path, text: str) -> None:
+    """Write COBOL text read with read_source: the same bytes come back."""
+    from pathlib import Path
+
+    Path(path).write_bytes(text.encode("latin-1"))
+
+
+def read_for_people(path) -> str:
+    """A COBOL file for reading on screen: UTF-8 when it is UTF-8, otherwise one character per byte."""
+    from pathlib import Path
+
+    data = Path(path).read_bytes()
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("latin-1")
+
+
 def normalize(text: str, fixed: bool | None = None, copy_dirs: list | None = None) -> list[Line]:
     """Return code and comment lines. Fixed format: columns 1-6 and 73+ are ignored, column 7 is the indicator.
     copy_dirs: where COPY looks for copybooks. Given, every COPY statement is replaced by its copybook's text, as

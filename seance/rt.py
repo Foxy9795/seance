@@ -94,6 +94,7 @@ class FileState:
     returning: list = field(default_factory=list)  # SORT: records left for RETURN
     code: str = "00"  # the last I-O status, FILE STATUS or not
     last_mode: str | None = None  # the mode of the last OPEN (tried): which USE ... ON INPUT / OUTPUT applies
+    locked: bool = False  # CLOSE ... WITH LOCK: no OPEN again in this run (status 38)
 
 
 class IO:
@@ -497,6 +498,11 @@ class Program:
         width = max(len(ta) if isinstance(ta, str) else 0, len(tb) if isinstance(tb, str) else 0, 1)
         sa = ta.fill(width).decode(ENC) if isinstance(ta, Figurative) else ta.ljust(width)
         sb = tb.fill(width).decode(ENC) if isinstance(tb, Figurative) else tb.ljust(width)
+        if self.collating is not None and (isinstance(a, Ref) or isinstance(b, Ref)):
+            # PROGRAM COLLATING SEQUENCE: cobc applies it when data takes part; two literals compare natively
+            if self._coll_map is None:
+                self._coll_map = {c: self.collating[c] for c in range(256)}
+            sa, sb = sa.translate(self._coll_map), sb.translate(self._coll_map)
         return sa, sb
 
     def cond(self, name: str, *subs) -> bool:
@@ -601,6 +607,9 @@ class Program:
             self._fail(f, "41", f"OPEN {name}: the file is already open")
             return
         f.last_mode = mode
+        if f.locked:
+            self._fail(f, "38", f"OPEN {name}: the file was closed WITH LOCK")
+            return
         if f.organization in ("indexed", "relative"):
             return self._k_open(f, mode)
         f.mode = mode
@@ -629,17 +638,24 @@ class Program:
         return self.io.inputs.get(assign)
 
     def close(self, name: str, how: str = "") -> None:
+        """how: "" ; "reel" (REEL or UNIT: a disk file stays open, status 07, except an indexed one, which closes);
+        "norewind" (WITH NO REWIND: closes, 07 for a sequential or relative file); "lock" (WITH LOCK: closes, and
+        any later OPEN fails with 38). Measured on GnuCOBOL 3.1.2."""
         f = self.files[name]
         if not f.mode:
             self._fail(f, "42", f"CLOSE {name}: the file is not open")
             return
+        if how == "reel" and f.organization != "indexed":
+            self._status(f, "07")
+            return
+        f.locked = f.locked or how == "lock"
         if f.organization in ("indexed", "relative"):
             if f.mode in ("output", "extend", "io"):
                 self.io.outputs[f.assign] = self._written[f.assign] = self._k_dump(f)
         elif f.mode in ("output", "extend", "io"):
             self.io.outputs[f.assign] = self._written[f.assign] = bytes(f.out)
         f.mode = None
-        self._status(f, "07" if how == "reel" and f.organization in ("sequential", "line") else "00")
+        self._status(f, "07" if how == "norewind" and f.organization in ("sequential", "line", "relative") else "00")
 
     declaratives: list = []  # [(section, [file names or INPUT | OUTPUT | I-O | EXTEND])], set by the translated program
 
@@ -1067,11 +1083,16 @@ class Program:
         return True
 
     # ---------------------------------------------------------- SORT and MERGE
-    def _sort_cmp(self, keys):
+    collating: bytes | None = None  # PROGRAM COLLATING SEQUENCE: the weight of each byte (None: native order)
+    _coll_map: dict | None = None
+
+    def _sort_cmp(self, keys, collating=None):
         def value(name, rec):
             spec = self.items[name]
             raw = rec[spec[1]:spec[1] + spec[2]]
-            return decode(self._cspec(spec), raw) if spec[3] == "num" else raw
+            if spec[3] == "num":
+                return decode(self._cspec(spec), raw)
+            return raw.translate(collating) if collating is not None else raw
 
         def cmp(a, b):
             for ascending, name in keys:
@@ -1081,8 +1102,11 @@ class Program:
             return 0
         return cmp
 
-    def sort(self, sd: str, keys: list, using=None, giving=None, input_proc=None, output_proc=None) -> None:
-        """SORT or MERGE: keys is [(ascending, item)]. GnuCOBOL's sort is stable (measured)."""
+    def sort(self, sd: str, keys: list, using=None, giving=None, input_proc=None, output_proc=None, collating=...) -> None:
+        """SORT or MERGE: keys is [(ascending, item)]. GnuCOBOL's sort is stable (measured). collating: the weights
+        of the SORT's COLLATING SEQUENCE (None: native); left out, the program collating sequence."""
+        if collating is ...:
+            collating = self.collating
         from functools import cmp_to_key
 
         f = self.files[sd]
@@ -1099,7 +1123,7 @@ class Program:
             f.released = []
             self.perform(*input_proc)
             records = f.released
-        records = sorted(records, key=cmp_to_key(self._sort_cmp(keys)))
+        records = sorted(records, key=cmp_to_key(self._sort_cmp(keys, collating)))
         if giving:
             for name in giving:
                 gf = self.files[name]
@@ -1131,7 +1155,9 @@ class Program:
             ks = self.items[name]
             off = ks[1] - base
             raw = row[off:off + ks[2]]
-            return decode(self._cspec(ks), raw) if ks[3] == "num" else raw
+            if ks[3] == "num":
+                return decode(self._cspec(ks), raw)
+            return raw.translate(self.collating) if self.collating is not None else raw
 
         def cmp(a, b):
             for ascending, name in shifted:
@@ -1162,6 +1188,127 @@ class Program:
         if into is not None:
             self.move(Ref(f.record), into)
         return True
+
+    # ---------------------------------------------------------- intrinsic functions
+    _fn_n = 0
+    when_compiled = "2026103123595800+0000"  # the recorder compiles on the run's fixed clock
+
+    def fn(self, name: str, *args, where: str = "") -> "Ref":
+        """FUNCTION name(args): the result as a field of its own, named by a Ref, with the attributes libcob gives it
+        (seance.intrinsics). where: LEADING or TRAILING for TRIM."""
+        from . import intrinsics
+
+        fargs = []
+        for a in args:
+            if isinstance(a, list):  # TABLE(ALL): every occurrence
+                fargs += [self._fn_arg(x) for x in a]
+            else:
+                fargs.append(self._fn_arg(a))
+        if where:
+            fargs.append(where)
+        rand = self.io.__dict__.setdefault("rand_state", [1])  # one C library generator per run
+        env = intrinsics.Env(cmp=self._fn_cmp, decimal_point="," if self.comma else ".", currency=self.currency,
+                             rand_state=rand, when_compiled=self.when_compiled)
+        return self._fn_store(intrinsics.call(name, fargs, env))
+
+    def all_of(self, name: str, subs: list) -> list:
+        """TABLE(ALL) in a function argument: a Ref for each occurrence, the ALL subscripts varying fastest last."""
+        spec = self.items[self.resolve(name)]
+        refs = [[]]
+        for (count, _), s in zip(spec[10], subs):
+            refs = [r + [k] for r in refs for k in (range(1, count + 1) if s is None else [int(s)])]
+        return [Ref(self.resolve(name), tuple(r)) for r in refs]
+
+    @staticmethod
+    def _alpha_spec(size: int) -> list:
+        return ["_LIT", 0, size, "alpha", "display", 0, 0, False, "none", "", [], [], False, False]
+
+    def _fn_arg(self, x):
+        from .intrinsics import Arg, from_float
+
+        if isinstance(x, Ref):
+            rec, off, size, spec = self._addr(x)
+            raw = bytes(self.mem[rec][off:off + size])
+            if x.start is not None or spec[3] in ("alpha", "group", "edited"):
+                return Arg(False, None, raw, spec if x.start is None else self._alpha_spec(size), x)
+            val = decode(self._cspec(spec), raw)
+            if spec[4] in ("float", "double"):
+                val = from_float(val).decimal()
+            return Arg(True, val, raw, spec, x)
+        if isinstance(x, Figurative):
+            raw = x.fill(1) if x.text else b""
+            return Arg(False, None, raw, self._alpha_spec(len(raw)), x)
+        if isinstance(x, (Decimal, int)):
+            d = Decimal(x)
+            sign, digits, exp = d.as_tuple()
+            text = getattr(x, "text", None)
+            scale = max(0, -exp)
+            ndig = max(len(text.lstrip("+-").replace(".", "")) if text else len(digits) + max(exp, 0), scale, 1)
+            signed = bool(sign)
+            spec = ["_LIT", 0, ndig + (1 if signed else 0), "num", "display", ndig, scale, signed,
+                    "leading_sep" if signed else "none", "", [], [], False, False]
+            return Arg(True, d, encode(self._cspec(spec), d), spec, x)
+        raw = str(x).encode(ENC, errors="replace") or b" "  # cobc reads an empty literal as one space
+        return Arg(False, None, raw, self._alpha_spec(len(raw)), raw.decode(ENC))
+
+    def _fn_cmp(self, a, b) -> int:
+        """cob_cmp of two argument fields: numbers by value, anything else as text (collating sequence and all)."""
+        if a.numeric and b.numeric:
+            return (a.value > b.value) - (a.value < b.value)
+        x, y = self._comparable(a.src, b.src)
+        if self.collating is not None and not (isinstance(a.src, Ref) or isinstance(b.src, Ref)):
+            # inside the function both are fields, so the program collating sequence applies even to two literals
+            if self._coll_map is None:
+                self._coll_map = {c: self.collating[c] for c in range(256)}
+            x, y = x.translate(self._coll_map), y.translate(self._coll_map)
+        return (x > y) - (x < y)
+
+    def _fn_store(self, res) -> "Ref":
+        from . import intrinsics
+
+        Program._fn_n = (Program._fn_n + 1) % 64
+        key = f"_FN{Program._fn_n}"
+        if res.kind == "dec":
+            d = intrinsics.Dec.of(res.dec).trim()
+            usage, size, digits, scale, signed = intrinsics.layout(d)
+            spec = [key, 0, size, "num", usage, digits, scale, signed, "trailing_over" if signed else "none", "", [], [], False,
+                    False]
+            if usage == "display":  # libcob's DISPLAY field: digits, the last one overpunched when negative
+                body = str(abs(d.v) * 10 ** (scale - d.s)).rjust(size, "0")[-size:]
+                if signed:
+                    body = body[:-1] + NEG_DIGITS[int(body[-1])]
+                data = body.encode(ENC)
+            else:  # the binary holds the whole value, past its 9 or 20 digits (DISPLAY shows only those)
+                data = (d.v * 10 ** (scale - d.s)).to_bytes(size, "big", signed=signed)
+        elif res.kind in ("uint", "int"):
+            signed = res.kind == "int" and res.n < 0
+            spec = [key, 0, 4, "num", "binary", 9, 0, signed, "trailing_over" if signed else "none", "", [], [], False, False]
+            data = res.n.to_bytes(4, "big", signed=signed)
+        elif res.kind == "num":
+            size = len(res.data)
+            spec = [key, 0, size, "num", "display", size, 0, False, "none", "", [], [], False, False]
+            data = res.data
+        elif res.kind == "alpha":
+            spec = self._alpha_spec(len(res.data))
+            spec[0] = key
+            data = res.data
+        elif res.kind == "copy":
+            src = res.arg
+            spec = list(src.spec) if src.spec is not None else self._alpha_spec(src.size)
+            spec[0], spec[1], spec[2], spec[10], spec[11] = key, 0, src.size, [], []
+            data = res.data or src.data
+            if res.value is not None:
+                data = encode(self._cspec(spec), store_into(self._cspec(spec), res.value, move=True))
+        elif res.kind == "double":
+            spec = [key, 0, 8, "num", "double", 18, 6, True, "none", "", [], [], False, False]
+            import struct
+
+            data = struct.pack("<d", res.double)
+        else:
+            raise CobolError(f"intrinsic function result {res.kind}")
+        self.items[key] = spec
+        self.mem[key] = bytearray(data)
+        return Ref(key)
 
     # ---------------------------------------------------------- CALL
     def link(self, programs: dict) -> None:

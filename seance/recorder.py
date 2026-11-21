@@ -8,7 +8,7 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
-from .cobol_src import source_fixes
+from .cobol_src import read_source, source_fixes, write_source
 from .model import ModelError, ProgramModel, load_model
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -79,10 +79,10 @@ def _cobc(args: list[str], what: str) -> None:
 
 def _prepare(model: ProgramModel, out_dir: Path) -> Path:
     """A copy with the reported dialect fixes (the original is never changed; line numbers stay the same)."""
-    fixed_text, _ = source_fixes((model.compile_source or model.source or model.path).read_text(encoding="utf-8", errors="replace"), model.fixed)
+    fixed_text, _ = source_fixes(read_source(model.compile_source or model.source or model.path), model.fixed)
     prepared = out_dir / "src" / model.path.name
     prepared.parent.mkdir(parents=True, exist_ok=True)
-    prepared.write_text(fixed_text, encoding="utf-8")
+    write_source(prepared, fixed_text)
     return prepared
 
 

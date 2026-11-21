@@ -31,7 +31,7 @@ import string
 from dataclasses import dataclass
 from pathlib import Path
 
-from .cobol_src import Line, detect_fixed, read_lines
+from .cobol_src import Line, detect_fixed, read_lines, read_source
 from .precompile import Conditions, directive
 
 EXTENSIONS = ("", ".CPY", ".CBL", ".COB", ".cpy", ".cbl", ".cob")
@@ -543,7 +543,7 @@ class _Pass:
             raise CopyError(f"{where}: copybook {stmt.name} copies itself.")
         if len(chain) >= MAX_DEPTH:
             raise CopyError(f"{where}: COPY statements are nested more than {MAX_DEPTH} deep.")
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_source(path)
         body = read_lines(text, detect_fixed(text), self.debugging, entries=False)
         self.run(body, stmt.rules + rules, chain + (resolved,), no)
         self.drain()

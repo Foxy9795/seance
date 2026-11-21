@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .cobol_src import detect_fixed, normalize, sentences, source_fixes
+from .cobol_src import detect_fixed, normalize, read_source, sentences, source_fixes, write_source
 from .layout import Item, LayoutError, leaves, parse_entries, walk
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -161,7 +161,7 @@ def code_sentences(path: Path, fixed: bool, dirs: list[Path], text: str | None =
     from .copybook import CopyError
 
     try:
-        return sentences(normalize(path.read_text(encoding="utf-8", errors="replace") if text is None else text, fixed, dirs))
+        return sentences(normalize(read_source(path) if text is None else text, fixed, dirs))
     except CopyError as exc:
         raise ModelError(str(exc)) from exc
 
@@ -375,7 +375,7 @@ def split_programs(path: Path, out_dir: Path) -> dict[str, Path] | None:
     """A file that holds several programs, one after another or nested, as one file per program: each copy keeps only
     its own program's lines and leaves the others empty, so every line number stays the same. {program-id: file},
     the first program first; None when the file holds one program."""
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = read_source(path)
     fixed = detect_fixed(text)
     raw = text.splitlines()
 
@@ -398,8 +398,8 @@ def split_programs(path: Path, out_dir: Path) -> dict[str, Path] | None:
         target = out_dir / (path.name if k == 0 else f"{pid}.cbl")
         target.parent.mkdir(parents=True, exist_ok=True)
         content = "\n".join(seg) + "\n"
-        if not target.exists() or target.read_text(encoding="utf-8") != content:  # keep the date of an unchanged copy
-            target.write_text(content, encoding="utf-8")
+        if not target.exists() or read_source(target) != content:  # keep the date of an unchanged copy
+            write_source(target, content)
         out.setdefault(pid, target)
     return out
 
@@ -409,7 +409,7 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     path = root / "legacy" / program / f"{program}.cbl"
     src_dir = path.parent
     folders = [src_dir]  # where COPY looks, in the order the recorder passes them to cobc as -I
-    sql = any(q.is_file() and re.search(r"\bEXEC\s+SQL\b", q.read_text(encoding="utf-8", errors="replace"), re.I) for q in src_dir.iterdir())
+    sql = any(q.is_file() and re.search(r"\bEXEC\s+SQL\b", read_source(q), re.I) for q in src_dir.iterdir())
     pre = None
     if sql:  # precompile the folder; everything is then read from the plain-COBOL copy
         from .sqlpre import SqlError, precompile_folder
@@ -420,7 +420,7 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
             raise ModelError(f"embedded SQL: {exc}") from exc
         src_dir = root / "build" / program / "sqlsrc"
         folders.insert(0, src_dir)
-    cics = any(q.is_file() and re.search(r"\bEXEC\s+CICS\b", q.read_text(encoding="utf-8", errors="replace"), re.I) for q in src_dir.iterdir())
+    cics = any(q.is_file() and re.search(r"\bEXEC\s+CICS\b", read_source(q), re.I) for q in src_dir.iterdir())
     cics_notes: list[str] = []
     if cics:  # CICS commands become CALLs of the CICS bridge (after SQL, if the program has both)
         from .cicspre import CicsError, precompile_folder as cics_precompile
@@ -452,7 +452,7 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     others = [q for q in sorted(src_dir.iterdir()) if q.is_file() and q.suffix.lower() in SOURCE_EXTENSIONS and q.name != path.name]
     subs: dict[str, ProgramModel] = {}
     for q in others:
-        text = q.read_text(encoding="utf-8", errors="replace")
+        text = read_source(q)
         if not re.search(r"PROCEDURE\s+DIVISION", text, re.I):
             continue  # a copybook saved with a program extension
         try:
@@ -488,7 +488,7 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
 
 def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Path] | None = None) -> ProgramModel:
     """shown: the file people see (the original when path is a precompiled copy). dirs: where COPY looks."""
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = read_source(path)
     fixed = detect_fixed(text)
     dirs = dirs if dirs is not None else copy_dirs(path.parent)
     try:
@@ -615,6 +615,12 @@ def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Pa
     if missing:
         raise ModelError(f"PROCEDURE DIVISION USING names {', '.join(missing)}, which is not a 01 or 77 item in the LINKAGE SECTION.")
     model.notes += source_fixes(text, fixed)[1]
+    if re.search(r"\bFUNCTION\s+WHEN-COMPILED\b", proc_text, re.I):
+        model.notes.append("FUNCTION WHEN-COMPILED is the moment cobc compiled the program (cobc ignores COB_CURRENT_DATE); "
+                           "the Python gives the run's fixed clock, so output that shows it will not match.")
+    if re.search(r"\bFUNCTION\s+RANDOM\b(?!\s*\()", proc_text, re.I):
+        model.notes.append("FUNCTION RANDOM without a seed: the compiled COBOL seeds the C library generator from the clock, so "
+                           "its numbers change from run to run; the Python starts from seed 1. Give RANDOM a seed to compare.")
     model.notes += limit_notes(items)
     model.decimal_comma = any(re.search(r"\bDECIMAL-POINT\s+IS\s+COMMA\b", s, re.I) for _, s in items)
     from .precompile import currency_symbol, currency_text

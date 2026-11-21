@@ -16,7 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .cobol_num import ROUND_MODES
-from .cobol_src import normalize
+from .cobol_src import read_source, normalize
 from .layout import Item, parse_entries, walk
 from .model import ROOT, ModelError, ProgramModel, load_model
 
@@ -132,6 +132,7 @@ class Names:
     files: dict[str, object] = field(default_factory=dict)  # FD name -> FileDef
     file_buffer: dict[str, str] = field(default_factory=dict)  # FD name -> its record area (shared by SAME RECORD AREA)
     debug_sections: set = field(default_factory=set)  # USE FOR DEBUGGING sections, where DEBUG-ITEM may be read
+    alphabets: dict = field(default_factory=dict)  # SPECIAL-NAMES ALPHABET name -> weights of the 256 bytes (None: native)
 
     def add(self, it: Item, buffer: str) -> None:
         self.by_name.setdefault(it.name, []).append(it)
@@ -194,6 +195,7 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
     if sp is not None:
         names.classes, names.switch_conds, names.switch_names = dict(sp.classes), dict(sp.switch_conds), dict(sp.switch_names)
         names.symbolic, names.devices = dict(sp.symbolic), dict(sp.devices)
+        names.alphabets = dict(getattr(sp, "alphabets", {}))
     records: dict[str, int] = {}
     shared: dict[int, str] = {}  # SAME RECORD AREA group: the buffer its files share
     for f in model.files:
@@ -343,8 +345,14 @@ class Parser:
             while not self.is_op(")"):
                 if self.peek().kind == "end":
                     raise Unsupported("unclosed subscript")
+                if self.word() == "ALL" and getattr(self, "_all_ok", False):  # FUNCTION SUM(TABLE(ALL))
+                    self.i += 1
+                    subs.append("None")
+                    continue
                 subs.append(self.subscript())
             self.i += 1
+            if "None" in subs:
+                return RefX(f'S.all_of("{key}", [{", ".join(subs)}])', item, False, key)
             py += ", " + ", ".join(subs)
             simple = False
         py += ")"
@@ -441,43 +449,79 @@ class Parser:
         return self.ref().py
 
     def function(self) -> str:
+        """FUNCTION name(args): S.fn gives the result as a field, with the attributes libcob gives it (seance.intrinsics)."""
         self.expect("FUNCTION")
         name = self.take().value
-        from .rt import F
+        from .intrinsics import NAMES
 
-        attr = name.replace("-", "_")
-        if not hasattr(F, attr):
+        if name not in NAMES:
             raise Unsupported(f"FUNCTION {name} is not supported yet")
-        args = []
+        args, where = [], ""
+        if name in ("LENGTH", "BYTE-LENGTH") and self.is_op("("):
+            folded = self._constant_length()
+            if folded is not None:
+                return folded
         if self.is_op("(") and not self._refmod_ahead():  # FUNCTION CURRENT-DATE (1:8) is a substring, not arguments
             self.i += 1
             while not self.is_op(")"):
                 if self.peek().kind == "end":
                     raise Unsupported("unclosed function arguments")
-                if self.word() in ("LEADING", "TRAILING") and attr == "TRIM":
-                    args.append(repr(self.take().value))
+                if self.word() in ("LEADING", "TRAILING") and name == "TRIM":
+                    where = self.take().value
                     continue
-                if attr in TEXT_FUNCTIONS:  # these take text: FUNCTION LOWER-CASE(NAME(2:19)) must not read NAME as a number
-                    args.append(self._text_arg())
-                    continue
-                save = self.i
-                try:
-                    args.append(self.expr())
-                    if not (self.is_op(")") or self.peek().kind in ("word", "num", "str")):
-                        raise Unsupported("")
-                except Unsupported:
-                    self.i = save
-                    args.append(self._text_arg())
+                args.append(self._fn_arg())
             self.i += 1
-        call = f"F.{attr}({', '.join(args)})"
+        call = f'S.fn("{name}"' + "".join(", " + a for a in args) + (f', where="{where}"' if where else "") + ")"
         if self.is_op("(") and self._refmod_ahead():
             self.i += 1
             start = self.expr()
             self.i += 1  # ':'
             length = None if self.is_op(")") else self.expr()
             self.i += 1
-            call = f"{call}[int({start}) - 1:{'int(' + start + ') - 1 + int(' + length + ')' if length else ''}]"
+            call = f"{call}.sub({start}{', ' + length if length else ''})"
         return call
+
+    def _constant_length(self) -> str | None:
+        """FUNCTION LENGTH of a literal or of a fixed-size item is a number cobc works out when it compiles: a
+        numeric literal, which DISPLAY shows without leading zeros. Anything else is left to the run."""
+        save = self.i
+        self.i += 1
+        tok = self.peek()
+        size = None
+        if tok.kind == "str" and self.peek(1).kind == "op" and self.peek(1).value == ")":
+            size = len(tok.value.encode("latin-1", errors="replace"))
+            self.i += 1
+        elif self.is_data():
+            r = self.ref()
+            fixed = ".sub(" not in r.py and not any(getattr(x, "depending", None) for x in _walk_up(r.item))
+            if fixed and self.is_op(")"):
+                size = r.item.size
+        if size is None or not self.is_op(")"):
+            self.i = save
+            return None
+        self.i += 1
+        return f'D("{size}")'
+
+    def _fn_arg(self) -> str:
+        """One function argument: a field when it is one (a data item, a literal, another function), else the
+        value of an arithmetic expression. TABLE(ALL) gives every occurrence."""
+        save = self.i
+        if self.word() == "FUNCTION":
+            out = self.function()
+        elif self.is_data():
+            self._all_ok = True
+            try:
+                r = self.ref()
+            finally:
+                self._all_ok = False
+            out = r.py
+        else:
+            out = self.literal()
+        nxt = self.peek()
+        if out is None or (nxt.kind == "op" and nxt.value in ("+", "-", "*", "/", "**") and not out.startswith("*")):
+            self.i = save
+            return self.expr()
+        return out
 
     def _text_arg(self) -> str:
         lit = self.literal()
@@ -536,7 +580,8 @@ class Parser:
             self.i += 1
             return 'D("0")'
         if tok.kind == "word" and tok.value == "FUNCTION":
-            return f"D({self.function()})"
+            call = self.function()
+            return call if call.startswith("D(") else f"S.n({call})"  # LENGTH of a fixed item is a literal already
         if tok.kind == "word" and tok.value in self.names.indexes:
             self.i += 1
             return f'D(S.idx_value("{tok.value}"))'
@@ -1311,10 +1356,13 @@ class Parser:
             w = self.take().value
             if w in self.names.files:
                 calls.append([w, ""])
-            elif w in ("REEL", "UNIT") or (w == "REWIND" and calls):
-                if calls:
-                    calls[-1][1] = "reel"  # CLOSE REEL / UNIT / NO REWIND: a disk file answers 07
-        return self.code(line, "; ".join(f'S.close("{w}"' + (', how="reel")' if how else ")") for w, how in calls) or "pass")
+            elif calls and w in ("REEL", "UNIT"):
+                calls[-1][1] = "reel"  # a disk file stays open and answers 07
+            elif calls and w == "REWIND":
+                calls[-1][1] = "norewind"  # WITH NO REWIND: closed, and 07
+            elif calls and w == "LOCK":
+                calls[-1][1] = "lock"  # no OPEN again in this run
+        return self.code(line, "; ".join(f'S.close("{w}"' + (f', how="{how}")' if how else ")") for w, how in calls) or "pass")
 
     def s_READ(self, line, stop):
         file = self.take().value
@@ -1517,8 +1565,18 @@ class Parser:
             self.accept("DUPLICATES")
             self.accept("IN")
             self.accept("ORDER")
-        if self.accept("COLLATING"):
-            raise Unsupported("SORT ... COLLATING SEQUENCE is not supported yet")
+        collating = None
+        if self.word() in ("COLLATING", "SEQUENCE"):
+            self.accept("COLLATING")
+            self.expect("SEQUENCE")
+            self.accept("FOR")
+            self.accept("ALPHANUMERIC")
+            self.accept("IS")
+            name = self.take().value
+            if name not in self.names.alphabets:
+                raise Unsupported(f"COLLATING SEQUENCE {name}: no ALPHABET of that name in SPECIAL-NAMES")
+            table = self.names.alphabets[name]
+            collating = f'bytes.fromhex("{table.hex()}")' if table is not None else "None"
         if target not in self.names.files:
             if target in self.names.by_name:  # SORT of a table in WORKING-STORAGE
                 key = self.names.key[id(self.names.resolve(target, []))]
@@ -1542,6 +1600,8 @@ class Parser:
         parts = [f'"{target}"', f'[{", ".join(keys)}]']
         parts.append(f"using={using!r}" if using is not None else f"input_proc={inp}")
         parts.append(f"giving={giving!r}" if giving is not None else f"output_proc={outp}")
+        if collating is not None:
+            parts.append(f"collating={collating}")  # COLLATING SEQUENCE: instead of the program's
         return self.code(line, f"S.sort({', '.join(parts)})" + ("  # MERGE" if merge else ""))
 
     def s_MERGE(self, line, stop):
@@ -1793,6 +1853,24 @@ class Parser:
 
 
 # ---------------------------------------------------------------- program structure
+
+def _walk_up(item):
+    """An item and the groups that hold it, and everything under it (where an OCCURS DEPENDING ON may sit)."""
+    seen, out = set(), []
+    stack = [item]
+    while stack:
+        it = stack.pop()
+        if id(it) in seen:
+            continue
+        seen.add(id(it))
+        out.append(it)
+        stack += list(getattr(it, "children", []) or [])
+    p = getattr(item, "parent", None)
+    while p is not None:
+        out.append(p)
+        p = getattr(p, "parent", None)
+    return out
+
 
 def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], dict[str, tuple[str, str]], dict[str, int], dict[str, str | None]]:
     """Paragraph headers are one-word sentences; NAME SECTION starts a section. DECLARATIVES are skipped."""
@@ -2085,7 +2163,7 @@ def _has(nodes, kind) -> bool:
 def _unit(model: ProgramModel, tag: str) -> dict:
     """Translate one program (the main one or a called one) into its data literals and paragraph functions."""
     names, records = build_names(model)
-    src_lines = normalize((model.source or model.path).read_text(encoding="utf-8", errors="replace"), model.fixed, model.copy_dirs or None)
+    src_lines = normalize(read_source(model.source or model.path), model.fixed, model.copy_dirs or None)
     start = next((i for i, l in enumerate(src_lines) if not l.comment and re.match(r"^\s*PROCEDURE\s+DIVISION", l.text, re.I)), None)
     if start is None:
         raise Unsupported("no PROCEDURE DIVISION")
@@ -2128,6 +2206,16 @@ def _unit(model: ProgramModel, tag: str) -> dict:
             "gaps": em.unsupported, "count": em.count, "linkage": linkage, "decls": decls}
 
 
+def _collating_line(model: ProgramModel) -> str:
+    """S.collating for a program with a PROGRAM COLLATING SEQUENCE that is not the native order."""
+    sp = getattr(model, "special", None)
+    table = sp.collating() if sp is not None else None
+    if table is None:
+        return ""
+    return (f"S.collating = bytes.fromhex(\"{table.hex()}\")  # PROGRAM COLLATING SEQUENCE IS {sp.program_collating}: "
+            "alphanumeric comparisons of data and SORT keys go by these weights\n")
+
+
 def _indent(text: str, n: int = 1) -> str:
     pad = "    " * n
     return "\n".join(pad + line if line.strip() else line for line in text.split("\n"))
@@ -2150,7 +2238,8 @@ def translate(program: str, root: Path = ROOT) -> Translation:
         count += u["count"]
         fn = "_program_" + re.sub(r"[^a-z0-9_]", "_", sub.program_id.lower())
         body = (u["data"]
-                + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={u['linkage']!r}, initial={sub.initial})\n\n\n"
+                + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={u['linkage']!r}, initial={sub.initial})\n"
+                + _collating_line(sub) + "\n\n"
                 + "\n\n".join(u["funcs"])
                 + "\n\nPARAGRAPHS = [\n" + u["paras"] + ",\n]\n"
                 + f"SECTIONS = {u['sections']!r}\n"
@@ -2181,6 +2270,7 @@ def translate(program: str, root: Path = ROOT) -> Translation:
         + ("S.comma = True  # DECIMAL-POINT IS COMMA: numbers are shown and read as 1.234,50\n" if model.decimal_comma else "")
         + (f"S.currency = {model.currency!r}  # CURRENCY SIGN: edited fields show it where the picture has $\n"
            if getattr(model, "currency", "$") != "$" else "")
+        + _collating_line(model)
         + "\n\n"
         + "\n\n".join(main["funcs"])
         + "\n\nPARAGRAPHS = [\n" + main["paras"] + ",\n]\n"

@@ -21,7 +21,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .cobol_src import detect_fixed
+from .cobol_src import detect_fixed, read_source, write_source
 
 FIXED_DATE, FIXED_TIME = "2026-10-31", "23:59:58"
 _EXEC = re.compile(r"EXEC\s+SQL\b(.*?)\bEND-EXEC(\s*\.)?", re.I | re.S)
@@ -521,7 +521,7 @@ def precompile_folder(src_dir: Path, main: str, out_dir: Path) -> Result:
     out_dir.mkdir(parents=True)
     result = Result()
     files = [p for p in src_dir.iterdir() if p.is_file() and p.name != ".user"]
-    texts = {p.name: p.read_text(encoding="utf-8", errors="replace") for p in files}
+    texts = {p.name: read_source(p) for p in files}
     # pass 1: data-division SQL (INCLUDE, DECLARE TABLE, DECLARE SECTION) in every file
     main_text = texts.get(f"{main}.cbl", next(iter(texts.values()), ""))
     stage = {}
@@ -532,7 +532,7 @@ def precompile_folder(src_dir: Path, main: str, out_dir: Path) -> Result:
         stage[name] = precompile_text(text, gen, only_data=True) if has_sql(text) else text
     stage["SQLCA.cpy"] = SQLCA_COPY
     for name, text in stage.items():
-        (out_dir / name).write_text(text, encoding="utf-8")
+        write_source(out_dir / name, text)
     # pass 2: procedure SQL, now that host variables can be looked up
     for name, text in list(stage.items()):
         if not name.lower().endswith((".cbl", ".cob", ".cobol")) or not has_sql(text):
@@ -549,7 +549,7 @@ def precompile_folder(src_dir: Path, main: str, out_dir: Path) -> Result:
             em = re.search(r"^.*\bEND\s+PROGRAM\b.*$", new, re.I | re.M)
             new = (new[:em.start()] + tail + new[em.start():]) if em else (new.rstrip("\n") + "\n" + tail)
         result.statements += gen.n
-        (out_dir / name).write_text(new, encoding="utf-8")
+        write_source(out_dir / name, new)
     return result
 
 
@@ -558,7 +558,7 @@ def _data_items(path: Path, fixed: bool) -> dict:
     from .layout import parse_entries, walk
     from .model import code_sentences, copy_dirs
 
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = read_source(path)
     text = _EXEC.sub(lambda m: " " * len(m.group(0)), _code_text(text, fixed))
     items = code_sentences(path, fixed, copy_dirs(path.parent), text)
     entries, section = [], ""

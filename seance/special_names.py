@@ -4,7 +4,14 @@
     CLASS HEXA IS "0" THRU "9" "A" THRU "F"
     SYMBOLIC CHARACTERS BELL IS 8
     SYSIN IS KEYBOARD, CONSOLE IS CRT, SYSERR IS ERRORS
+    ALPHABET CU IS "Z" "Y" "X" ALSO "W" "0" THRU "3"      ALPHABET EB IS EBCDIC
+and, from OBJECT-COMPUTER, PROGRAM COLLATING SEQUENCE IS CU.
 CURRENCY SIGN and DECIMAL-POINT IS COMMA are read elsewhere (the precompiler and the model).
+
+An alphabet is a weight for each of the 256 characters (None: the native order). Measured on GnuCOBOL 3.1.2: the
+characters an alphabet lists take positions in the order given (ALSO shares one, so they compare equal), every other
+character follows in native order; EBCDIC is cobc's own ASCII-to-EBCDIC table, which is not code page 037 above X'7F';
+NATIVE, STANDARD-1, STANDARD-2 and ASCII are the native order.
 """
 
 from __future__ import annotations
@@ -18,6 +25,16 @@ DEVICES = {"SYSIN", "SYSIPT", "STDIN", "SYSOUT", "SYSLIST", "SYSLST", "STDOUT", 
            "PRINTER", "CSP", "FORMFEED", "TOP", "C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10", "C11", "C12",
            "S01", "S02", "S03", "S04", "S05", "TAB"}
 _STOP = {"CURRENCY", "DECIMAL-POINT", "CLASS", "SYMBOLIC", "ALPHABET", "CRT", "CURSOR", "LOCALE", "CALL-CONVENTION", "NUMERIC", "CONSOLE"}
+# EBCDIC as an alphabet: the position of each byte, found by sorting all 256 bytes WITH COLLATING SEQUENCE IS EBCDIC
+EBCDIC = bytes.fromhex(
+    "00010203372d2e2f1605250b0c0d0e0f101112133c3d322618193f271c1d1e1f405a7f7b5b6c507d4d5d5c4e6b604b61f0f1f2f3"
+    "f4f5f6f7f8f97a5e4c7e6e6f7cc1c2c3c4c5c6c7c8c9d1d2d3d4d5d6d7d8d9e2e3e4e5e6e7e8e9ade0bd5f6d7981828384858687"
+    "8889919293949596979899a2a3a4a5a6a7a8a9c06ad0a10768dc5142434447485253545756586367719c9ecbcccddbdddfecfcb0"
+    "b1b23eb44555cede49699a9bab9fbab8b7aa8a8bb6b5624f6465662021227023727374be7677788024158c8d8e41061728299d2a"
+    "2b2c090aac4aaeaf1b3031fa1a33343536590838bc39a0bfca3afe3b04cfda14e18f4675fdebeeed90efb3fbb9eabbff"
+)
+_FIGURATIVE = {"LOW-VALUE": "\x00", "LOW-VALUES": "\x00", "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff", "SPACE": " ",
+               "SPACES": " ", "QUOTE": '"', "QUOTES": '"', "ZERO": "0", "ZEROS": "0", "ZEROES": "0"}
 
 
 @dataclass
@@ -27,6 +44,13 @@ class SpecialNames:
     classes: dict[str, str] = field(default_factory=dict)  # class name -> every character it allows
     symbolic: dict[str, str] = field(default_factory=dict)  # symbolic character -> the character
     devices: dict[str, str] = field(default_factory=dict)  # mnemonic -> device (SYSIN, SYSOUT, SYSERR, CONSOLE, C01, ...)
+    alphabets: dict[str, bytes | None] = field(default_factory=dict)  # alphabet name -> weight of each byte (None: native)
+    program_collating: str | None = None  # OBJECT-COMPUTER. PROGRAM COLLATING SEQUENCE IS alphabet-name
+
+    def collating(self, name: str | None = None) -> bytes | None:
+        """The weights of an alphabet, or of the program collating sequence; None for the native order."""
+        name = name or self.program_collating
+        return self.alphabets.get(name) if name else None
 
 
 def _literal_chars(tok: str) -> str:
@@ -89,6 +113,53 @@ def parse(text: str) -> SpecialNames:
                     chars.extend(lo)
             out.classes[name] = "".join(dict.fromkeys(chars))
             continue
+        if w == "ALPHABET" and i + 1 < len(toks):
+            name = up[i + 1]
+            i += 2
+            if word() == "FOR":
+                i += 2  # FOR ALPHANUMERIC / FOR NATIONAL
+            if word() == "IS":
+                i += 1
+            if word() in ("NATIVE", "STANDARD-1", "STANDARD-2", "ASCII"):
+                out.alphabets[name] = None
+                i += 1
+                continue
+            if word() == "EBCDIC":
+                out.alphabets[name] = EBCDIC
+                i += 1
+                continue
+            positions: list[list[int]] = []  # the characters at each position, in order
+
+            def chars_at(k: int) -> str:
+                return _FIGURATIVE.get(up[k], "") or _literal_chars(toks[k]) if k < len(toks) else ""
+
+            while i < len(toks) and chars_at(i):
+                first = chars_at(i)
+                i += 1
+                if word() in ("THRU", "THROUGH") and chars_at(i + 1):
+                    lo, hi = ord(first[0]), ord(chars_at(i + 1)[0])
+                    i += 2
+                    step = 1 if hi >= lo else -1
+                    positions += [[c] for c in range(lo, hi + step, step)]
+                else:
+                    positions += [[ord(c)] for c in first]
+                while word() == "ALSO" and chars_at(i + 1):
+                    positions[-1] += [ord(c) for c in chars_at(i + 1)]
+                    i += 2
+            weight: list[int | None] = [None] * 256
+            pos = 0
+            for group in positions:
+                fresh = [c for c in group if c < 256 and weight[c] is None]
+                if fresh:
+                    for c in fresh:
+                        weight[c] = pos
+                    pos += 1
+            for c in range(256):  # the characters it does not list come after, in native order
+                if weight[c] is None:
+                    weight[c] = pos
+                    pos += 1
+            out.alphabets[name] = bytes(weight)
+            continue
         if w == "SYMBOLIC":
             i += 1
             if word() in ("CHARACTERS", "CHARACTER"):
@@ -122,11 +193,23 @@ def parse(text: str) -> SpecialNames:
 
 
 def from_sentences(items: list[tuple[int, str]]) -> SpecialNames:
-    """Find the SPECIAL-NAMES paragraph among a program's sentences and read it."""
+    """Find the SPECIAL-NAMES paragraph among a program's sentences and read it, with the program collating
+    sequence the OBJECT-COMPUTER paragraph names."""
     parts: list[str] = []
     inside = False
+    collating = None
+    in_object = False
     for _, s in items:
         up = s.upper().strip()
+        if up == "OBJECT-COMPUTER":
+            in_object = True
+            continue
+        if in_object:
+            m = re.search(r"\bCOLLATING\s+SEQUENCE\s+(?:FOR\s+ALPHANUMERIC\s+)?(?:IS\s+)?([A-Z0-9][A-Z0-9-]*)", up)
+            if m:
+                collating = m.group(1)
+            if re.match(r"^(SPECIAL-NAMES|SOURCE-COMPUTER|REPOSITORY|INPUT-OUTPUT\s+SECTION|DATA\s+DIVISION|PROCEDURE\s+DIVISION)\b", up):
+                in_object = False
         if up == "SPECIAL-NAMES":
             inside = True
             continue
@@ -135,4 +218,6 @@ def from_sentences(items: list[tuple[int, str]]) -> SpecialNames:
                         r"SOURCE-COMPUTER|OBJECT-COMPUTER)\b", up):
                 break
             parts.append(s)
-    return parse(" ".join(parts))
+    out = parse(" ".join(parts))
+    out.program_collating = collating
+    return out
