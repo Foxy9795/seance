@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
 from .codec import ENC, decode, display_text, encode, store_into, zero
-from .cobol_num import deedit, size_error
+from .cobol_num import NEG_DIGITS, deedit, size_error
 
 D = Decimal
 
@@ -172,6 +172,7 @@ class Program:
         self.files = {f[0]: FileState(*f) for f in self.file_defs}
         self.steps = 0
         self._alters: dict[str, str] = {}  # ALTER: paragraph -> where its GO TO goes now
+        self._switches: dict[int, bool] = {}  # SWITCH-n, read from the environment on first use
 
     def _all_offsets(self, spec) -> list[int]:
         offs = [spec[1]]
@@ -186,8 +187,11 @@ class Program:
             if spec[3] == "num" and fig is ZERO:
                 return zero(self._cspec(spec))
             return fig.fill(size)
-        if spec[3] in ("group", "alpha"):
+        if spec[3] in ("group", "alpha") or (spec[3] == "edited" and isinstance(value, str)):
+            # an edited field given a text VALUE holds that text as written (VALUE " <1,111.11")
             return encode(("alpha", "display", 0, 0, False, "none", "", size, spec[12], False), str(value) if not isinstance(value, Decimal) else str(value))
+        if spec[3] == "edited":
+            return self._shown(encode(self._cspec(spec), Decimal(value)))
         return self._encode_value(spec, value)
 
     @staticmethod
@@ -276,7 +280,9 @@ class Program:
         if isinstance(src, Ref):
             rec, off, size, spec = self._addr(src)
             raw = bytes(self.mem[rec][off:off + size])
-            if src.start is not None or spec[3] in ("group", "alpha"):
+            if spec[3] == "group" and src.start is None:
+                return "group", raw, None  # a group move copies bytes, whatever the receiving item is
+            if src.start is not None or spec[3] == "alpha":
                 return "alpha", raw, None
             if spec[3] == "edited":
                 return "edited", raw, spec
@@ -309,7 +315,8 @@ class Program:
                 else:
                     if kind == "num":
                         value, sspec = num
-                        text = _digits_text(value, sspec)
+                        # a DISPLAY number gives its bytes as they are (junk included), without the sign
+                        text = _display_digits(sspec, raw) if sspec[4] == "display" else _digits_text(value, sspec)
                     elif kind == "lit":
                         text = _lit_text(num).lstrip("+-")
                     else:
@@ -322,8 +329,17 @@ class Program:
                     buf[off:off + size] = self._shown(encode(self._cspec(spec), value))
                 elif kind == "fig":
                     buf[off:off + size] = self._shown(encode(self._cspec(spec), Decimal(0))) if raw is ZERO else raw.fill(size)
+                elif kind == "alpha":  # alphanumeric to numeric-edited: the text is read as an unsigned integer, then edited
+                    buf[off:off + size] = self._shown(encode(self._cspec(spec), _alpha_to_number(raw.decode(ENC))))
+                elif kind == "edited":  # edited to edited: de-edited by its own picture, then edited again
+                    from .editing import deedit_numeric
+
+                    value = deedit_numeric(self._std(raw.decode(ENC)), num[9])
+                    buf[off:off + size] = self._shown(encode(self._cspec(spec), value))
                 else:
                     buf[off:off + size] = raw[:size].ljust(size, b" ")
+            elif kind == "group":  # a group sent to an elementary number: the bytes, left-justified and padded with spaces
+                buf[off:off + size] = raw[:size].ljust(size, b" ")
             else:  # numeric
                 if kind == "num":
                     value = num[0]
@@ -339,26 +355,63 @@ class Program:
                     value = _alpha_to_number(raw.decode(ENC))
                 buf[off:off + size] = self._encode_value(spec, value)
 
-    def initialize(self, *targets) -> None:
+    @staticmethod
+    def _category(spec) -> str:
+        if spec[3] == "num":
+            return "NUMERIC"
+        if spec[3] == "edited":
+            return "NUMERIC-EDITED"
+        pic = spec[9] or ""
+        if pic and any(c in "B0/" for c in pic):
+            return "ALPHANUMERIC-EDITED"
+        if pic and set(pic) == {"A"}:
+            return "ALPHABETIC"
+        return "ALPHANUMERIC"
+
+    def initialize(self, *targets, filler: bool = False, to_value: str | None = None, replacing=None, default: bool = False) -> None:
+        """INITIALIZE: spaces for text and zeros for numbers by default. With REPLACING only the categories it names
+        change (to the value given); ALL TO VALUE gives items their VALUE clause; TO DEFAULT covers the rest."""
+        values = None
+        if to_value:
+            values = {name: (value, is_all) for name, value, is_all in self.values}
+        plain = not replacing and not to_value
         for t in targets:
             ref = t if isinstance(t, Ref) else Ref(self.resolve(t))
             spec = self.items[ref.name]
-            if spec[3] == "group":
-                rec, base, size, _ = self._addr(ref)
-                for leaf_name in self._leaves(ref.name):
-                    lspec = self.items[leaf_name]
-                    if leaf_name.startswith("FILLER#"):
-                        continue
-                    rel = lspec[1] - spec[1]
-                    inner = [(c, s) for c, s in lspec[10][len(spec[10]):]]
-                    offs = [base + rel]
-                    for count, stride in inner:
-                        offs = [o + k * stride for o in offs for k in range(count)]
+            rec, base, size, _ = self._addr(ref)
+            leaves = [(n, self.items[n]) for n in self._leaves(ref.name)] if spec[3] == "group" else [(ref.name, spec)]
+            for leaf_name, lspec in leaves:
+                if leaf_name.startswith("FILLER#") and not filler:
+                    continue
+                rel = lspec[1] - spec[1]
+                inner = [(c, s) for c, s in lspec[10][len(spec[10]):]]
+                offs = [base + rel]
+                for count, stride in inner:
+                    offs = [o + k * stride for o in offs for k in range(count)]
+                cat = self._category(lspec)
+                data = None
+                if to_value and leaf_name in values:
+                    # GnuCOBOL 3.1.2 gives every item with a VALUE its value, whichever category the TO VALUE names
+                    data = self._initial_bytes(lspec, *values[leaf_name])
+                elif replacing and any(c == cat for c, _ in replacing):
+                    src = next(v for c, v in replacing if c == cat)
                     for o in offs:
-                        self.mem[rec][o:o + lspec[2]] = zero(self._cspec(lspec))
-            else:
-                rec, off, size, _ = self._addr(ref)
-                self.mem[rec][off:off + size] = zero(self._cspec(spec))
+                        self._move_to_offset(src, lspec, rec, o)
+                    continue
+                elif plain or default:
+                    data = zero(self._cspec(lspec))
+                if data is not None:
+                    for o in offs:
+                        self.mem[rec][o:o + lspec[2]] = data
+
+    def _move_to_offset(self, src, spec, rec: str, off: int) -> None:
+        """MOVE src into the item described by spec at a given byte offset (one occurrence of a table entry)."""
+        tmp = "__init_target__"
+        self.items[tmp] = [rec, off, *spec[2:10], [], [], *spec[12:]]
+        try:
+            self.move(src, Ref(tmp))
+        finally:
+            del self.items[tmp]
 
     def _leaves(self, name: str) -> list[str]:
         out = []
@@ -427,7 +480,7 @@ class Program:
         if isinstance(x, Figurative):
             return (Decimal(0) if x is ZERO else None), x
         if isinstance(x, (Decimal, int)):
-            return Decimal(x), _lit_text(Decimal(x))
+            return Decimal(x), _lit_text(x if isinstance(x, Decimal) else Decimal(x))
         return None, str(x)
 
     def _comparable(self, a, b):
@@ -455,6 +508,22 @@ class Program:
     def set_true(self, name: str, *subs) -> None:
         target, choices = self.conds[name][:2]
         self.move(choices[0][0], Ref(target, subs))
+
+    def switch(self, n: int) -> bool:
+        """SWITCH-n: GnuCOBOL reads COB_SWITCH_n (ON or OFF) when the program starts; SET can change it."""
+        if n not in self._switches:
+            import os
+
+            self._switches[n] = os.environ.get(f"COB_SWITCH_{n}", "OFF").strip().upper() == "ON"
+        return self._switches[n]
+
+    def set_switch(self, n: int, on: bool) -> None:
+        self._switches[n] = on
+
+    def in_class(self, x, chars: str) -> bool:
+        """A CLASS test: every character of the item is one the class allows."""
+        text = self._text(x)
+        return all(c in chars for c in text)
 
     def alter(self, para: str, target: str) -> None:
         """ALTER para TO PROCEED TO target."""
@@ -1270,7 +1339,13 @@ class Program:
 
     def _text(self, x) -> str:
         if isinstance(x, Ref):
-            return self.v(x) if not isinstance(self.v(x), Decimal) else _digits_text(self.v(x), self.items[x.name])
+            val = self.v(x)
+            if not isinstance(val, Decimal):
+                return val
+            spec = self.items[x.name]
+            if spec[4] == "display":  # a DISPLAY number used as text is its storage: sign character and all
+                return self._bytes(x).decode(ENC)
+            return _digits_text(val, spec)
         if isinstance(x, Figurative):
             return x.text[:1]
         if isinstance(x, Decimal):
@@ -1408,20 +1483,24 @@ class Program:
         self._execute(a, b)
 
     def _execute(self, a: int, b: int) -> None:
+        """Run from paragraph a until control falls out of the end of paragraph b, however it got there: through the
+        paragraphs in order or by GO TO, even when b comes before a. A range whose end is never reached runs on."""
         i = a
-        while i <= b and i < len(self._paras):
+        while i < len(self._paras):
             self.tick()
             nxt = self._paras[i][1]()
             if nxt is None:
+                if i == b:
+                    return
                 i += 1
             elif nxt == "__exit_section__":
-                name = self._paras[i][0]
                 sec = next((s for s, (f, l) in self._sections.items() if self._index[f] <= i <= self._index[l]), None)
-                i = self._index[self._sections[sec][1]] + 1 if sec else i + 1
+                end = self._index[self._sections[sec][1]] if sec else i
+                if end == b:
+                    return
+                i = end + 1
             else:
                 i = self._range(nxt)[0]  # GO TO
-                if i > b:  # a GO TO out of the performed range keeps running from there to the program's end
-                    b = len(self._paras) - 1
 
 
 # ------------------------------------------------------------------- helpers
@@ -1504,9 +1583,36 @@ def crt_qsort(a: list, cmp) -> None:
 
 
 
+class Lit(Decimal):
+    """A numeric literal that keeps how it was written: 012345 compared with text is "012345", leading zero and all."""
+
+    def __new__(cls, text: str):
+        obj = super().__new__(cls, text)
+        obj.text = text.lstrip("+")
+        return obj
+
+
 def _lit_text(d: Decimal) -> str:
-    """A numeric literal as written: 12.50 stays 12.50, -3 stays -3."""
-    return format(d, "f")
+    """A numeric literal as written: 12.50 stays 12.50, -3 stays -3, 007 stays 007."""
+    return getattr(d, "text", None) or format(d, "f")
+
+
+def _display_digits(spec, raw: bytes) -> str:
+    """The digits of a USAGE DISPLAY number as stored, for a MOVE to text: a separate sign is dropped, an overpunched
+    one is taken off its digit (one that is not a sign counts as 0), and P positions are zeros."""
+    text = raw.decode(ENC)
+    signed, sign, scale = spec[7], spec[8], spec[6]
+    if signed:
+        if sign == "leading_sep":
+            text = text[1:]
+        elif sign == "trailing_sep":
+            text = text[:-1]
+        elif text:
+            k = 0 if sign == "leading_over" else len(text) - 1
+            ch = text[k]
+            ch = str(NEG_DIGITS.index(ch)) if ch in NEG_DIGITS else ch if ch.isdigit() else "0"
+            text = text[:k] + ch + text[k + 1:]
+    return text + "0" * -scale if scale < 0 else text
 
 
 def _digits_text(value: Decimal, spec) -> str:

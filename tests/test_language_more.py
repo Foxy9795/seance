@@ -138,6 +138,19 @@ def test_translation_matches_gnucobol(tmp_path, label):
     assert result["stage"] == "match", result
 
 
+LANG = sorted((Path(__file__).resolve().parent / "data" / "lang").glob("*.cbl"))
+
+
+@needs_cobol
+@pytest.mark.parametrize("path", LANG, ids=[p.stem for p in LANG])
+def test_language_programs_match_gnucobol(tmp_path, path, monkeypatch):
+    """tests/data/lang: one program per group of features (SPECIAL-NAMES, CORRESPONDING, INITIALIZE, ...)."""
+    monkeypatch.delenv("COB_SWITCH_1", raising=False)
+    monkeypatch.delenv("COB_SWITCH_2", raising=False)
+    result = stress.run_one(path, "stp", tmp_path)
+    assert result["stage"] == "match", result
+
+
 def _fuzz(seed: int, deedit: bool, pics: int = 120, values: int = 8):
     rng = random.Random(seed)
     chosen, seen = [], set()

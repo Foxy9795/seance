@@ -123,6 +123,11 @@ class Names:
     items: dict[str, Item] = field(default_factory=dict)  # key -> item
     conds: dict[str, tuple] = field(default_factory=dict)  # condition key -> (item key, choices, FALSE value)
     cond_items: dict[str, list] = field(default_factory=dict)  # condition name -> [(item, item key, condition key)]
+    classes: dict[str, str] = field(default_factory=dict)  # SPECIAL-NAMES CLASS name -> the characters it allows
+    switch_conds: dict[str, tuple] = field(default_factory=dict)  # switch condition -> (switch number, ON STATUS?)
+    switch_names: dict[str, int] = field(default_factory=dict)  # switch mnemonic -> switch number
+    symbolic: dict[str, str] = field(default_factory=dict)  # SYMBOLIC CHARACTERS name -> the character
+    devices: dict[str, str] = field(default_factory=dict)  # mnemonic -> device
     indexes: dict[str, str] = field(default_factory=dict)  # index name -> table item key
     files: dict[str, object] = field(default_factory=dict)  # FD name -> FileDef
 
@@ -176,6 +181,10 @@ class Names:
 def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
     names = Names()
     names.comma = model.decimal_comma  # DECIMAL-POINT IS COMMA
+    sp = getattr(model, "special", None)
+    if sp is not None:
+        names.classes, names.switch_conds, names.switch_names = dict(sp.classes), dict(sp.switch_conds), dict(sp.switch_names)
+        names.symbolic, names.devices = dict(sp.symbolic), dict(sp.devices)
     records: dict[str, int] = {}
     for f in model.files:
         if not f.records:
@@ -184,11 +193,11 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
         records[buffer] = f.size
         names.files[f.name] = f
         for r in f.records:
-            for it in walk(r):
+            for it in [*walk(r), *r.renames]:  # level 66 RENAMES are names in the record too
                 names.add(it, buffer)
     for r in model.linkage_records:  # storage that belongs to the caller; CALL points it at the caller's data
         records[r.name] = max(r.size, 1)
-        for it in walk(r):
+        for it in [*walk(r), *r.renames]:  # level 66 RENAMES are names in the record too
             names.add(it, r.name)
     for r in model.ws_records:
         buffer = r.name
@@ -197,7 +206,7 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
             while buffer in names.by_name and names.by_name[buffer][0].record != buffer:
                 buffer = names.by_name[buffer][0].record
         records[buffer] = max(records.get(buffer, 0), r.size, 1)
-        for it in walk(r):
+        for it in [*walk(r), *r.renames]:  # level 66 RENAMES are names in the record too
             names.add(it, buffer)
     special = Item("RETURN-CODE", 1, kind="num", usage="binary", digits=9, signed=True, size=4)
     records["_SPECIAL"] = 10
@@ -367,6 +376,9 @@ class Parser:
     # -- literal and value operands
     def literal(self) -> str | None:
         tok = self.peek()
+        if tok.kind == "word" and tok.value in self.names.symbolic:
+            self.i += 1
+            return repr(self.names.symbolic[tok.value])
         if tok.kind == "word" and tok.value == "ALL" and self.peek(1).kind in ("str",):
             self.i += 2
             return f"ALL({self.t[self.i - 1].value!r})"
@@ -385,6 +397,8 @@ class Parser:
             return repr("".join(parts))
         if tok.kind == "num":
             self.i += 1
+            if re.fullmatch(r"0\d+", tok.value):  # 007 compared with text is "007": keep the zeros as written
+                return f'Lit("{tok.value}")'
             return f'D("{tok.value}")'
         if tok.kind == "op" and tok.value in "+-" and self.peek(1).kind == "num":
             self.i += 2
@@ -590,14 +604,39 @@ class Parser:
             return f"not ({self.cond_not()})"
         return self.cond_primary()
 
+    CLASS_WORDS = ("POSITIVE", "NEGATIVE", "ZERO", "NUMERIC", "ALPHABETIC", "ALPHABETIC-UPPER", "ALPHABETIC-LOWER")
+
+    def _continues_relation(self) -> bool:
+        """After an operand: does a relational operator or a class test follow (so the operand is a subject)?"""
+        k = 1 if self.word() == "IS" else 0
+        if self.word(k) == "NOT":
+            k += 1
+        return self.relop_ahead(k) or self.word(k) in self.CLASS_WORDS or self.word(k) in self.names.classes
+
     def cond_primary(self) -> str:
-        if self._last and (self.relop_ahead(0) or (self.word() == "NOT" and self.relop_ahead(1))):
-            subject = self._last[0]
+        k = 1 if self.word() == "IS" else 0
+        if self._last and (self.relop_ahead(k) or (self.word(k) == "NOT" and self.relop_ahead(k + 1))):
+            subject = self._last[0]  # A > B AND IS NOT LESS THAN C: the subject is A again
             op = self.relop()
             obj = self.comparand()
             self._last = (subject, op)
             return f'S.cmp({subject}, "{op}", {obj})'
         tok = self.peek()
+        if tok.kind == "word" and tok.value in self.names.switch_conds:
+            self.i += 1
+            n, on = self.names.switch_conds[tok.value]
+            return f"S.switch({n})" if on else f"not S.switch({n})"
+        if self._last and not (tok.kind == "word" and (tok.value in self.names.cond_items or tok.value in self.names.switch_conds)):
+            # A = 1 OR 2, A > B AND C, A = B OR -11 + D: an object alone takes the subject and operator before it
+            save = self.i
+            try:
+                obj = self.comparand()
+                if not self._continues_relation() and not (self.peek().kind == "op" and self.peek().value not in (")",)):
+                    subject, op = self._last
+                    return f'S.cmp({subject}, "{op}", {obj})'
+            except Unsupported:
+                pass
+            self.i = save
         if tok.kind == "word" and tok.value in self.names.cond_items:
             ck = self.cond_name()
             subs = ""
@@ -631,6 +670,11 @@ class Parser:
         self.accept("IS")
         negate = self.accept("NOT")
         cls = self.word()
+        if cls in self.names.classes or cls in ("ALPHABETIC-UPPER", "ALPHABETIC-LOWER"):
+            self.i += 1
+            chars = self.names.classes.get(cls) or ("ABCDEFGHIJKLMNOPQRSTUVWXYZ " if cls == "ALPHABETIC-UPPER" else "abcdefghijklmnopqrstuvwxyz ")
+            test = f"S.in_class({subject}, {chars!r})"
+            return f"not ({test})" if negate else test
         if cls in ("POSITIVE", "NEGATIVE", "ZERO", "NUMERIC", "ALPHABETIC"):
             self.i += 1
             num = f"S.n({subject})" if subject.startswith("S.r(") else subject
@@ -725,19 +769,84 @@ class Parser:
         return "[" + ", ".join(f"({r.target}, lambda: {e}, {rounded!r})" for r, e, rounded in items) + "]"
 
     # MOVE / INITIALIZE / SET ------------------------------------------------
+    def corresponding(self, a: RefX, b: RefX, numeric: bool) -> list[tuple[RefX, RefX]]:
+        """The CORRESPONDING pairs of two groups: same name, same groups in between, no FILLER, REDEFINES or OCCURS
+        on the way down. For MOVE one of each pair may be a group; for ADD and SUBTRACT both are numbers."""
+        def below(root):
+            def visit(it, path):
+                for c in it.children:
+                    if c.name.startswith("FILLER#") or c.redefines or c.occurs or c.level in (66, 88):
+                        continue
+                    p = path + (c.name,)
+                    yield p, c
+                    if c.children:
+                        yield from visit(c, p)
+            yield from visit(root, ())
+
+        if not a.item.children or not b.item.children:
+            raise Unsupported("CORRESPONDING needs two groups")
+        theirs = dict(below(b.item))
+        subs_a = a.py[len(f'S.r("{a.key}"'):-1] if not a.simple else ""
+        subs_b = b.py[len(f'S.r("{b.key}"'):-1] if not b.simple else ""
+        if ".sub(" in a.py or ".sub(" in b.py:
+            raise Unsupported("CORRESPONDING with reference modification")
+        pairs = []
+        for path, x in below(a.item):
+            y = theirs.get(path)
+            if y is None:
+                continue
+            if numeric:
+                if x.children or y.children or x.kind not in ("num", "edited") or y.kind not in ("num", "edited"):
+                    continue
+            elif x.children and y.children:
+                continue  # two groups: their own items pair up further down
+            kx, ky = self.names.key[id(x)], self.names.key[id(y)]
+            pairs.append((RefX(f'S.r("{kx}"{subs_a})', x, not subs_a, kx), RefX(f'S.r("{ky}"{subs_b})', y, not subs_b, ky)))
+        return pairs
+
     def s_MOVE(self, line, stop):
-        if self.word() in ("CORRESPONDING", "CORR"):
-            raise Unsupported("MOVE CORRESPONDING is not supported yet")
+        if self.accept("CORRESPONDING", "CORR"):
+            a = self.ref()
+            self.expect("TO")
+            outs = []
+            for r, _ in self.targets(allow_rounded=False):
+                outs += [f"S.move({x.py}, {y.target})" for x, y in self.corresponding(a, r, numeric=False)]
+            return self.code(line, "; ".join(outs) or "pass  # MOVE CORRESPONDING: no items correspond")
         src = self.value()
         self.expect("TO")
         names = [r.target for r, _ in self.targets(allow_rounded=False)]
         return self.code(line, f"S.move({src}, {', '.join(names)})")
 
+    INIT_CATEGORIES = ("ALPHABETIC", "ALPHANUMERIC", "NUMERIC", "ALPHANUMERIC-EDITED", "NUMERIC-EDITED", "NATIONAL", "NATIONAL-EDITED")
+
     def s_INITIALIZE(self, line, stop):
         names = [r.target for r, _ in self.targets(allow_rounded=False)]
-        if self.word() in ("REPLACING", "WITH", "ALL", "TO"):
-            raise Unsupported("INITIALIZE ... REPLACING is not supported yet")
-        return self.code(line, f"S.initialize({', '.join(names)})")
+        opts = []
+        if self.accept("WITH"):
+            self.expect("FILLER")
+            opts.append("filler=True")
+        if self.word() == "ALL" or (self.word() in self.INIT_CATEGORIES and self.word(1) == "TO"):
+            cat = self.take().value
+            self.expect("TO")
+            self.expect("VALUE")
+            opts.append(f"to_value={cat!r}")
+        self.accept("THEN")
+        if self.accept("REPLACING"):
+            reps = []
+            while self.word() in self.INIT_CATEGORIES:
+                cat = self.take().value
+                self.accept("DATA")
+                self.expect("BY")
+                reps.append(f"({cat!r}, {self.value()})")
+            if not reps:
+                raise Unsupported("expected a category after REPLACING")
+            opts.append(f"replacing=[{', '.join(reps)}]")
+        self.accept("THEN")
+        if self.word() == "TO" and self.word(1) == "DEFAULT":
+            self.i += 2
+            opts.append("default=True")
+        self.accept("END-INITIALIZE")
+        return self.code(line, f"S.initialize({', '.join(names + opts)})")
 
     def cond_name(self) -> str:
         """A condition name with its qualifiers (A OF REC), as the key the runtime knows it by."""
@@ -770,6 +879,16 @@ class Parser:
                 if self.names.conds[ck][2] is None:
                     raise Unsupported(f"SET {ck.split('@')[0]} TO FALSE: its 88 level has no FALSE value")
             return self.code(line, "; ".join(f'S.set_false("{ck}"{subs})' for ck, subs in calls))
+        if self.word() in self.names.switch_names:
+            calls = []
+            while self.word() in self.names.switch_names:
+                n = self.names.switch_names[self.take().value]
+                self.expect("TO")
+                on = self.accept("ON")
+                if not on:
+                    self.expect("OFF")
+                calls.append(f"S.set_switch({n}, {on})")
+            return self.code(line, "; ".join(calls))
         tgts = []
         while self.word() in self.names.indexes or self.is_data():
             if self.word() in self.names.indexes:
@@ -820,8 +939,14 @@ class Parser:
         return self.guarded(line, f"S.compute({self.specs(items)}, guarded={guarded})", on_err, not_err)
 
     def s_ADD(self, line, stop):
-        if self.word() in ("CORRESPONDING", "CORR"):
-            raise Unsupported("ADD CORRESPONDING is not supported yet")
+        if self.accept("CORRESPONDING", "CORR"):
+            a = self.ref()
+            self.expect("TO")
+            b, rounded = self.targets()[0]
+            items = [(y, f"{y.num} + {x.num}", rounded) for x, y in self.corresponding(a, b, numeric=True)]
+            if not items:
+                return self.code(line, "pass  # ADD CORRESPONDING: no items correspond")
+            return self._arith(line, stop, items, "END-ADD")
         total = " + ".join(self._operands({"TO", "GIVING"}))
         if self.accept("TO"):
             dests = self.targets()
@@ -836,8 +961,14 @@ class Parser:
         return self._arith(line, stop, items, "END-ADD")
 
     def s_SUBTRACT(self, line, stop):
-        if self.word() in ("CORRESPONDING", "CORR"):
-            raise Unsupported("SUBTRACT CORRESPONDING is not supported yet")
+        if self.accept("CORRESPONDING", "CORR"):
+            a = self.ref()
+            self.expect("FROM")
+            b, rounded = self.targets()[0]
+            items = [(y, f"{y.num} - {x.num}", rounded) for x, y in self.corresponding(a, b, numeric=True)]
+            if not items:
+                return self.code(line, "pass  # SUBTRACT CORRESPONDING: no items correspond")
+            return self._arith(line, stop, items, "END-SUBTRACT")
         total = " + ".join(self._operands({"FROM"}))
         self.expect("FROM")
         if self.is_data():
@@ -871,8 +1002,8 @@ class Parser:
         a = self.operand_num()
         remainder = None
         if self.accept("INTO"):
-            if self.is_data() and self.word(1) not in ("GIVING",) and not self.is_op("(", 1):
-                dests = self.targets()
+            if self.is_data():
+                dests = self.targets()  # DIVIDE A INTO B C: B and C get the quotients; with GIVING, B is the dividend
                 if self.accept("GIVING"):
                     dividend = dests[0][0].num
                     items = [(r, f"{dividend} / {a}", rd) for r, rd in self.targets()]
@@ -917,10 +1048,28 @@ class Parser:
         self.accept("END-IF")
         return Node("if", line, {"cond": cond, "then": then, "else": other})
 
+    def _subject(self):
+        """An EVALUATE subject: TRUE, FALSE, a value, or a condition (EVALUATE X NUMERIC WHEN TRUE)."""
+        if self.accept("TRUE"):
+            return None
+        if self.accept("FALSE"):
+            return "FALSE"
+        save = self.i
+        if not (self.peek().kind == "word" and self.peek().value in self.names.cond_items):
+            try:
+                v = self.comparand()
+                if not self._continues_relation():
+                    return v
+            except Unsupported:
+                pass
+        self.i = save
+        self._last = None
+        return ("cond", self.cond_or())
+
     def s_EVALUATE(self, line, stop):
-        subjects = [None if self.accept("TRUE") else ("FALSE" if self.accept("FALSE") else self.comparand())]
+        subjects = [self._subject()]
         while self.accept("ALSO"):
-            subjects.append(None if self.accept("TRUE") else ("FALSE" if self.accept("FALSE") else self.comparand()))
+            subjects.append(self._subject())
         branches = []
         while self.accept("WHEN"):
             if self.accept("OTHER"):
@@ -947,6 +1096,13 @@ class Parser:
         if subject == "FALSE":
             self._last = None
             return f"not ({self.cond_or()})"
+        if isinstance(subject, tuple):  # the subject is a condition: WHEN TRUE, WHEN FALSE or WHEN another condition
+            if self.accept("TRUE"):
+                return subject[1]
+            if self.accept("FALSE"):
+                return f"not ({subject[1]})"
+            self._last = None
+            return f"bool({subject[1]}) == bool({self.cond_or()})"
         negate = self.accept("NOT")
         lo = self.comparand()
         if self.accept("THRU", "THROUGH"):
@@ -996,7 +1152,8 @@ class Parser:
         if self.word() == "UNTIL" and self.word(1) == "EXIT":
             self.i += 2
             return ("forever",)
-        if self.accept("WITH"):
+        if self.word() == "TEST" or (self.word() == "WITH" and self.word(1) == "TEST"):
+            self.accept("WITH")  # WITH is optional: PERFORM P TEST AFTER UNTIL ...
             self.expect("TEST")
             after = self.accept("AFTER")
             if not after:
@@ -1411,6 +1568,7 @@ class Parser:
         while not self.at_boundary(stop):
             if self.accept("UPON"):
                 dev = self.take().value
+                dev = self.names.devices.get(dev, dev)
                 upon = "syserr" if dev in ("SYSERR", "STDERR") else "console"
                 continue
             if self.word() == "WITH" or (self.word() == "NO" and self.word(1) == "ADVANCING"):
@@ -1444,7 +1602,7 @@ class Parser:
                 source = "time"
             elif w == "DAY-OF-WEEK":
                 source = "day-of-week"
-            elif w in ("CONSOLE", "SYSIN", "STDIN"):
+            elif w in ("CONSOLE", "SYSIN", "STDIN", "SYSIPT") or self.names.devices.get(w) in ("CONSOLE", "SYSIN", "STDIN", "SYSIPT"):
                 source = "console"
             else:
                 raise Unsupported(f"ACCEPT FROM {w} is not supported yet")
@@ -1827,7 +1985,7 @@ def _data_literals(names: Names, records: dict[str, int], model: ProgramModel) -
     items, values, conds = [], [], []
     for key, it in names.items.items():
         spec = it.spec()
-        spec[11] = [names.key[id(c)] for c in it.children]
+        spec[11] = [names.key[id(c)] for c in it.children if not c.redefines]  # INITIALIZE leaves REDEFINES out
         items.append(f'    "{key}": {spec!r},')
         in_ws = it.record in {r.name for r in model.ws_records}
         if it.value is not None and in_ws:
@@ -1967,7 +2125,7 @@ def translate(program: str, root: Path = ROOT) -> Translation:
     code = (
         header
         + "\nfrom decimal import Decimal as D\n\n"
-        + "from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, NextSentence, Program, StopRun, run_cli\n\n"
+        + "from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, Lit, NextSentence, Program, StopRun, run_cli\n\n"
         + main["data"]
         + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={main['linkage']!r})\n"
         + ("S.comma = True  # DECIMAL-POINT IS COMMA: numbers are shown and read as 1.234,50\n" if model.decimal_comma else "")

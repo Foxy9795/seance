@@ -60,6 +60,9 @@ class Item:
     conds: list[tuple[str, list]] = field(default_factory=list)
     indexes: list[str] = field(default_factory=list)
     cond_false: dict = field(default_factory=dict)  # condition name -> the value SET ... TO FALSE moves (88 ... FALSE IS)
+    sign_clause: str = ""  # its own SIGN clause (leading_sep, trailing_over, ...), which items under a group inherit
+    usage_words: str = ""  # its own USAGE clause as written (COMP-3, BINARY, ...), which items under a group inherit
+    renames: list["Item"] = field(default_factory=list, repr=False)  # on an 01: its level 66 RENAMES items
 
     @property
     def is_table(self) -> bool:
@@ -92,8 +95,8 @@ def _separators(text: str) -> str:
             quote = "" if ch == quote else quote
         elif ch in "\"'":
             quote = ch
-        elif ch in ",;" and (i + 1 == len(text) or text[i + 1] in " \t"):
-            ch = " "
+        elif ch in ",;" and i + 1 < len(text) and text[i + 1] in " \t":
+            ch = " "  # (a comma that ends the entry, just before its period, belongs to the picture: PIC 9,9,)
         out.append(ch)
     return "".join(out)
 
@@ -118,7 +121,19 @@ def parse_literal(tok: str):
         return None
 
 
-def _numeric_from_pic(item: Item, p: str, tail: str) -> None:
+_USAGE = re.compile(r"\b(COMP(?:UTATIONAL)?(?:-[0-9X])?|BINARY(?:-(?:CHAR|SHORT|LONG|DOUBLE|INT))?|PACKED-DECIMAL|"
+                    r"FLOAT-(?:SHORT|LONG)|(?:SIGNED|UNSIGNED)-(?:CHAR|SHORT|LONG|DOUBLE|INT)|POINTER|"
+                    r"(?<![A-Z-])INDEX(?![A-Z-])|(?<=USAGE )DISPLAY|(?<=USAGE IS )DISPLAY)\b")
+_SIGN = re.compile(r"(?:\bSIGN\s+(?:IS\s+)?)?\b(LEADING|TRAILING)\b(\s+SEPARATE(?:\s+CHARACTER)?)?", re.I)
+
+
+def _sign_clause(text: str) -> str:
+    """leading_sep, leading_over, trailing_sep or trailing_over from a SIGN clause, or ""; literals are not looked at."""
+    sm = _SIGN.search(re.sub(r"\"(?:[^\"]|\"\")*\"|'(?:[^']|'')*'", " ", text))
+    return f"{sm.group(1).lower()}_{'sep' if sm.group(2) else 'over'}" if sm else ""
+
+
+def _numeric_from_pic(item: Item, p: str, tail: str, inherited: str = "") -> None:
     lead = re.fullmatch(r"(S?)V?(P+)(9+)", p)  # PPP99: the digits sit below the decimal point, after P zeros
     trail = re.fullmatch(r"(S?)(9+)(P+)V?", p)  # 999PP: the digits sit above P zeros
     m = re.fullmatch(r"(S?)(9*)(?:V(9*))?", p)
@@ -135,8 +150,7 @@ def _numeric_from_pic(item: Item, p: str, tail: str) -> None:
     else:
         raise LayoutError(f"{item.name}: the picture {p} is not supported yet.")
     if item.signed and item.usage == "display":
-        sm = re.search(r"(?:SIGN\s+(?:IS\s+)?)?\b(LEADING|TRAILING)\b(\s+SEPARATE(?:\s+CHARACTER)?)?", tail, re.I)
-        item.sign = "trailing_over" if not sm else f"{sm.group(1).lower()}_{'sep' if sm.group(2) else 'over'}"
+        item.sign = _sign_clause(tail) or inherited or "trailing_over"
     if item.usage == "display":
         item.size = item.digits + (1 if item.sign.endswith("_sep") else 0)
     elif item.usage == "packed":
@@ -149,6 +163,8 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
     """Level-numbered data descriptions -> 01 Items with children, offsets and sizes."""
     roots: list[Item] = []
     stack: list[Item] = []
+    needs_pic: list[tuple[Item, int]] = []
+    pending_renames: list[tuple] = []
     last: Item | None = None
     fillers = 0
     for line, text in entries:
@@ -180,7 +196,12 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             last.conds.append((name, choices))
             continue
         if level == 66:
-            raise LayoutError(f"line {line}: level 66 RENAMES is not supported yet.")
+            rn = re.match(r"RENAMES\s+([A-Z0-9-]+(?:\s+(?:OF|IN)\s+[A-Z0-9-]+)*)(?:\s+(?:THRU|THROUGH)\s+([A-Z0-9-]+(?:\s+(?:OF|IN)\s+[A-Z0-9-]+)*))?$",
+                          rest.upper())
+            if not rn or not roots:
+                raise LayoutError(f"line {line}: cannot read this RENAMES entry: {text[:70]!r}")
+            pending_renames.append((line, name, rn.group(1), rn.group(2), roots[-1]))
+            continue
         if level == 78:
             raise LayoutError(f"line {line}: level 78 constants are not supported yet.")
         if level == 77:
@@ -190,6 +211,15 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             name = f"FILLER#{line}-{fillers}"
         it = Item(name, level)
         upper = rest.upper()
+        it.sign_clause = _sign_clause(re.sub(r"\bPIC(?:TURE)?\s+(?:IS\s+)?\S+", " ", rest, flags=re.I))
+        inherited = next((s.sign_clause for s in reversed(stack) if s.level < level and s.sign_clause), "")
+        bare = re.sub(r"\"(?:[^\"]|\"\")*\"|'(?:[^']|'')*'", " ", upper)  # literals are not clauses
+        own = [m.group(1) for m in _USAGE.finditer(re.sub(r"\bINDEXED\s+BY\b.*", " ", bare))]
+        it.usage_words = " ".join(own)
+        if not own:  # USAGE on a group applies to every item under it that says none of its own
+            inherited_usage = next((s.usage_words for s in reversed(stack) if s.level < level and s.usage_words), "")
+            if inherited_usage:
+                upper = upper + " " + inherited_usage
         rm = re.search(r"\bREDEFINES\s+([A-Z0-9-]+)", upper)
         it.redefines = rm.group(1) if rm else None
         om = re.search(r"\bOCCURS\s+(\d+)(?:\s+TO\s+(\d+))?(?:\s+TIMES)?", upper)
@@ -227,8 +257,8 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             it.value_all = bool(vm.group(1))
         pm = re.search(r"\bPIC(?:TURE)?\s+(?:IS\s+)?(\S+)", rest, re.I)
         if pm and it.usage != "index":
-            p = expand_pic(pm.group(1).rstrip(".").rstrip(",;"))
-            tail = rest[pm.end():]
+            p = expand_pic(pm.group(1).rstrip(".").rstrip(";"))
+            tail = rest[:pm.start()] + " " + rest[pm.end():]  # SIGN may be written before the PIC too
             if re.fullmatch(r"[XA9]+", p) and re.search(r"[XA]", p):
                 it.kind, it.size, it.pic = "alpha", len(p), p
             elif alpha_edited_ok(p):  # alphanumeric-edited (XXBXX/XX): text with B, 0 and / inserted on a MOVE
@@ -237,7 +267,7 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
                 raise LayoutError(f"{name}: national (PIC N) fields are not supported yet.")
             elif re.fullmatch(r"S?[9PV]+", p) and "9" in p and p.count("V") <= 1:
                 it.pic = p
-                _numeric_from_pic(it, p, tail)
+                _numeric_from_pic(it, p, tail, inherited)
             elif edited_supported(p):
                 if it.usage != "display":
                     raise LayoutError(f"{name}: an edited picture must be USAGE DISPLAY.")
@@ -259,7 +289,7 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             it.signed = not re.search(r"\bUNSIGNED(?:-[A-Z]+)?\b", upper)
             it.size, it.pic = binary_size(digits), ("S" if it.signed else "") + "9" * digits
         elif it.usage in ("packed", "binary", "native") and not pm:
-            raise LayoutError(f"{name}: a {it.usage} item needs a PIC clause.")
+            needs_pic.append((it, line))  # unless it turns out to be a group with items under it
 
         while stack and stack[-1].level >= level:
             stack.pop()
@@ -274,9 +304,49 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             it.record = stack[0].record
         stack.append(it)
         last = it
+    for it, line in needs_pic:
+        if not it.children:
+            raise LayoutError(f"{it.name}: a {it.usage} item needs a PIC clause.")
     for r in roots:
         _place(r, 0)
+    for line, name, first, last_name, root in pending_renames:
+        root.renames.append(_renames(line, name, first, last_name, root))
     return roots
+
+
+def _renames(line: int, name: str, first: str, last_name: str | None, root: Item) -> Item:
+    def find(ref: str) -> Item:
+        parts = re.split(r"\s+(?:OF|IN)\s+", ref)
+        found = [it for it in walk(root) if it.name == parts[0] and all(q in _ancestor_names(it) for q in parts[1:])]
+        if len(found) != 1:
+            raise LayoutError(f"line {line}: RENAMES {ref}: {'no' if not found else 'more than one'} such item in {root.name}.")
+        if found[0].occurs or any(a.occurs for a in _ancestors(found[0])):
+            raise LayoutError(f"line {line}: RENAMES {ref}: an item in a table cannot be renamed.")
+        return found[0]
+
+    a = find(first)
+    it = Item(name, 66, record=root.record, offset=a.offset)
+    if last_name is None:
+        for attr in ("kind", "usage", "digits", "scale", "signed", "sign", "pic", "size", "justified", "blank_zero"):
+            setattr(it, attr, getattr(a, attr))
+        if it.kind == "group":
+            it.kind = "group"
+        return it
+    b = find(last_name)
+    end = max(b.offset + b.size, a.offset + a.size)
+    it.kind, it.size = "alpha", end - a.offset  # the bytes from the first item through the last, as text
+    return it
+
+
+def _ancestors(it: Item):
+    node = it.parent
+    while node is not None:
+        yield node
+        node = node.parent
+
+
+def _ancestor_names(it: Item) -> set[str]:
+    return {a.name for a in _ancestors(it)} | {it.record}
 
 
 def _place(it: Item, offset: int) -> int:

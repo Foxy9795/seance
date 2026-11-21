@@ -89,6 +89,7 @@ class ProgramModel:
     initial: bool = False  # PROGRAM-ID ... IS INITIAL: fresh storage on every CALL
     decimal_comma: bool = False  # SPECIAL-NAMES. DECIMAL-POINT IS COMMA: numbers are written 1.234,50
     currency: str = "$"  # SPECIAL-NAMES. CURRENCY SIGN IS "W": what edited fields show for the currency symbol
+    special: object = None  # SPECIAL-NAMES: switches, CLASS tests, SYMBOLIC CHARACTERS, devices (seance.special_names)
     compile_source: Path | None = None  # the whole file GnuCOBOL compiles, when the file holds several programs
     in_main: bool = False  # a program of that same file: compiled with the main program, not on its own
     subprograms: list["ProgramModel"] = field(default_factory=list)  # other programs in the folder, reached by CALL
@@ -486,6 +487,9 @@ def load_file(path: Path, program: str, shown: Path | None = None, include_dir: 
     model.notes += limit_notes(items)
     model.decimal_comma = any(re.search(r"\bDECIMAL-POINT\s+IS\s+COMMA\b", s, re.I) for _, s in items)
     from .precompile import currency_symbol, currency_text
+    from .special_names import from_sentences
+
+    model.special = from_sentences(items)
 
     sign = currency_text(" ".join(s for _, s in items))
     if sign and sign != "$":

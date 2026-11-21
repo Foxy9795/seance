@@ -58,6 +58,40 @@ def encode(spec, value) -> bytes:
     raise ValueError(f"cannot encode usage {usage}")
 
 
+def _display_raw(spec, text: str) -> str:
+    """DISPLAY of a USAGE DISPLAY number, as GnuCOBOL prints it (measured): the bytes as they are, not their value, so
+    a field holding junk shows the junk. The sign is read from where the PIC keeps it (an overpunch that is not a
+    sign counts as +0), a point goes where V is, a character right of the point that is not a digit shows as 0, and
+    B shows as a space."""
+    kind, usage, digits, scale, signed, sign = spec[0], spec[1], spec[2], spec[3], spec[4], spec[5]
+    body, neg = text, False
+    if signed:
+        if sign == "leading_sep":
+            neg, body = body[:1] == "-", body[1:]
+        elif sign == "trailing_sep":
+            neg, body = body[-1:] == "-", body[:-1]
+        elif body:
+            k = 0 if sign == "leading_over" else len(body) - 1
+            ch = body[k]
+            if ch in NEG_DIGITS:
+                neg, ch = True, str(NEG_DIGITS.index(ch))
+            elif not ch.isdigit():
+                ch = "0"
+            body = body[:k] + ch + body[k + 1:]
+    if scale < 0:
+        body = body + "0" * -scale
+    elif scale > len(body):
+        body = "." + body.rjust(scale, "0")
+    elif scale:
+        ints = len(body) - scale
+        body = body[:ints] + "." + "".join(c if c.isdigit() or c in ",+-/B" else "0" for c in body[ints:])
+    body = body.replace("B", " ")
+    if signed:
+        mark = "-" if neg else "+"
+        return body + mark if sign == "trailing_sep" else mark + body
+    return body
+
+
 def _lenient_display(text: str, digits: int, scale: int, signed: bool, sign: str) -> Decimal:
     """Read a DISPLAY number the way GnuCOBOL does even when the data is not clean (spaces, junk)."""
     neg = False
@@ -123,6 +157,8 @@ def display_text(spec, data: bytes) -> str:
         return float_text(struct.unpack("<f" if usage == "float" else "<d", bytes(data))[0], usage)
     if usage == "display" and spec[9] and not bytes(data).strip():  # BLANK WHEN ZERO holding zero: DISPLAY shows the spaces
         return data.decode(ENC)
+    if usage == "display":
+        return _display_raw(spec, data.decode(ENC))
     v = decode(spec, data)
     n = _scaled(v, scale)
     width = NATIVE_DIGITS.get(size, digits) if usage in ("native", "index") else digits
