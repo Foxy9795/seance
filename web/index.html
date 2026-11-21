@@ -568,6 +568,17 @@
   @media (max-width: 900px) { .h-hero { grid-template-columns: 1fr; padding: 22px 18px; } .h-hero h1 { font-size: 1.85rem; } .h-groups, .h-agent, .h-support { grid-template-columns: 1fr; } }
   @media (max-width: 560px) { .h-steps { grid-template-columns: 1fr; } .hp-cols > div + div { display: none; } .h-cta .btn { flex: 1 1 100%; justify-content: center; } }
   table.xref td:first-child { width: 120px; white-space: nowrap; } table.xref td:nth-child(2) { width: 104px; } table.xref td.mono { font-size: var(--code-fs); }
+
+/* 1.2.3: one smooth verified bar, no scroll chaining, no layout shift when a scrollbar appears */
+html { scrollbar-gutter: stable; }
+dialog, .dlg-body, .pal-list, .dd, .menu, .code, .scroll, .out, .graph, .rec-scroll, .h-code, textarea, .side-list { overscroll-behavior: contain; }
+body:has(dialog[open]) { overflow: hidden; }
+.vbar { gap: 0; }
+.vbar i { flex: 0 1 0; min-width: 0; transition: flex-grow .7s cubic-bezier(.3,.8,.3,1); }
+.vbar i + i { box-shadow: inset 2px 0 0 var(--sunk); }
+.vbar i.good { box-shadow: none; } .vbar i.good + i { box-shadow: inset 2px 0 0 var(--sunk); }
+@media (prefers-reduced-motion: reduce) { .vbar i { transition: none; } }
+body[data-samples="0"] .sample-only, body[data-samples="0"] [data-act="tour"], body[data-samples="0"] [data-act="samples"], body[data-samples="0"] .h-proof { display: none !important; }
 </style>
 </head>
 <body data-density="comfortable" data-motion="system" data-side="on">
@@ -1064,8 +1075,9 @@ function goTo(name, tab) {
   const t = tab || S.lastTab[name] || 'overview'; const h = `#/p/${enc(name)}/${t}`;
   if (location.hash !== h) location.hash = h; else route();
 }
-function enter(el) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
+function enter(el) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); clearTimeout(el._enterT); el._enterT = setTimeout(() => el.classList.remove('enter'), 700); }
 async function route() {
+  ['xrefDlg', 'recDlg'].forEach((id) => { const d = $(id); if (d?.open) d.close(); }); /* a page change closes the dialogs left over from the last page */
   const r = parseHash();
   if (r.view === 'prog' && !prog(r.name)) { if (S.programs.length || S.loaded) say(`There is no program named “${r.name}”.`, 'error'); location.replace('#/'); return; }
   if (r.view === 'port') {
@@ -1297,6 +1309,7 @@ async function ensureHomeData() {
   HOME.loading = true;
   try {
     const [cat, info] = await Promise.all([HOME.cat ? HOME.cat : api('/api/samples').catch(() => ({ samples: [], groups: [] })), HOME.info ? HOME.info : mcpInfo()]);
+  document.body.dataset.samples = String(cat.samples?.length || 0);
     HOME.cat = cat; HOME.info = info;
   } finally { HOME.loading = false; }
   if (S.view === 'work') renderHomeParts();
@@ -1312,7 +1325,7 @@ function heroHtml() {
       <p class="eyebrow">COBOL to Python, with proof</p>
       <h1 id="workTitle">Prove your COBOL migration is correct</h1>
       <p class="lede">Séance compiles your original COBOL with GnuCOBOL, writes Python for it, runs both on the same inputs and compares every byte they write. When they differ, it shows the smallest input that proves it.</p>
-      <div class="h-cta"><button class="btn primary lg" data-act="add">${ic('plus')}Add Program</button><button class="btn lg" data-try="check">${ic('play')}Try It On A Sample</button><button class="btn ghost lg" data-act="tour">${ic('compass')}Guided Tour</button></div>
+      <div class="h-cta"><button class="btn primary lg" data-act="add">${ic('plus')}Add Program</button><button class="btn lg sample-only" data-try="check">${ic('play')}Try It On A Sample</button><button class="btn ghost lg sample-only" data-act="tour">${ic('compass')}Guided Tour</button></div>
       <button class="h-drop" data-act="add">${ic('upload', 20)}<span><b>Drop your COBOL here, or anywhere on this page.</b> Programs (.cbl, .cob), copybooks (.cpy) and JCL jobs (.jcl). Bring the copybooks and the programs it CALLs along with it.</span></button>
     </div>
     <div class="h-proof" role="img" aria-label="Example of a finished check: the COBOL and the Python wrote identical lines">
@@ -1389,6 +1402,12 @@ async function loadSampleThen(name, btn) {
 }
 async function tryFeature(id, btn) {
   const f = allFeatures().find((x) => x.id === id); if (!f) return;
+  if (document.body.dataset.samples === '0') { /* no sample library: open the feature on one of your own programs */
+    if (f.route === 'assessment' && S.programs.length) { goAssessment(); return; }
+    const own = S.programs.find((p) => !p.error && (isJob(p) ? ['overview', 'code', 'analysis', 'check', 'data'].includes(f.tab || 'overview') : true));
+    if (!own) { say('Add a program first, then open this on it.'); openAdd(); return; }
+    goTo(own.name, f.tab || 'overview'); return;
+  }
   if (!(await loadSampleThen(f.sample, btn))) return;
   if (f.route === 'assessment') { goAssessment(); return; }
   goTo(f.sample, f.tab || 'overview');
@@ -1411,7 +1430,24 @@ document.addEventListener('change', async (e) => {
   HOME.mcp[e.target.id === 'mcpClient' ? 'client' : 'mode'] = e.target.value; HOME.info = await mcpInfo();
   $$('[data-home-part="agent"]').forEach((el) => { el.innerHTML = agentHtml(); }); $(e.target.id)?.focus();
 });
+function scrollParent(el) {
+  for (let n = el.parentElement; n; n = n.parentElement) { const o = getComputedStyle(n).overflowY; if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight) return n; }
+  return document.scrollingElement;
+}
+/* The verified bar: segments start at their old size and grow to the new one, so a re-render does not jump. */
+function vbarHtml(parts, label) {
+  const prev = S.vbarPrev || {}; S.vbarPrev = Object.fromEntries(parts);
+  return `<div class="vbar" role="img" aria-label="${label}">${parts.map(([c, n]) => `<i class="${c}" style="flex-grow:${prev[c] ?? n}" data-to="${n}"></i>`).join('')}</div>`;
+}
 function renderWork() {
+  const el = $('vWork'); const sc = scrollParent(el); const y = sc.scrollTop; const h = el.offsetHeight;
+  if (h) el.style.minHeight = h + 'px'; /* the page must not get shorter for a moment: that is what threw the view to the top */
+  try { renderWorkInner(); } finally {
+    sc.scrollTop = y;
+    requestAnimationFrame(() => { el.style.minHeight = ''; sc.scrollTop = y; requestAnimationFrame(() => el.querySelectorAll('.vbar i[data-to]').forEach((i) => { i.style.flexGrow = i.dataset.to; })); });
+  }
+}
+function renderWorkInner() {
   const el = $('vWork');
   if (!S.loaded) { el.innerHTML = skeleton(5); return; }
   const ps = S.programs;
@@ -1437,9 +1473,9 @@ function renderWork() {
   el.innerHTML = `
     <div class="page-head"><div><h1 id="workTitle">Workspace</h1><p class="lede">Each program is your original COBOL, the Python for it, and the evidence that the two behave the same.</p></div>
       <div class="row"><button class="btn" data-act="checkAll" ${ca ? 'disabled' : ''}>${ic('play')}Check All</button></div></div>
-    ${ca ? `<div class="panel body" style="margin-bottom:14px"><div class="row between"><span><span class="spin" aria-hidden="true"></span> &nbsp;Checking <b>${ca.done + 1}</b> of ${ca.total}: ${esc(ca.current)}</span><button class="btn sm" id="stopAll">Stop After This One</button></div><div class="progress" style="margin-top:10px"><i style="width:${Math.round(ca.done / ca.total * 100)}%"></i></div></div>` : ''}
+    ${ca ? `<div class="panel body" style="margin-bottom:14px"><div class="row between"><span><span class="spin" aria-hidden="true"></span> &nbsp;Checking <b>${ca.done + 1}</b> of ${ca.total}: ${esc(ca.current)}</span><button class="btn sm" id="stopAll">Stop After This One</button></div></div>` : ''}
     <div class="stats"><div><b>${ps.length}</b><span>${per(ps.length, 'Program', 'Programs')}</span></div><div><b class="good">${count('matched')}</b><span>Spirit matched</span></div><div><b class="${count('restless') ? 'bad' : ''}">${count('restless')}</b><span>Spirit restless</span></div><div><b>${count('new')}</b><span>Not checked</span></div><div><b>${lines.toLocaleString()}</b><span>Output lines compared</span></div><div><b>${cov.length ? Math.round(cov.reduce((a, c) => a + c, 0) / cov.length) + '%' : '–'}</b><span>Average coverage</span></div></div>
-    ${ps.length ? `<div class="vsum"><div class="vbar" role="img" aria-label="${count('matched')} of ${ps.length} verified">${[['good', count('matched')], ['bad', count('attention')], ['new', count('new')]].map(([c, n]) => (n ? `<i class="${c}" style="flex:${n}"></i>` : '')).join('')}</div><span class="sm muted"><b class="good">${count('matched')}</b> of ${plural(ps.length, 'program')} verified${count('attention') ? ` · <b class="bad">${count('attention')}</b> need attention` : ''}${count('new') ? ` · ${count('new')} not checked yet` : ''}</span></div>` : ''}
+    ${ps.length ? `<div class="vsum">${vbarHtml([['good', count('matched')], ['bad', count('attention')], ['new', count('new')]], `${count('matched')} of ${ps.length} verified`)}<span class="sm muted"><b class="good">${count('matched')}</b> of ${plural(ps.length, 'program')} verified${count('attention') ? ` · <b class="bad">${count('attention')}</b> need attention` : ''}${count('new') ? ` · ${count('new')} not checked yet` : ''}</span></div>` : ''}
     ${S.sel.size ? `<div class="selbar" role="region" aria-label="Selected programs"><span><b>${S.sel.size}</b> selected</span><span class="row"><button class="btn sm" data-act="selCheck">${ic('play', 14)}Run Checks</button><button class="btn danger sm" data-act="selDelete">${ic('trash', 14)}Delete</button><button class="btn ghost sm" data-act="selClear">Clear</button></span></div>` : ''}
     <div class="toolbar"><div class="chips" role="group" aria-label="Filter by result">${STATUS_FILTERS.map(([k, l]) => `<button class="chipbtn" data-filter="${k}" aria-pressed="${S.filter.status === k}">${l} <b>${count(k)}</b></button>`).join('')}</div>
       <div class="row"><div class="searchbox"><span aria-hidden="true">${ic('search', 15)}</span><input type="search" id="wsSearch" placeholder="Filter by name" aria-label="Filter programs" value="${esc(S.filter.q)}"></div>
@@ -1463,8 +1499,8 @@ function openRowMenu(btn) {
 }
 $('vWork').addEventListener('change', (e) => {
   const c = e.target.closest('[data-sel]');
-  if (c) { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); renderWork(); return; }
-  if (e.target.id === 'selAll') { const shown = sortList(S.programs.filter(inFilter)).map((p) => p.name); shown.forEach((n) => (e.target.checked ? S.sel.add(n) : S.sel.delete(n))); renderWork(); }
+  if (c) { const k = c.dataset.sel; c.checked ? S.sel.add(k) : S.sel.delete(k); renderWork(); $('vWork').querySelector(`[data-sel="${CSS.escape(k)}"]`)?.focus({ preventScroll: true }); return; }
+  if (e.target.id === 'selAll') { const shown = sortList(S.programs.filter(inFilter)).map((p) => p.name); shown.forEach((n) => (e.target.checked ? S.sel.add(n) : S.sel.delete(n))); renderWork(); $('selAll')?.focus({ preventScroll: true }); }
 });
 $('vWork').addEventListener('click', (e) => {
   const m = e.target.closest('[data-rowmenu]'); if (m) { e.preventDefault(); e.stopPropagation(); openRowMenu(m); return; }
@@ -1628,7 +1664,7 @@ async function renderCode() {
   el.innerHTML = `
     <div class="codebar"><button class="chipbtn" data-opt="wrap" aria-pressed="${!!prefs.wrap}">Wrap lines</button><button class="chipbtn" data-opt="coverage" aria-pressed="${!!prefs.coverage}" title="Mark COBOL lines that no saved run reaches">Coverage marks</button>
       <span class="row" style="gap:2px"><button class="icon-btn sm" data-fs="-0.5" aria-label="Smaller code text" title="Smaller text">A−</button><button class="icon-btn sm" data-fs="0.5" aria-label="Larger code text" title="Larger text">A+</button></span></div>
-    ${gaps.length ? `<div class="note bad" style="margin-bottom:12px"><b>${plural(gaps.length, 'statement')} need a person.</b> Each raises an error naming its COBOL line, so the check fails there instead of passing quietly: ${gaps.slice(0, 8).map((g) => `<a href="#" data-line="${g[1]}">line ${g[1]}</a>`).join(', ')}</div>` : ''}
+    ${gaps.length ? `<div class="note bad" style="margin-bottom:12px"><b>${plural(gaps.length, 'statement')} could not be translated.</b> Each stops the check at its COBOL line, so the check fails there instead of passing quietly: ${gaps.slice(0, 8).map((g) => `<a href="#" data-line="${g[1]}">line ${g[1]}</a>`).join(', ')}</div>` : ''}
     <div class="cols">
       <div class="panel"><div class="codehead"><div class="row"><h3>${job ? 'JCL' : 'COBOL'}</h3><select id="cobolFile" aria-label="Which program" ${Object.keys(files).length < 2 ? 'hidden' : ''}>${Object.keys(files).map((k) => `<option value="${esc(k)}">${k ? esc(k) + ' (called)' : esc(p.program_id || 'Main program')}</option>`).join('')}</select></div><div class="row"><span class="faint sm" id="cobolInfo"></span><button class="icon-btn sm" data-copy="cobol" aria-label="Copy the source" title="Copy">${ic('copy', 15)}</button></div></div><div class="code" id="cobolPane" tabindex="0" aria-label="${job ? 'JCL' : 'COBOL'} source"></div></div>
       <div class="panel"><div class="codehead"><h3>${job ? 'Python' : 'Python'}</h3><div class="row" id="pyTools"></div></div><div id="pyPane"></div></div>
@@ -1646,7 +1682,8 @@ async function renderCode() {
   const jump = (key, n) => {
     if (($('cobolPane').dataset.prog || '') !== (key || '')) { $('cobolFile').value = key || ''; paneCobol(key || ''); }
     $$('#cobolPane .hl').forEach((x) => x.classList.remove('hl'));
-    const line = $('c' + n); if (!line) return; line.classList.add('hl'); const pane = $('cobolPane'); pane.scrollTop = line.offsetTop - pane.clientHeight / 3;
+    const line = $('c' + n); if (!line) return; line.classList.add('hl'); const pane = $('cobolPane');
+    pane.scrollTop += line.getBoundingClientRect().top - pane.getBoundingClientRect().top - pane.clientHeight / 3; /* offsetTop is measured from the wrong parent here */
   };
   $('cobolFile').addEventListener('change', () => paneCobol($('cobolFile').value));
   $$('#pCode [data-line]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); jump('', +a.dataset.line); }));
@@ -1670,7 +1707,15 @@ async function renderCode() {
     $('pyPane').innerHTML = `<div class="code" tabindex="0" aria-label="Python source">${src.migrated.split('\n').map((l, i) => { const m = l.match(/#\s*(?:([A-Z0-9][A-Z0-9-]*)\s+)?L(\d+)\b/); const gap = /S\.unsupported\(/.test(l);
       return `<div class="ln${gap ? ' gap' : ''}${/^\s*#|^\s*"""/.test(l) ? ' cm' : ''}"${m ? ` data-cobol="${m[2]}" data-prog="${esc(m[1] || '')}" title="From ${m[1] ? esc(m[1]) + ' ' : ''}COBOL line ${m[2]}"` : ''}><i>${i + 1}</i>${esc(l) || ' '}</div>`; }).join('')}</div>`;
   }
-  $('pyPane').addEventListener('click', (e) => { const d = e.target.closest('[data-cobol]'); if (!d) return; $$('#pyPane .hl').forEach((x) => x.classList.remove('hl')); d.classList.add('hl'); jump(d.dataset.prog, +d.dataset.cobol); });
+  $('pyPane').addEventListener('click', (e) => {
+    let d = e.target.closest('.ln'); if (!d || !d.parentElement.classList.contains('code')) return;
+    if (!d.dataset.cobol) { /* a continuation line or a def line: the tag of the statement it belongs to, a few lines on or back */
+      const rows = [...d.parentElement.children]; const at = rows.indexOf(d);
+      d = rows.slice(at, at + 6).find((r) => r.dataset.cobol) || rows.slice(Math.max(0, at - 3), at).reverse().find((r) => r.dataset.cobol && r.classList.contains('cont')) || null;
+      if (!d) { say('This line is set-up (record layouts and tables), so it has no COBOL line.'); return; }
+    }
+    $$('#pyPane .hl').forEach((x) => x.classList.remove('hl')); d.classList.add('hl'); jump(d.dataset.prog, +d.dataset.cobol);
+  });
   el.onclick = (e) => {
     const o = e.target.closest('[data-opt]'); if (o) { const k = o.dataset.opt; setPref(k, !prefs[k]); o.setAttribute('aria-pressed', !!prefs[k]); return; }
     const f = e.target.closest('[data-fs]'); if (f) { setPref('codeSize', Math.min(18, Math.max(10, prefs.codeSize + +f.dataset.fs))); return; }
@@ -1771,12 +1816,12 @@ async function startGaps(name) {
     S.gaps.set(name + '|' + impl, r); if (r.strength) S.mutants.set(name + '|' + impl, r.strength);
     if (r.saved.length) { forget(name, ['sets']); await refreshProgram(name); }
     const n = (s) => r.results.filter((x) => x.status === s).length;
-    say(`${r.saved.length ? plural(r.saved.length, 'new test set') + ' saved. ' : ''}${n('equivalent') ? n('equivalent') + ' judged equivalent. ' : ''}${n('mismatch') ? n('mismatch') + ' real mismatch, needs human review. ' : ''}${n('open') + n('unreached') ? n('open') + n('unreached') + ' still open.' : ''}`.trim() || 'Nothing to fill.', n('mismatch') ? 'error' : 'ok');
+    say(`${r.saved.length ? plural(r.saved.length, 'new test set') + ' saved. ' : ''}${n('equivalent') ? n('equivalent') + ' judged equivalent. ' : ''}${n('mismatch') ? n('mismatch') + ' bug found: COBOL and Python differ on it. ' : ''}${n('open') + n('unreached') ? n('open') + n('unreached') + ' still open.' : ''}`.trim() || 'Nothing to fill.', n('mismatch') ? 'error' : 'ok');
   } catch (e) { say(e.message, 'error'); }
   S.running.delete(name); afterRunChange(name);
 }
 /* ================================================================ check tab */
-const GAP_TAG = { closed: ['good', 'Closed'], equivalent: ['amber', 'Likely equivalent'], mismatch: ['bad', 'Needs human review'], open: ['amber', 'Needs human review'], unreached: ['amber', 'Needs human review'] };
+const GAP_TAG = { closed: ['good', 'Closed'], equivalent: ['amber', 'Likely equivalent'], mismatch: ['bad', 'Bug found'], open: ['amber', 'Not reached'], unreached: ['amber', 'Not reached'] };
 function gapHtml(g) {
   const inputLines = (r) => Object.entries(r.inputs.inputs || {}).map(([f, rows]) => `${esc(f)}\n${rows.map((x) => '  ' + esc(x)).join('\n')}`).concat((r.inputs.stdin || []).length ? ['console\n' + r.inputs.stdin.map((x) => '  ' + esc(x)).join('\n')] : []).join('\n');
   return `<div class="body gaps"><h3>What the search found</h3>${g.results.map((r, i) => {
@@ -1984,7 +2029,7 @@ async function redraft(name) {
   const ok = await confirmBox({ title: 'Translate the COBOL again?', body: 'The COBOL is translated into new Python. Your current Python is kept next to it as a .bak file.', ok: 'Translate' }); if (!ok) return;
   try {
     const r = await send(`/api/programs/${enc(name)}/draft`, {}); forget(name, ['source', 'report']); await refreshProgram(name); if (S.name === name) showTab(S.tab);
-    say(r.translated ? `Translated. ${r.gaps.length ? plural(r.gaps.length, 'statement') + ' need a person.' : 'Every statement was translated.'}` : r.reason, r.translated ? 'ok' : 'error');
+    say(r.translated ? `Translated. ${r.gaps.length ? plural(r.gaps.length, 'statement') + ' could not be translated.' : 'Every statement was translated.'}` : r.reason, r.translated ? 'ok' : 'error');
   } catch (e) { say(e.message, 'error'); }
 }
 async function deleteProgram(name) {
@@ -2420,9 +2465,9 @@ function tourSteps(name) {
   return steps;
 }
 async function runTourCheck(name, impl, msg) {
-  tour.busy = true; renderTourCard(msg);
+  const tok = tour.token, at = tour.i; tour.busy = true; renderTourCard(msg);
   try { await startCheck(name, { impl, stay: true, quiet: true }); } catch (e) { say(e.message, 'error'); }
-  tour.busy = false; if (tour.on) nextStep();
+  tour.busy = false; if (tour.on && tok === tour.token && at === tour.i) nextStep(); /* not if the person skipped or moved on meanwhile */
 }
 function beginTour(name) {
   tour.on = true; tour.name = name; tour.i = 0; tour.steps = tourSteps(name); $('tour').hidden = false; setPref('guideSeen', true); showStep();
@@ -2445,14 +2490,16 @@ function renderTourCard(busyMsg) {
   (card.querySelector('.btn.primary') || card).focus({ preventScroll: true });
 }
 $('tcard').addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-t]'); if (!b || tour.busy) return; const k = b.dataset.t; const st = tour.steps[tour.i];
-  if (k === 'skip') endTour(false); else if (k === 'next') nextStep(); else if (k === 'back') { tour.i = Math.max(0, tour.i - 1); showStep(); }
-  else if (k.startsWith('x')) { const btn = st.buttons()[+k.slice(1)]; await btn.run(); }
+  const b = e.target.closest('[data-t]'); if (!b) return; const k = b.dataset.t; const st = tour.steps[tour.i];
+  if (k === 'skip') { endTour(false); return; } /* Skip works while a check is running too */
+  if (tour.busy || tour.lock) return;
+  if (k === 'next') nextStep(); else if (k === 'back') { tour.i = Math.max(0, tour.i - 1); showStep(); }
+  else if (k.startsWith('x')) { tour.lock = true; try { const btn = st.buttons()[+k.slice(1)]; await btn.run(); } finally { tour.lock = false; } }
 });
 async function nextStep() { const st = tour.steps[tour.i]; if (st?.after) st.after(); tour.i++; if (tour.i >= tour.steps.length) endTour(true); else showStep(); }
 function endTour(done) {
   const st = tour.steps[tour.i]; if (st?.after && done) st.after();
-  tour.on = false; tour.token++; $('tour').hidden = true; if (tour.name && S.impl[tour.name]) { const p = prog(tour.name); if (p) { S.impl[tour.name] = primary(p).module; if (S.name === tour.name) renderProgHeader(); } }
+  tour.on = false; tour.busy = false; tour.lock = false; tour.token++; $('tour').hidden = true; if (tour.name && S.impl[tour.name]) { const p = prog(tour.name); if (p) { S.impl[tour.name] = primary(p).module; if (S.name === tour.name) renderProgHeader(); } }
   setPref('guideSeen', true); if (!done) say('You can take the tour again from the Help menu.');
 }
 function positionTour() {
@@ -2491,6 +2538,7 @@ function countUp(root) {
 if (window.MutationObserver) new MutationObserver((ms) => { if (ms.every((m) => m.target.closest && m.target.closest('[data-cu]'))) return; clearTimeout(countUp.t); countUp.t = setTimeout(() => countUp(document.querySelector('main')), 40); }).observe(document.querySelector('main'), { childList: true, subtree: true });
 /* ================================================================ start */
 async function init() {
+  api('/api/samples').then((c) => { document.body.dataset.samples = String(c.samples?.length || 0); HOME.cat = HOME.cat || c; }).catch(() => { document.body.dataset.samples = '0'; });
   applyPrefs(); syncSide(); hydrateIcons(); $('logo').innerHTML = WISP('calm', 22);
   renderWork();
   try {

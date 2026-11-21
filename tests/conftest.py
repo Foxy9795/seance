@@ -3,8 +3,11 @@
 Only samples this run added are removed, and their compiled programs under build/ are kept so the next run starts fast.
 """
 
+import os
 import sys
 from pathlib import Path
+
+os.environ.setdefault("SEANCE_SAMPLES", "1")  # the tests use the sample library; the product leaves it off
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

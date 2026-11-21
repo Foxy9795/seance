@@ -66,7 +66,10 @@ def replay_sets(program: str, impl, model: ProgramModel, root=ROOT, coverage: di
 
     from .coverage import Tracer, summarize
 
+    from .report import source_sha
+
     sets, diffs = [], []
+    current = source_sha(program, root)
     tracer = Tracer(impl.__file__) if coverage is not None and getattr(impl, "__file__", None) else None
     for name in set_names(program, root):
         case, expected, meta = load_set(program, name, root)
@@ -78,6 +81,12 @@ def replay_sets(program: str, impl, model: ProgramModel, root=ROOT, coverage: di
                      "python_error": actual.error, "cobol_error": expected.error})
         for d in found[: max(0, SHOWN_DIFFS - len(diffs))]:
             diffs.append({"set": name, **d.to_dict()})
+        if meta.get("cobol_sha256") and current and meta["cobol_sha256"] != current:
+            # the answers on file came from other COBOL than the COBOL now in the folder: they prove nothing about it
+            sets[-1]["differing"] += 1
+            sets[-1]["stale"] = True
+            diffs.append({"set": name, **Diff("run", -1, "answers recorded from different COBOL",
+                                              "the COBOL changed since: run the real COBOL again (Test Data, Record Again)").to_dict()})
     if tracer is not None:
         limits = {}
         if model.source and model.source != model.path:
@@ -243,6 +252,7 @@ def verify(program: str, implementation: str | None = None, rounds: int = 40) ->
     if not report.sets:
         raise ValueError(f"No saved test sets for {program!r}. Run: python -m seance record {program}")
     report.random_runs, report.random_failure = random_check(program, impl, model, rounds)
+    report.review += [f"Note: {n}" for n in model.notes]  # what the model knows about this program (SQL, CICS, unseeded RANDOM ...)
     for s in report.sets:
         if s["differing"]:
             report.review.append(f"{s['label']}: {s['differing']} of {s['compared']} output lines differ")

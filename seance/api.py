@@ -48,6 +48,16 @@ async def _lifespan(_app):
 
 
 app = FastAPI(title="Séance", lifespan=_lifespan)
+
+
+@app.exception_handler(Exception)
+async def _unexpected(request: Request, exc: Exception):
+    """A failure nobody planned for still answers in JSON, with what went wrong, so the page can say it instead of
+    showing 'Internal Server Error'. The traceback goes to the server's log."""
+    import logging
+
+    logging.getLogger("seance").exception("unhandled error in %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": f"{type(exc).__name__}: {exc}"[:600]}, status_code=500)
 app.router.routes.append(Route("/mcp", endpoint=MCP_ENDPOINT))
 
 # Threat model: this app compiles and runs code you give it, so a hostile web page must not be able
@@ -307,6 +317,11 @@ def one_program(name: str):
 
 @app.get("/api/samples")
 def samples():
+    """The sample library, which is off in the product (a workspace starts empty): SEANCE_SAMPLES=1 turns it on."""
+    import os
+
+    if os.environ.get("SEANCE_SAMPLES") != "1":
+        return {"samples": [], "groups": []}
     from .samples import catalog
 
     return catalog()

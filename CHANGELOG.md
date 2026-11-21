@@ -3,6 +3,31 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.3] - 2026-11-22
+### Fixed (page)
+- One progress bar for Check All, drawn smoothly; re-drawing the workspace no longer replays the fade-in (the blink) or throws
+  the page to the top (select-all, row checkboxes); keyboard focus stays on the box that was clicked.
+- Scrolling inside Settings or any dialog or menu no longer scrolls the page behind; the page no longer shifts a few pixels when a
+  scrollbar appears; leaving a page closes a Where Used or Records dialog left open.
+- Skip Tour works while a check is running; a check started from a tour step cannot run twice or move the tour twice.
+- Clicking a Python line finds its COBOL line from continuation lines and `def` lines too, and scrolls the COBOL pane to it;
+  lines of generated record layouts say they have no COBOL line.
+- A server failure answers with what went wrong instead of "Internal Server Error".
+- "Needs human review" is gone: a difference the gap search finds is "Bug found", an unreached line is "Not reached".
+### Changed
+- The product starts with an empty workspace and no sample library (set SEANCE_SAMPLES=1 to bring it back); the hard-coded
+  example on the home page, the sample tour and the sample buttons are hidden without it. The feature cards open on your own program.
+### Fixed (proof and runtime, from the Antigravity review of 1.2)
+- A check no longer passes when the two sides stop with different file statuses, when a last line was left open (WITH NO
+  ADVANCING) on one side only, or when a form feed stands where a line end should be.
+- Saved runs record the hash of the COBOL they came from; a run recorded from other COBOL is reported as stale, not replayed as proof.
+- A program's own notes (SQL, CICS, unseeded RANDOM ...) appear in its report.
+- DIVIDE ... REMAINDER works from the quotient cut to the receiver's scale (never rounded), and ON SIZE ERROR guards the remainder.
+- A COMP-5 item overflows at the end of its bytes, so ON SIZE ERROR sees it.
+- HIGH-VALUE and LOW-VALUE follow the program collating sequence (measured); a table SORT keeps its COLLATING SEQUENCE phrase.
+- Paragraphs after END DECLARATIVES are not part of the last declarative; a COPY on a line whose identifiers contain EXEC is expanded;
+  HIGHEST/LOWEST-ALGEBRAIC counts PIC P positions; an exported package carries editing.py and intrinsics.py.
+
 ## [1.2.2] - 2026-11-22
 ### Added
 - LINAGE, LINAGE-COUNTER (qualified by file) and `WRITE ... AT END-OF-PAGE / NOT AT END-OF-PAGE`, following libcob's

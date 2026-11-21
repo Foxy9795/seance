@@ -428,6 +428,11 @@ class Program:
         return out
 
     # ---------------------------------------------------------- arithmetic
+    @staticmethod
+    def trunc(x, scale: int) -> Decimal:
+        """x cut (not rounded) to `scale` decimals: the quotient a REMAINDER is worked from."""
+        return Decimal(x).quantize(Decimal(1).scaleb(-scale), rounding="ROUND_DOWN")
+
     def compute(self, specs: list, guarded: bool = False) -> bool:
         """Evaluate every target first, then store. Returns False on a size error.
 
@@ -444,9 +449,13 @@ class Program:
                 error = True
                 continue
             spec = self.items[ref.name]
-            if spec[3] == "num":
-                digits = spec[5] if spec[4] not in ("native", "index") else 38
-                over = size_error(value, digits, spec[6], spec[7], rounded)
+            if spec[3] == "num" and spec[4] in ("native", "index"):
+                bits = 8 * spec[2]
+                lo, hi = (-(2 ** (bits - 1)), 2 ** (bits - 1) - 1) if spec[7] else (0, 2 ** bits - 1)
+                scaled = value.scaleb(spec[6]).to_integral_value(rounding="ROUND_HALF_UP" if rounded else "ROUND_DOWN")
+                over = not (lo <= scaled <= hi)
+            elif spec[3] == "num":
+                over = size_error(value, spec[5], spec[6], spec[7], rounded)
             elif spec[3] == "edited":
                 from .cobol_num import edited_digits, edited_has_sign
 
@@ -1308,8 +1317,11 @@ class Program:
         if "SORT-RETURN" in self.items:
             self.move(Decimal(0), "SORT-RETURN")
 
-    def sort_table(self, table: str, keys: list) -> None:
-        """SORT of an OCCURS table in storage: reorder its occurrences by the keys (stable)."""
+    def sort_table(self, table: str, keys: list, collating=...) -> None:
+        """SORT of an OCCURS table in storage: reorder its occurrences by the keys (stable). collating: the weights of the
+        COLLATING SEQUENCE phrase (None: native); left out, the program collating sequence."""
+        if collating is ...:
+            collating = self.collating
         from functools import cmp_to_key
 
         spec = self.items[self.resolve(table)]
@@ -1327,7 +1339,7 @@ class Program:
             raw = row[off:off + ks[2]]
             if ks[3] == "num":
                 return decode(self._cspec(ks), raw)
-            return raw.translate(self.collating) if self.collating is not None else raw
+            return raw.translate(collating) if collating is not None else raw
 
         def cmp(a, b):
             for ascending, name in shifted:

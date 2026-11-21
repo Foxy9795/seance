@@ -1009,10 +1009,15 @@ class Parser:
             raise Unsupported("expected operands")
         return out
 
-    def _arith(self, line, stop, items, end_word):
+    def _arith(self, line, stop, items, end_word, extra=None):
+        """extra: a second computation that goes with the first (the REMAINDER of a DIVIDE), guarded the same way."""
         on_err, not_err = self.size_phrases(stop, end_word)
         guarded = on_err is not None or not_err is not None
-        return self.guarded(line, f"S.compute({self.specs(items)}, guarded={guarded})", on_err, not_err)
+        call = f"S.compute({self.specs(items)}, guarded={guarded})"
+        if extra:
+            second = f"S.compute({self.specs(extra)}, guarded={guarded})"
+            call = f"all([{call}, {second}])" if guarded else f"{call}; {second}"  # both run; either one overflowing is a size error
+        return self.guarded(line, call, on_err, not_err)
 
     def s_ADD(self, line, stop):
         if self.accept("CORRESPONDING", "CORR"):
@@ -1103,15 +1108,8 @@ class Parser:
                 raise Unsupported("DIVIDE ... REMAINDER needs GIVING")
             rem = self.ref()
             q = items[0][0]
-            remainder = (rem, f"{dividend} - {q.num} * {divisor}")
-        node = self._arith(line, stop, items, "END-DIVIDE")
-        if remainder:
-            extra = f"S.compute([({remainder[0].target}, lambda: {remainder[1]}, False)])"
-            if node.kind == "code":
-                node.data["py"] += f"; {extra}"
-            else:
-                node.data["not_err"] = node.data["not_err"] + [self.code(line, extra)]
-        return node
+            remainder = [(rem, f"{dividend} - S.trunc({dividend} / {divisor}, {q.item.scale}) * {divisor}", False)]
+        return self._arith(line, stop, items, "END-DIVIDE", remainder)
 
     # control flow ------------------------------------------------------------
     def s_IF(self, line, stop):
@@ -1593,7 +1591,7 @@ class Parser:
         if target not in self.names.files:
             if target in self.names.by_name:  # SORT of a table in WORKING-STORAGE
                 key = self.names.key[id(self.names.resolve(target, []))]
-                return self.code(line, f'S.sort_table("{key}", [{", ".join(keys)}])')
+                return self.code(line, f'S.sort_table("{key}", [{", ".join(keys)}]' + (f", collating={collating})" if collating is not None else ")"))
             raise Unsupported(f"SORT of unknown file {target}")
         using = giving = inp = outp = None
         if self.accept("USING"):
@@ -1922,6 +1920,7 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
             continue
         if vals[:2] == ["END", "DECLARATIVES"]:
             in_decl = False
+            section, current = None, "(start)"  # what follows belongs to no declarative section, and runs from the start
             continue
         if in_decl and vals[0] == "USE":
             if section and "DEBUGGING" in vals:
@@ -2239,6 +2238,18 @@ def _unit(model: ProgramModel, tag: str) -> dict:
             "gaps": em.unsupported, "count": em.count, "linkage": linkage, "decls": decls}
 
 
+def _collating_figs(model: ProgramModel) -> str:
+    """With a PROGRAM COLLATING SEQUENCE, HIGH-VALUE is the character that sorts last in it and LOW-VALUE the one that sorts first
+    (measured on GnuCOBOL 3.1.2: with ALPHABET X"FF" X"00" "B" "A", HIGH-VALUE is X"FE" and LOW-VALUE is X"FF")."""
+    sp = getattr(model, "special", None)
+    table = sp.collating() if sp is not None else None
+    if table is None:
+        return ""
+    hi = max(range(256), key=lambda c: (table[c], c))
+    lo = min(range(256), key=lambda c: (table[c], -c))
+    return f'HIGH = ZERO.__class__("HIGH", chr({hi}))\nLOW = ZERO.__class__("LOW", chr({lo}))\n'
+
+
 def _collating_line(model: ProgramModel) -> str:
     """S.collating for a program with a PROGRAM COLLATING SEQUENCE that is not the native order."""
     sp = getattr(model, "special", None)
@@ -2270,7 +2281,7 @@ def translate(program: str, root: Path = ROOT) -> Translation:
             gaps.append({**g, "text": f"{sub.program_id}: {g['text']}"})
         count += u["count"]
         fn = "_program_" + re.sub(r"[^a-z0-9_]", "_", sub.program_id.lower())
-        body = (u["data"]
+        body = (_collating_figs(sub) + u["data"]
                 + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={u['linkage']!r}, initial={sub.initial})\n"
                 + _collating_line(sub) + "\n\n"
                 + "\n\n".join(u["funcs"])
@@ -2298,7 +2309,7 @@ def translate(program: str, root: Path = ROOT) -> Translation:
         header
         + "\nfrom decimal import Decimal as D\n\n"
         + "from seance.rt import ALL, F, HIGH, IO, LOW, QUOTE, SPACE, ZERO, GoBack, Lit, NextSentence, Program, StopRun, run_cli\n\n"
-        + main["data"]
+        + _collating_figs(model) + main["data"]
         + f"\nS = Program(ITEMS, RECORDS, VALUES, CONDITIONS, FILES, INDEXES, linkage={main['linkage']!r})\n"
         + ("S.comma = True  # DECIMAL-POINT IS COMMA: numbers are shown and read as 1.234,50\n" if model.decimal_comma else "")
         + (f"S.currency = {model.currency!r}  # CURRENCY SIGN: edited fields show it where the picture has $\n"

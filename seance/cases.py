@@ -212,6 +212,8 @@ def _units(f: FileDef | None, data: bytes) -> list[bytes]:
         rows = re.split(rb"\n", text)
         if rows and rows[-1] == b"":
             rows.pop()
+        elif rows and text:
+            rows[-1] += b"[no line end]"  # the last line was left open: the other side must leave it open too
         return rows
     size = f.size or len(data) or 1
     return [data[i:i + size] for i in range(0, len(data), size)]
@@ -224,8 +226,14 @@ def _record_units(f: FileDef, data: bytes) -> list[bytes]:
         return _units(f, data)
     size = f.size or 1
     out = []
-    for piece in re.split(rb"[\n\f]", data):
-        out += [piece[i:i + size] for i in range(0, len(piece), size)] or [b""]
+    parts = re.split(rb"([\n\f])", data)
+    for k in range(0, len(parts), 2):
+        piece = parts[k]
+        page = k > 0 and parts[k - 1] == b"\f"  # a page break stays visible: it starts the next record with a mark
+        chunks = [piece[i:i + size] for i in range(0, len(piece), size)] or [b""]
+        if page:
+            chunks[0] = b"\f" + chunks[0]
+        out += chunks
     while out and out[-1] == b"":
         out.pop()
     return out
@@ -267,6 +275,11 @@ def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 
         # (ZeroDivisionError, KeyError, NotImplementedError ...) is the Python crashing where the COBOL stopped in an orderly way.
         if not actual.error.startswith("CobolError"):
             diffs.append(Diff("run", -1, expected.error, actual.error))
+        else:
+            # the status a file error carries is part of the stop: libcob says "(status = 35)", the runtime says the same
+            e_code, a_code = (re.search(r"status\s*=\s*(\d\d)", m) for m in (expected.error, actual.error))
+            if e_code and a_code and e_code.group(1) != a_code.group(1):
+                diffs.append(Diff("run", -1, expected.error, actual.error))
     elif expected.return_code != actual.return_code:
         diffs.append(Diff("run", -1, f"return code {expected.return_code}", f"return code {actual.return_code}"))
     streams = sorted(set(expected.outputs) | set(actual.outputs))
@@ -688,6 +701,9 @@ def save_set(program: str, name: str, case: Case, result: Result, label: str, ro
         (d / fn).write_bytes(data)
         meta["outputs"][assign] = fn
     (d / "console.txt").write_text(result.stdout, encoding="utf-8")
+    from .report import source_sha
+
+    meta["cobol_sha256"] = source_sha(program, root)  # the COBOL these answers came from: a later check refuses them for other COBOL
     (d / "set.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 

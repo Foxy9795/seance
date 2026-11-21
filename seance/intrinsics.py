@@ -327,6 +327,8 @@ class Result:
 def _r_dec(d: Dec) -> Result:
     if d.nan:
         return Result("uint", n=0, error=True)
+    if d.s < 0:  # 999PP: the P positions are zeros in the number, not a negative scale in the field
+        d = Dec(d.v * 10 ** -d.s, 0)
     return Result("dec", dec=d)
 
 

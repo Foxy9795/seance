@@ -14,7 +14,7 @@ from .cases import text_only
 from .cases import text_only
 from .recorder import ROOT, get_model
 
-RUNTIME_FILES = ("rt.py", "codec.py", "cobol_num.py")
+RUNTIME_FILES = ("rt.py", "codec.py", "cobol_num.py", "editing.py", "intrinsics.py")  # everything rt.py imports
 
 RUNNER = '''"""Run the migrated {pid} program the way the COBOL batch job ran.
 

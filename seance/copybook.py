@@ -485,7 +485,7 @@ class _Pass:
             if not self.cond.active:
                 i += 1
                 continue
-            if self.in_exec or "EXEC" in _fold(ln.text):
+            if self.in_exec or _EXEC.search(_fold(_LIT.sub(" ", ln.text))):  # the word EXEC, not EXEC-COUNT
                 # inside EXEC SQL ... END-EXEC nothing is COPY or REPLACE: EXEC SQL INCLUDE and the SQL REPLACE
                 # function are the SQL precompiler's
                 marks = _EXEC.findall(_fold(_LIT.sub(" ", ln.text)))
