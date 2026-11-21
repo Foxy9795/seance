@@ -742,14 +742,17 @@ class Program:
     def _file_of(self, record: str) -> tuple[FileState, str]:
         key = self.resolve(record)
         buffer = self.items[key][0]
-        f = next((x for x in self.files.values() if x.record == buffer), None)
+        owners = [x for x in self.files.values() if x.record == buffer]
+        # SAME RECORD AREA: several files share the buffer; the record's own FD says which file it is
+        f = next((x for x in owners if key in x.extra.get("records", ())), owners[0] if owners else None)
         if f is None:
             raise CobolError(f"{record}: no file has this record")
         return f, key
 
-    def write(self, record: str, src=None, advancing=None, phrase: bool = False) -> bool:
-        """WRITE. advancing: None, ("before" | "after", n) or ("before" | "after", "page"). False on INVALID KEY."""
-        f, record = self._file_of(record)
+    def write(self, record: str, src=None, advancing=None, phrase: bool = False, file: str | None = None) -> bool:
+        """WRITE. advancing: None, ("before" | "after", n) or ("before" | "after", "page"). False on INVALID KEY.
+        file: the file to write, when the record area is shared (SORT ... GIVING writes each output file)."""
+        f, record = (self.files[file], self.resolve(record)) if file else self._file_of(record)
         if src is not None:
             self.move(src, record)
         if f.organization in ("indexed", "relative"):
@@ -1103,7 +1106,7 @@ class Program:
                 self.open(name, "output")
                 for rec in records:
                     self.mem[gf.record][0:gf.size] = rec[:gf.size].ljust(gf.size, b" ")
-                    self.write(gf.record)
+                    self.write(gf.record, file=name)
                 self.close(name)
         else:
             f.returning = list(records)

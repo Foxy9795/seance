@@ -555,13 +555,12 @@ def precompile_folder(src_dir: Path, main: str, out_dir: Path) -> Result:
 
 def _data_items(path: Path, fixed: bool) -> dict:
     """Data items by name, from the program and its copybooks (procedure SQL blanked out)."""
-    from .cobol_src import normalize, sentences
     from .layout import parse_entries, walk
-    from .model import _inline_copies
+    from .model import code_sentences, copy_dirs
 
     text = path.read_text(encoding="utf-8", errors="replace")
     text = _EXEC.sub(lambda m: " " * len(m.group(0)), _code_text(text, fixed))
-    items = _inline_copies(sentences(normalize(text, fixed)), path.parent)
+    items = code_sentences(path, fixed, copy_dirs(path.parent), text)
     entries, section = [], ""
     for line, s in items:
         up = s.upper().strip()

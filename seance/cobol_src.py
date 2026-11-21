@@ -27,11 +27,48 @@ def detect_fixed(text: str) -> bool:
     return bool(sample) and fixedish >= max(1, int(0.8 * len(sample))) and all(len(l) < 7 or l[6] in " *-/D" for l in sample)
 
 
-def normalize(text: str, fixed: bool | None = None) -> list[Line]:
-    """Return code and comment lines. Fixed format: columns 1-6 and 73+ are ignored, column 7 is the indicator."""
+def normalize(text: str, fixed: bool | None = None, copy_dirs: list | None = None) -> list[Line]:
+    """Return code and comment lines. Fixed format: columns 1-6 and 73+ are ignored, column 7 is the indicator.
+    copy_dirs: where COPY looks for copybooks. Given, every COPY statement is replaced by its copybook's text, as
+    the compiler reads it; left out, COPY statements stay as written. REPLACE is always done (seance.copybook)."""
+    from .copybook import expand
+    from .precompile import apply
+
     fixed = detect_fixed(text) if fixed is None else fixed
     debugging = bool(re.search(r"WITH\s+DEBUGGING\s+MODE", text, re.I))
+    out = expand(read_lines(text, fixed, debugging), list(copy_dirs) if copy_dirs is not None else None, debugging)
+    return apply(out, Line, debugging)[0]
+
+
+_ENTRY = re.compile(r"(AUTHOR|DATE-WRITTEN|DATE-MODIFIED|DATE-COMPILED|INSTALLATION|REMARKS|SECURITY)(?![A-Za-z0-9_-])", re.I)
+_DIVISION = re.compile(r"(?<![A-Za-z0-9_-])(?:(ID|IDENTIFICATION)[ ,;]+DIVISION|(PROGRAM-ID)|DIVISION|SECTION)(?![A-Za-z0-9_-])", re.I)
+_LITERALS = re.compile(r"\"[^\"]*\"|'[^']*'")
+
+
+def read_lines(text: str, fixed: bool, debugging: bool, entries: bool = True) -> list[Line]:
+    """The code and comment lines of one file, before COPY and the compiler directives: continuation lines joined,
+    debugging lines kept only WITH DEBUGGING MODE, inline comments cut, and the comment entries of the
+    IDENTIFICATION DIVISION (AUTHOR. and the like, to the next line with something in area A) left out as cobc
+    leaves them out: even a COPY there is not read. entries: whether the file may start with them (not a copybook)."""
     out: list[Line] = []
+    allowed, within = entries, False
+
+    def comment_entry(code: str, area_a_blank: bool) -> bool:
+        """cobc's ppinput: a line that starts AUTHOR, SECURITY ... while comments are allowed is skipped, and in
+        fixed format so is every line after it with columns 8-11 blank. ID DIVISION and PROGRAM-ID allow them,
+        any other DIVISION or SECTION ends that."""
+        nonlocal allowed, within
+        if within:
+            if area_a_blank:
+                return True
+            within = False
+        if allowed and _ENTRY.match(code.lstrip()):
+            within = fixed
+            return True
+        for m in _DIVISION.finditer(_LITERALS.sub(" ", code)):
+            allowed = bool(m.group(1) or m.group(2))
+        return False
+
     # the last code line as written out to column 72, while a literal on it is still open: a continued literal keeps
     # every character up to column 72, trailing spaces included, which the stripped text of the line has lost
     open_tail: str | None = None
@@ -67,7 +104,7 @@ def normalize(text: str, fixed: bool | None = None) -> list[Line]:
                     else:
                         # a continued word or number: the first character of the line follows the last one before it
                         joined = prev.text.rstrip() + full[first:]
-                    open_tail = joined if _open_quote(joined) else None
+                    open_tail = joined if _open_quote(joined, len(joined) - 1) else None
                     out[at] = Line(prev.number, joined if open_tail is not None else _strip_inline_comment(joined).rstrip())
                 continue
             elif indicator in "dD":
@@ -77,9 +114,9 @@ def normalize(text: str, fixed: bool | None = None) -> list[Line]:
                 continue
             elif body.strip():
                 code = _strip_inline_comment(body)  # GnuCOBOL accepts *> after column 7 in fixed format too
-                if code.strip():
+                if code.strip() and not comment_entry(code, not body[:4].strip()):
                     out.append(Line(i, code.rstrip()))
-                    open_tail = body.ljust(65) if code == body and _open_quote(body) else None
+                    open_tail = body.ljust(65) if code == body and _open_quote(body.ljust(65), 64) else None
                 continue
         else:
             stripped = raw.strip()
@@ -87,11 +124,9 @@ def normalize(text: str, fixed: bool | None = None) -> list[Line]:
                 out.append(Line(i, stripped[2:].strip(), True))
                 continue
             code = _strip_inline_comment(raw)
-            if code.strip():
+            if code.strip() and not comment_entry(code, False):
                 out.append(Line(i, code.rstrip()))
-    from .precompile import apply
-
-    return apply(out, Line, debugging)[0]
+    return out
 
 
 _PROGRAM_ID = re.compile(r"^(?P<head>\s*PROGRAM-ID\.?\s+['\"]?[A-Za-z0-9-]+['\"]?)(?P<tail>\s*)$", re.I)
@@ -125,8 +160,10 @@ def source_fixes(text: str, fixed: bool) -> tuple[str, list[str]]:
     return "".join(out), notes
 
 
-def _open_quote(text: str) -> bool:
-    """Whether a literal is still open at the end of the text (a doubled quote inside a literal is one quote)."""
+def _open_quote(text: str, last: int | None = None) -> bool:
+    """Whether a literal is still open at the end of the text (a doubled quote inside a literal is one quote).
+    last: the index of column 72. A literal that closes exactly there stays open, as cobc reads it: its quote may
+    be the first of a doubled quote that a continuation line starting with two quotes completes."""
     quote = ""
     i = 0
     while i < len(text):
@@ -136,6 +173,8 @@ def _open_quote(text: str) -> bool:
                 if text[i + 1:i + 2] == quote:
                     i += 2
                     continue
+                if i == last:
+                    return True
                 quote = ""
         elif ch in "\"'":
             quote = ch

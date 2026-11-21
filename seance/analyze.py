@@ -497,12 +497,13 @@ def _decisions(masked: str) -> int:
 
 def _unit_analysis(model: ProgramModel, path: Path, fixed: bool, program_id: str, label: str, subs_ids: set[str]) -> dict:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
-    lines = normalize(text, fixed)
+    own = normalize(text, fixed)  # the file as written, for its size
+    lines = normalize(text, fixed, model.copy_dirs or None) if model.copy_dirs else own  # what cobc reads: COPY expanded
     raw_lines = text.splitlines()
     start = next((i for i, l in enumerate(lines) if not l.comment and l.text.strip().upper().startswith("PROCEDURE DIVISION")), None)
     blank = sum(1 for l in raw_lines if not l.strip())
-    comment = sum(1 for l in lines if l.comment and l.text.strip())
-    code = [l for l in lines if not l.comment and l.text.strip()]
+    comment = sum(1 for l in own if l.comment and l.text.strip())
+    code = [l for l in own if not l.comment and l.text.strip()]
     metrics = {"lines": len(raw_lines), "code": len(code), "comments": comment, "blank": blank}
     if start is None:
         return {"name": label, "program_id": program_id, "file": path.name, "metrics": metrics, "paragraphs": [], "edges": [], "rules": [], "dictionary": [], "lineage": [], "calls": [], "error": "no PROCEDURE DIVISION"}

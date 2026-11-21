@@ -149,6 +149,11 @@ def run_one(cob: Path, name: str, root: Path) -> dict:
     if name[:2].upper() == "SM":
         for c in (HOME / "copy").glob("*"):
             (src / c.name).write_text(c.read_text(encoding="latin-1"), encoding="latin-1")
+        # COPY ALTLB IN "../copyalt" (SM207A): the second library sits beside the program's folder, as in the suite
+        alt = root / "legacy" / "copyalt"
+        alt.mkdir(parents=True, exist_ok=True)
+        for c in (HOME / "copyalt").glob("*"):
+            (alt / c.name).write_text(c.read_text(encoding="latin-1"), encoding="latin-1")
     for sub in (cob.parent / "lib").glob("*.CBL") if name[:2].upper() == "IC" else []:
         (src / sub.name.lower()).write_text(sub.read_text(encoding="latin-1"), encoding="latin-1")
     stdin = []

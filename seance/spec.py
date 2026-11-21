@@ -292,7 +292,7 @@ def generate_spec(program: str, root: Path = ROOT) -> Spec:
     except ModelError as exc:
         raise ValueError(str(exc)) from exc
     text = model.path.read_text(encoding="utf-8", errors="replace")
-    lines = normalize(text, model.fixed)
+    lines = normalize(text, model.fixed, model.copy_dirs or None)
     start = next((i for i, l in enumerate(lines) if not l.comment and l.text.strip().upper().startswith("PROCEDURE DIVISION")), None)
     if start is None:
         raise ValueError(f"{model.path.name}: no PROCEDURE DIVISION")

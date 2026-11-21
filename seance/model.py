@@ -10,7 +10,20 @@ from .cobol_src import detect_fixed, normalize, sentences, source_fixes
 from .layout import Item, LayoutError, leaves, parse_entries, walk
 
 ROOT = Path(__file__).resolve().parent.parent
-COPY_EXTENSIONS = (".cpy", ".CPY", ".cbl", ".CBL", ".cob", ".COB", ".copy", ".COPY", "")
+# GnuCOBOL's own copybooks (screenio.cpy and the like), which cobc finds after the program's folder
+GNUCOBOL_COPY = ROOT / "tools" / "gnucobol" / "gnucobol-3.1.2-windows-mingw-x64" / "share" / "gnucobol" / "copy"
+
+
+def copy_dirs(*folders: Path) -> list[Path]:
+    """Where COPY looks, in cobc's order: the folders given (as -I), then GnuCOBOL's copy folder."""
+    import os
+
+    out = [Path(f) for f in folders]
+    extra = os.environ.get("COB_COPY_DIR")
+    for d in ([Path(extra)] if extra else []) + [GNUCOBOL_COPY]:
+        if d.is_dir() and d not in out:
+            out.append(d)
+    return out
 
 
 class ModelError(ValueError):
@@ -33,6 +46,7 @@ class FileDef:
     optional: bool = False
     raw_assign: str = ""  # the name as written (UT-S-REPORT), which GnuCOBOL also looks up
     contains: tuple[int, int] | None = None  # RECORD CONTAINS / IS VARYING: (smallest, largest) record
+    same_record: int = 0  # I-O-CONTROL SAME RECORD AREA: files with the same number share one record area
 
     @property
     def variable(self) -> bool:
@@ -94,6 +108,7 @@ class ProgramModel:
     in_main: bool = False  # a program of that same file: compiled with the main program, not on its own
     subprograms: list["ProgramModel"] = field(default_factory=list)  # other programs in the folder, reached by CALL
     calls: list[str] = field(default_factory=list)  # program names CALLed with a literal
+    copy_dirs: list[Path] = field(default_factory=list)  # where its COPY statements found their copybooks
 
     def _every(self) -> list["ProgramModel"]:
         return [self] + [m for sub in self.subprograms for m in sub._every()]
@@ -140,32 +155,25 @@ class ProgramModel:
         return ", ".join(parts) or "no files"
 
 
-def _inline_copies(items: list[tuple[int, str]], include_dir: Path, depth: int = 0) -> list[tuple[int, str]]:
-    out: list[tuple[int, str]] = []
-    for line_no, text in items:
-        m = re.match(r"^COPY\s+['\"]?([A-Z0-9_.-]+?)['\"]?(?:\s+(?:OF|IN)\s+\S+)?(\s+REPLACING\b(.*))?$", text.strip(), re.I)
-        if not m:
-            out.append((line_no, text))
-            continue
-        if depth > 8:
-            raise ModelError(f"line {line_no}: COPY statements are nested too deeply.")
-        name = m.group(1)
-        found = next((include_dir / f"{name}{ext}" for ext in COPY_EXTENSIONS if (include_dir / f"{name}{ext}").is_file()), None)
-        if not found:
-            found = next((p for p in include_dir.iterdir() if p.is_file() and p.stem.upper() == name.upper()), None)
-        if not found:
-            raise ModelError(f"line {line_no}: copybook {name} was not found. Add it with the program (a file named {name}.cpy).")
-        body = _inline_copies(sentences(normalize(found.read_text(encoding="utf-8", errors="replace"))), include_dir, depth + 1)
-        if m.group(2):
-            pairs = re.findall(r"==\s*(.*?)\s*==\s+BY\s+==\s*(.*?)\s*==|(\S+)\s+BY\s+(\S+)", m.group(3), re.I)
-            reps = [((a or c), (b if a else d)) for a, b, c, d in pairs]
-            fixed_body = []
-            for n, t in body:
-                for old, new in reps:
-                    t = re.sub(rf"(?<![A-Z0-9-]){re.escape(old)}(?![A-Z0-9-])" if re.fullmatch(r"[A-Z0-9-]+", old, re.I) else re.escape(old), new, t, flags=re.I)
-                fixed_body.append((n, t))
-            body = fixed_body
-        out.extend(body)
+def code_sentences(path: Path, fixed: bool, dirs: list[Path], text: str | None = None) -> list[tuple[int, str]]:
+    """The sentences the compiler reads from a program file: COPY statements expanded (seance.copybook), compiler
+    directives and REPLACE applied, comments dropped. A COPY that cobc rejects is a ModelError."""
+    from .copybook import CopyError
+
+    try:
+        return sentences(normalize(path.read_text(encoding="utf-8", errors="replace") if text is None else text, fixed, dirs))
+    except CopyError as exc:
+        raise ModelError(str(exc)) from exc
+
+
+def _same_record_areas(text: str) -> list[list[str]]:
+    """The file lists of I-O-CONTROL's SAME RECORD AREA clauses, in order. SAME AREA and SAME SORT AREA share no
+    record storage in GnuCOBOL 3.1.2 (measured), so they are left out."""
+    out = []
+    for m in re.finditer(r"\bSAME\s+(RECORD\s+|SORT\s+|SORT-MERGE\s+)?(?:AREA\s+)?(?:FOR\s+)?(.*?)(?=\bSAME\b|\bAPPLY\b|\bMULTIPLE\b|\bRERUN\b|$)",
+                         text, re.I | re.S):
+        if (m.group(1) or "").strip().upper() == "RECORD":
+            out.append([w.upper() for w in re.findall(r"[A-Za-z0-9][A-Za-z0-9-]*", m.group(2))])
     return out
 
 
@@ -400,6 +408,7 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     """The program in legacy/<program>/<program>.cbl, plus any other programs in that folder it CALLs."""
     path = root / "legacy" / program / f"{program}.cbl"
     src_dir = path.parent
+    folders = [src_dir]  # where COPY looks, in the order the recorder passes them to cobc as -I
     sql = any(q.is_file() and re.search(r"\bEXEC\s+SQL\b", q.read_text(encoding="utf-8", errors="replace"), re.I) for q in src_dir.iterdir())
     pre = None
     if sql:  # precompile the folder; everything is then read from the plain-COBOL copy
@@ -410,6 +419,7 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
         except SqlError as exc:
             raise ModelError(f"embedded SQL: {exc}") from exc
         src_dir = root / "build" / program / "sqlsrc"
+        folders.insert(0, src_dir)
     cics = any(q.is_file() and re.search(r"\bEXEC\s+CICS\b", q.read_text(encoding="utf-8", errors="replace"), re.I) for q in src_dir.iterdir())
     cics_notes: list[str] = []
     if cics:  # CICS commands become CALLs of the CICS bridge (after SQL, if the program has both)
@@ -420,8 +430,10 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
         except CicsError as exc:
             raise ModelError(f"CICS: {exc}") from exc
         src_dir = root / "build" / program / "cicssrc"
+        folders.insert(0, src_dir)
+    dirs = copy_dirs(*folders)
     split = split_programs(src_dir / path.name, root / "build" / program / "split")
-    model = load_file(split[next(iter(split))] if split else src_dir / path.name, program, shown=path, include_dir=src_dir)
+    model = load_file(split[next(iter(split))] if split else src_dir / path.name, program, shown=path, dirs=dirs)
     if split:
         model.compile_source = src_dir / path.name
         model.notes.append(f"This file holds {len(split)} programs. Each is translated and compiled as a program of its own, so data "
@@ -444,13 +456,13 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
         if not re.search(r"PROCEDURE\s+DIVISION", text, re.I):
             continue  # a copybook saved with a program extension
         try:
-            sub = load_file(q, q.stem.lower(), shown=path.parent / q.name)
+            sub = load_file(q, q.stem.lower(), shown=path.parent / q.name, dirs=dirs)
         except ModelError as exc:
             raise ModelError(f"{q.name}: {exc}") from exc
         subs[sub.program_id] = sub
     for pid, q in list(split.items())[1:] if split else []:
         try:
-            sub = load_file(q, pid, shown=path.parent / q.name, include_dir=src_dir)
+            sub = load_file(q, pid, shown=path.parent / q.name, dirs=dirs)
         except ModelError as exc:
             raise ModelError(f"program {pid.upper()} in {path.name}: {exc}") from exc
         sub.in_main = True
@@ -474,18 +486,20 @@ def load_model(program: str, root: Path = ROOT) -> ProgramModel:
     return model
 
 
-def load_file(path: Path, program: str, shown: Path | None = None, include_dir: Path | None = None) -> ProgramModel:
-    """shown: the file people see (the original when path is a precompiled copy). include_dir: where COPY looks."""
+def load_file(path: Path, program: str, shown: Path | None = None, dirs: list[Path] | None = None) -> ProgramModel:
+    """shown: the file people see (the original when path is a precompiled copy). dirs: where COPY looks."""
     text = path.read_text(encoding="utf-8", errors="replace")
     fixed = detect_fixed(text)
+    dirs = dirs if dirs is not None else copy_dirs(path.parent)
     try:
-        items = _inline_copies(sentences(normalize(text, fixed)), include_dir or path.parent)
+        items = code_sentences(path, fixed, dirs, text)
     except OSError as exc:
         raise ModelError(str(exc)) from exc
     files: dict[str, FileDef] = {}
     fd_items: dict[str, list[tuple[int, str]]] = {}
     fd_contains: dict[str, tuple[int, int]] = {}
     sd_names: set[str] = set()
+    io_control: list[str] = []
     ws: list[tuple[int, str]] = []
     link: list[tuple[int, str]] = []
     proc: list[tuple[int, str]] = []
@@ -519,6 +533,8 @@ def load_file(path: Path, program: str, shown: Path | None = None, include_dir: 
         if section == "FILE-CONTROL" and up.startswith("SELECT"):
             f = _parse_select(s, line_no)
             files[f.name] = f
+        elif section == "I-O-CONTROL":
+            io_control.append(up)
         elif section == "FILE" and re.match(r"^(FD|SD)\s", up):
             current_fd = re.match(r"^(?:FD|SD)\s+([A-Z0-9-]+)", up).group(1)
             if up.startswith("SD"):
@@ -541,6 +557,10 @@ def load_file(path: Path, program: str, shown: Path | None = None, include_dir: 
     for name in sd_names:
         if name in files:
             files[name].organization = "sort"
+    for group, names in enumerate(_same_record_areas(" ".join(io_control)), start=1):
+        for name in names:
+            if name in files:
+                files[name].same_record = group  # a later SAME RECORD AREA takes a file away from an earlier one
     for name, c in fd_contains.items():
         if name in files:
             files[name].contains = c
@@ -588,7 +608,7 @@ def load_file(path: Path, program: str, shown: Path | None = None, include_dir: 
             break
     model = ProgramModel(program, shown or path, fixed, pid.strip("'\"").upper(), list(files.values()), fd_items, ws, proc, ws_records, accepts,
                          [], sorted(set(unsupported)), linkage_records=linkage, using=using, initial=initial,
-                         calls=[c for c in calls if c not in ("SQLBRIDGE", "DSNTIAR", "CICSBRIDGE")], source=path)
+                         calls=[c for c in calls if c not in ("SQLBRIDGE", "DSNTIAR", "CICSBRIDGE")], source=path, copy_dirs=dirs)
     if not proc:
         raise ModelError("No PROCEDURE DIVISION statements were found.")
     missing = [u for u in using if u not in {r.name for r in linkage}]

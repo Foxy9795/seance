@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .cobol_num import ROUND_MODES
 from .cobol_src import normalize
-from .layout import Item, walk
+from .layout import Item, parse_entries, walk
 from .model import ROOT, ModelError, ProgramModel, load_model
 
 TEXT_FUNCTIONS = {"UPPER_CASE", "LOWER_CASE", "REVERSE", "TRIM", "LENGTH", "NUMVAL", "NUMVAL_C", "ORD"}
@@ -130,6 +130,8 @@ class Names:
     devices: dict[str, str] = field(default_factory=dict)  # mnemonic -> device
     indexes: dict[str, str] = field(default_factory=dict)  # index name -> table item key
     files: dict[str, object] = field(default_factory=dict)  # FD name -> FileDef
+    file_buffer: dict[str, str] = field(default_factory=dict)  # FD name -> its record area (shared by SAME RECORD AREA)
+    debug_sections: set = field(default_factory=set)  # USE FOR DEBUGGING sections, where DEBUG-ITEM may be read
 
     def add(self, it: Item, buffer: str) -> None:
         self.by_name.setdefault(it.name, []).append(it)
@@ -178,6 +180,13 @@ class Names:
         return cands[0][2]
 
 
+# DEBUG-ITEM as GnuCOBOL 3.1.2 lays it out (measured: 86 bytes, DEBUG-NAME and DEBUG-CONTENTS 30 each)
+DEBUG_ITEM = [(0, s) for s in (
+    "01 DEBUG-ITEM", "05 DEBUG-LINE PIC X(6)", "05 FILLER PIC X", "05 DEBUG-NAME PIC X(30)", "05 FILLER PIC X",
+    "05 DEBUG-SUB-1 PIC S9(4) SIGN LEADING SEPARATE", "05 FILLER PIC X", "05 DEBUG-SUB-2 PIC S9(4) SIGN LEADING SEPARATE",
+    "05 FILLER PIC X", "05 DEBUG-SUB-3 PIC S9(4) SIGN LEADING SEPARATE", "05 FILLER PIC X", "05 DEBUG-CONTENTS PIC X(30)")]
+
+
 def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
     names = Names()
     names.comma = model.decimal_comma  # DECIMAL-POINT IS COMMA
@@ -186,11 +195,13 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
         names.classes, names.switch_conds, names.switch_names = dict(sp.classes), dict(sp.switch_conds), dict(sp.switch_names)
         names.symbolic, names.devices = dict(sp.symbolic), dict(sp.devices)
     records: dict[str, int] = {}
+    shared: dict[int, str] = {}  # SAME RECORD AREA group: the buffer its files share
     for f in model.files:
         if not f.records:
             continue
-        buffer = f.records[0].name
-        records[buffer] = f.size
+        buffer = shared.setdefault(f.same_record, f.records[0].name) if f.same_record else f.records[0].name
+        records[buffer] = max(records.get(buffer, 0), f.size)
+        names.file_buffer[f.name] = buffer
         names.files[f.name] = f
         for r in f.records:
             for it in [*walk(r), *r.renames]:  # level 66 RENAMES are names in the record too
@@ -215,6 +226,11 @@ def build_names(model: ProgramModel) -> tuple[Names, dict[str, int]]:
     names.add(tally, "_SPECIAL")
     sort_return = Item("SORT-RETURN", 1, kind="num", usage="binary", digits=9, signed=True, size=4, offset=6)
     names.add(sort_return, "_SPECIAL")
+    if "DEBUG-ITEM" not in names.by_name:  # the special register USE FOR DEBUGGING procedures read
+        debug = parse_entries(DEBUG_ITEM)[0]
+        records["DEBUG-ITEM"] = debug.size
+        for it in walk(debug):
+            names.add(it, "DEBUG-ITEM")
     names.finish()
     found: dict[str, list] = {}
     for it in names.items.values():
@@ -315,6 +331,9 @@ class Parser:
             self.i += 1
             quals.append(self.take().value)
         item = self.names.resolve(tok.value, quals)
+        if item.record == "DEBUG-ITEM" and self.section not in self.names.debug_sections:
+            raise Unsupported("DEBUG-ITEM outside a USE FOR DEBUGGING procedure: GnuCOBOL updates it as the program "
+                              "runs, Séance does not")
         key = self.names.key[id(item)]
         py = f'S.r("{key}"'
         simple = True
@@ -1112,15 +1131,25 @@ class Parser:
             test = f'S.cmp({subject}, "==", {lo})'
         return f"not ({test})" if negate else test
 
+    def proc_name(self, k: int = 0) -> str:
+        """The token as a procedure name: a word, or digits only (PERFORM 10, a paragraph named 10)."""
+        tok = self.peek(k)
+        if tok.kind == "word":
+            return tok.value
+        if tok.kind == "num" and tok.value.isdigit() and self.word(k + 1) != "TIMES":
+            return tok.value
+        return ""
+
     def is_para(self, k: int = 0) -> bool:
-        return self.word(k) in self.paras or any(p.startswith(self.word(k) + "@") for p in self.paras if self.word(k))
+        name = self.proc_name(k)
+        return bool(name) and (name in self.paras or any(p.startswith(name + "@") for p in self.paras))
 
     def para_ref(self) -> str:
         """A paragraph or section name, with OF/IN SECTION when given: the key it is filed under. Without a
         qualifier, a name used in more than one section means the one in the current section."""
         name = self.take().value
         qual = None
-        if self.word() in ("OF", "IN") and self.peek(1).kind == "word":
+        if self.word() in ("OF", "IN") and self.proc_name(1):
             self.i += 1
             qual = self.take().value
         here = qual or self.section
@@ -1790,11 +1819,16 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
             in_decl = False
             continue
         if in_decl and vals[0] == "USE":
-            if "DEBUGGING" not in vals and section:
+            if section and "DEBUGGING" in vals:
+                # USE FOR DEBUGGING: GnuCOBOL runs these only when COB_SET_DEBUG is set at run time (measured), which
+                # Séance never sets; they are declaratives all the same, so a run does not start in them
+                decls.append((section, ["(FOR DEBUGGING)"]))
+            elif section:
                 skip = {"AFTER", "STANDARD", "EXCEPTION", "ERROR", "PROCEDURE", "ON", "GLOBAL"}
                 decls.append((section, [v for v in vals[1:] if v not in skip]))
             continue
-        if (len(words) == 2 or (len(words) == 3 and words[2].kind == "num")) and vals[1] == "SECTION" and words[0].kind == "word":
+        named = words[0].kind == "word" or (words[0].kind == "num" and vals[0].isdigit())  # a procedure name may be digits only
+        if (len(words) == 2 or (len(words) == 3 and words[2].kind == "num")) and vals[1] == "SECTION" and named:
             # NAME SECTION, or NAME SECTION 50 with a segment number (a priority that only matters to overlays)
             section = vals[0]
             current = vals[0]
@@ -1803,7 +1837,7 @@ def split_paragraphs(toks: list[Tok]) -> tuple[list[str], dict[str, list[Tok]], 
             sections[section] = [current]
             owner[current] = None
             continue
-        if len(words) == 1 and words[0].kind == "word" and vals[0] not in VERBS and vals[0] not in ENDERS:
+        if len(words) == 1 and named and vals[0] not in VERBS and vals[0] not in ENDERS:
             current = vals[0]
             if current in paras:
                 current = f"{current}@{section}"
@@ -2022,7 +2056,10 @@ def _data_literals(names: Names, records: dict[str, int], model: ProgramModel) -
             extra["alt"] = [[key_of(k), d] for k, d in f.alt_keys]
         if f.organization == "relative" and f.relative_key:
             extra["relkey"] = key_of(f.relative_key)
-        files.append(f'    ["{f.name}", "{f.assign}", "{f.organization}", "{f.records[0].name}", {f.size}, {status!r}, {extra!r}],')
+        if f.same_record:  # SAME RECORD AREA: the buffer is shared, so WRITE finds the file by its own records
+            extra["records"] = [names.key[id(r)] for r in f.records]
+        buffer = names.file_buffer.get(f.name, f.records[0].name)
+        files.append(f'    ["{f.name}", "{f.assign}", "{f.organization}", "{buffer}", {f.size}, {status!r}, {extra!r}],')
     return ("ITEMS = {\n" + "\n".join(items) + "\n}\n\n"
             + f"RECORDS = {records!r}\n\n"
             + "VALUES = [\n" + "\n".join(values) + "\n]\n\n"
@@ -2048,7 +2085,7 @@ def _has(nodes, kind) -> bool:
 def _unit(model: ProgramModel, tag: str) -> dict:
     """Translate one program (the main one or a called one) into its data literals and paragraph functions."""
     names, records = build_names(model)
-    src_lines = normalize((model.source or model.path).read_text(encoding="utf-8", errors="replace"), model.fixed)
+    src_lines = normalize((model.source or model.path).read_text(encoding="utf-8", errors="replace"), model.fixed, model.copy_dirs or None)
     start = next((i for i, l in enumerate(src_lines) if not l.comment and re.match(r"^\s*PROCEDURE\s+DIVISION", l.text, re.I)), None)
     if start is None:
         raise Unsupported("no PROCEDURE DIVISION")
@@ -2060,6 +2097,7 @@ def _unit(model: ProgramModel, tag: str) -> dict:
             toks = toks[:i]
             break
     order, ptoks, sections, plines, owner, decls = split_paragraphs(toks)
+    names.debug_sections = {s for s, targets in decls if targets == ["(FOR DEBUGGING)"]}
     known = set(order) | set(sections)
     altered = {toks[i + 1].value for i in range(len(toks) - 1) if toks[i].value == "ALTER" and toks[i].kind == "word"}
     parsed: dict[str, list[Node]] = {}

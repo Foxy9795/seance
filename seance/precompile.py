@@ -4,7 +4,7 @@ the translator and the analysis all see the program GnuCOBOL compiles.
 * Compiler directives: >>DEFINE, >>IF / >>ELIF / >>ELSE / >>END-IF (with IS [NOT] DEFINED, comparisons, AND, OR,
   NOT), >>SET CONSTANT. Other directives (>>TURN, >>PAGE, >>LISTING, $SET ...) change nothing the program computes
   here and are dropped.
-* REPLACE ==a== BY ==b== [LEADING|TRAILING], REPLACE ALSO, REPLACE [LAST] OFF.
+* COPY and REPLACE are done before this pass, the way cobc does them (seance.copybook).
 * Named constants: level 78 items, 01 name CONSTANT AS value, >>DEFINE CONSTANT. Each use is replaced by its value.
 
 Lines keep their numbers, so every message and every # Lnn tag still points at the original source.
@@ -210,29 +210,6 @@ _CONST_78 = re.compile(r"^\s*78\s+(" + WORD + r")\s+VALUE\s+(?:IS\s+)?(.+?)\s*\.
 _CONST_01 = re.compile(r"^\s*0?1\s+(" + WORD + r")\s+CONSTANT\s+(?:AS\s+)?(.+?)\s*\.?\s*$", re.I)
 
 
-# ---------------------------------------------------------------- REPLACE
-
-def _pseudo(text: str) -> list[tuple[str, str, str]]:
-    """The (mode, from, to) pairs of a REPLACE statement's operands. mode is '', 'LEADING' or 'TRAILING'."""
-    pairs = []
-    for m in re.finditer(r"(?:(LEADING|TRAILING)\s+)?==(.*?)==\s+BY\s+==(.*?)==", text, re.I | re.S):
-        pairs.append(((m.group(1) or "").upper(), " ".join(m.group(2).split()), " ".join(m.group(3).split())))
-    return pairs
-
-
-def _replacer(mode: str, old: str, new: str):
-    if not old:
-        return None
-    if mode == "LEADING":
-        rx = re.compile(_EDGE_L + re.escape(old) + r"(?=[A-Za-z0-9_-])", re.I)
-    elif mode == "TRAILING":
-        rx = re.compile(r"(?<=[A-Za-z0-9_-])" + re.escape(old) + _EDGE_R, re.I)
-    else:
-        words = old.split()
-        rx = re.compile(_EDGE_L + r"\s+".join(re.escape(w) for w in words) + _EDGE_R, re.I)
-    return rx, new
-
-
 # ---------------------------------------------------------------- DECIMAL-POINT IS COMMA
 
 _PIC = re.compile(r"(?<![A-Za-z0-9-])(PIC(?:TURE)?\s+(?:IS\s+)?)(\S+)", re.I)
@@ -270,111 +247,121 @@ def currency_text(text: str) -> str | None:
     return m.group(2) if m else None
 
 
+# ---------------------------------------------------------------- >>IF state
+
+_DEFINE = re.compile(r"(?:(CONSTANT)\s+)?(" + WORD + r")(?:\s+AS\s+(.+?))?(?:\s+OVERRIDE)?\s*$", re.I)
+_CONDITIONAL = {"IF", "ELIF", "ELSE-IF", "ELSE", "END-IF", "DEFINE", "SET"}
+
+
+def directive(text: str) -> tuple[str, str] | None:
+    """(word, rest) of a compiler directive line: >>IF X DEFINED gives ("IF", "X DEFINED"). None for code."""
+    stripped = text.strip()
+    if not (stripped.startswith(">>") or stripped.startswith("$")):
+        return None
+    m = re.match(r"(?:>>|\$)\s*([A-Z-]+)\s*(.*)$", stripped, re.I)
+    return (m.group(1).upper(), m.group(2)) if m else ("", "")
+
+
+class Conditions:
+    """Which lines the compiler reads: the >>IF / >>ELIF / >>ELSE / >>END-IF state, and the names >>DEFINE sets."""
+
+    def __init__(self) -> None:
+        self.defs: dict[str, str | None] = {}
+        self.stack: list[list[bool]] = []  # [this branch is taken, a branch of this >>IF was taken already]
+
+    @property
+    def active(self) -> bool:
+        return all(s[0] for s in self.stack)
+
+    def track(self, word: str, rest: str) -> re.Match | None:
+        """Follow one directive. Returns the match of a >>DEFINE or >>SET that gave a name a value."""
+        if word == "IF":
+            cond = self.active and evaluate(rest, self.defs)
+            self.stack.append([cond, cond])
+        elif word in ("ELIF", "ELSE-IF") and self.stack:
+            parent = all(s[0] for s in self.stack[:-1])
+            cond = parent and not self.stack[-1][1] and evaluate(rest, self.defs)
+            self.stack[-1] = [cond, self.stack[-1][1] or cond]
+        elif word == "ELSE" and self.stack:
+            parent = all(s[0] for s in self.stack[:-1])
+            self.stack[-1] = [parent and not self.stack[-1][1], True]
+        elif word == "END-IF" and self.stack:
+            self.stack.pop()
+        elif word in ("DEFINE", "SET") and self.active:
+            dm = _DEFINE.match(rest)
+            if dm:
+                name, value = dm.group(2).upper(), dm.group(3)
+                if value and value.strip().upper() == "OFF":
+                    self.defs.pop(name, None)
+                elif value and value.strip().upper() == "PARAMETER":
+                    pass  # comes from the compile command line, which Séance does not set: stays undefined
+                else:
+                    self.defs[name] = value.strip() if value else None
+                    return dm
+        return None
+
+
 # ---------------------------------------------------------------- the pass
 
 def apply(lines: list, make_line, debugging: bool = False) -> tuple[list, list[str]]:
-    """lines: Line objects (number, text, comment). make_line(number, text, comment) builds a new one.
-    debugging: the program says WITH DEBUGGING MODE, so >>D lines are compiled.
-    Returns the lines the compiler reads, and notes about what was done."""
-    defs: dict[str, str | None] = {}
-    stack: list[list[bool]] = []  # [this branch is taken, a branch of this >>IF was taken already]
+    """lines: Line objects (number, text, comment), with COPY and REPLACE already done (seance.copybook).
+    make_line(number, text, comment) builds a new one. debugging: the program says WITH DEBUGGING MODE, so >>D
+    lines are compiled. Returns the lines the compiler reads, and notes about what was done."""
+    cond = Conditions()
     consts: dict[str, str] = {}
     const_rx: re.Pattern | None = None
-    rules: list[list] = []  # the REPLACE rules in force, newest last
-    pending: str | None = None  # a REPLACE statement that continues on the next line
     notes: set[str] = set()
     out = []
     comma = any(not ln.comment and re.search(r"\bDECIMAL-POINT\s+IS\s+COMMA\b", ln.text, re.I) for ln in lines)
     # CURRENCY SIGN IS "W": pictures get the standard $ back, and the runtime shows the program's own sign
     currency = currency_symbol(" ".join(ln.text for ln in lines if not ln.comment))
 
-    def active() -> bool:
-        return all(s[0] for s in stack)
-
     def substitute(text: str) -> str:
         if const_rx is not None:
             text = _outside_quotes(text, lambda s: const_rx.sub(lambda m: consts[m.group(0).upper()], s))
-        for rx, new in (r for group in rules for r in group):
-            text = _outside_quotes(text, lambda s, rx=rx, new=new: rx.sub(new, s))
         return text
+
+    def remember(name: str, value: str) -> None:
+        nonlocal const_rx
+        consts[name] = value
+        const_rx = re.compile(_EDGE_L + "(" + "|".join(re.escape(k) for k in sorted(consts, key=len, reverse=True)) + ")" + _EDGE_R, re.I)
+        notes.add("constants")
 
     for ln in lines:
         if ln.comment:
             out.append(ln)
             continue
-        stripped = ln.text.strip()
-        up = stripped.upper()
-        if up.startswith(">>") or up.startswith("$"):
-            m = re.match(r"(?:>>|\$)\s*([A-Z-]+)\s*(.*)$", stripped, re.I)
-            word, rest = (m.group(1).upper(), m.group(2)) if m else ("", "")
+        d = directive(ln.text)
+        if d is not None:
+            word, rest = d
             if word == "D":  # a debugging line
-                if debugging and active() and rest.strip():
-                    text = substitute(rest)
-                    out.append(make_line(ln.number, text, False))
+                if debugging and cond.active and rest.strip():
+                    out.append(make_line(ln.number, substitute(rest), False))
                 continue
-            if word == "IF":
-                cond = active() and evaluate(rest, defs)
-                stack.append([cond, cond])
+            if word == "SEANCE-MISSING-COPY":  # left by seance.copybook: only an error where the compiler reads it
+                if cond.active:
+                    from .copybook import CopyError
+
+                    at, _, name = rest.partition(" ")
+                    raise CopyError(f"line {at}: copybook {name} was not found. Add it with the program "
+                                    f"(a file named {name.split()[0]}.cpy).")
+                continue
+            dm = cond.track(word, rest)
+            if word in _CONDITIONAL:
                 notes.add("directives")
-            elif word in ("ELIF", "ELSE-IF") and stack:
-                parent = all(s[0] for s in stack[:-1])
-                cond = parent and not stack[-1][1] and evaluate(rest, defs)
-                stack[-1] = [cond, stack[-1][1] or cond]
-            elif word == "ELSE" and stack:
-                parent = all(s[0] for s in stack[:-1])
-                stack[-1] = [parent and not stack[-1][1], True]
-            elif word == "END-IF" and stack:
-                stack.pop()
-            elif word in ("DEFINE", "SET") and active():
-                dm = re.match(r"(?:(CONSTANT)\s+)?(" + WORD + r")(?:\s+AS\s+(.+?))?(?:\s+OVERRIDE)?\s*$", rest, re.I)
-                if dm:
-                    name, value = dm.group(2).upper(), dm.group(3)
-                    if value and value.strip().upper() == "OFF":
-                        defs.pop(name, None)
-                    elif value and value.strip().upper() == "PARAMETER":
-                        pass  # comes from the compile command line, which Séance does not set: stays undefined
-                    else:
-                        defs[name] = value.strip() if value else None
-                        if dm.group(1) and value:
-                            v = _constant_value(value, consts)
-                            if v is not None:
-                                consts[name] = v
-                                const_rx = re.compile(_EDGE_L + "(" + "|".join(re.escape(k) for k in sorted(consts, key=len, reverse=True)) + ")" + _EDGE_R, re.I)
-                notes.add("directives")
+            if dm is not None and dm.group(1) and dm.group(3):
+                v = _constant_value(dm.group(3), consts)
+                if v is not None:
+                    remember(dm.group(2).upper(), v)
             continue  # a directive is never code
-        if not active():
+        if not cond.active:
             continue  # the branch the compiler leaves out
-        # REPLACE statements, possibly over several lines: one ends at a period outside its ==pseudo-text==
-        if pending is not None or re.match(r"REPLACE\b", up):
-            stmt = (pending + " " if pending is not None else "") + stripped
-            outside = re.sub(r"==.*?==", "", stmt, flags=re.S)
-            if stmt.count("==") % 2 or not re.search(r"\.\s*$", outside):
-                pending = stmt
-                continue
-            pending = None
-            body = stmt[len("REPLACE"):].strip().rstrip(".").strip()
-            if re.fullmatch(r"(?i)(LAST\s+)?OFF", body):
-                if re.match(r"(?i)LAST", body) and rules:
-                    rules.pop()
-                else:
-                    rules.clear()
-            else:
-                also = bool(re.match(r"(?i)ALSO\b", body))
-                group = [r for r in (_replacer(*p) for p in _pseudo(body)) if r]
-                if also:
-                    rules.append(group)
-                else:
-                    rules[:] = [group]
-            notes.add("replace")
-            continue
         # named constants
         cm = _CONST_78.match(ln.text) or _CONST_01.match(ln.text)
         if cm:
             v = _constant_value(cm.group(2), consts)
             if v is not None:
-                consts[cm.group(1).upper()] = v
-                const_rx = re.compile(_EDGE_L + "(" + "|".join(re.escape(k) for k in sorted(consts, key=len, reverse=True)) + ")" + _EDGE_R, re.I)
-                notes.add("constants")
+                remember(cm.group(1).upper(), v)
                 continue
         text = substitute(ln.text)
         if comma and not re.search(r"\bDECIMAL-POINT\b", text, re.I):
@@ -385,8 +372,6 @@ def apply(lines: list, make_line, debugging: bool = False) -> tuple[list, list[s
     done = []
     if "directives" in notes:
         done.append("Compiler directives (>>IF, >>DEFINE) were applied as GnuCOBOL applies them; no names are set on the command line.")
-    if "replace" in notes:
-        done.append("REPLACE statements were applied to the program text.")
     if "constants" in notes:
         done.append("Named constants (level 78, CONSTANT) were replaced by their values.")
     return out, done
