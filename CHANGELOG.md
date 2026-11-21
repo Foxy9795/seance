@@ -3,6 +3,11 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.5] - 2026-11-22
+### Fixed
+- A program that calls a FUNCTION (`FUNCTION CURRENT-DATE` and the like) failed on its second run in the same process with `KeyError: '_FN1'`: the temporary item for a function result stayed in the program's item table. Each run now starts clean.
+- The loop guard stopped a correct program at 2,000,000 steps, so a file of more than 2 million records could not be run. The limit grows with the size of the input files (8 steps per input byte); a program with no input keeps 2,000,000.
+
 ## [1.2.4] - 2026-11-22
 Everything still open from the 2026-11-21 review (`docs/review/2026-11-21/findings.md`), each measured against GnuCOBOL 3.1.2.
 ### Fixed

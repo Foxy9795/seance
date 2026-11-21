@@ -146,7 +146,7 @@ class Program:
     def __init__(self, items: dict, records: dict, values: list, conds: dict, files: list, indexes: list, aliases: dict | None = None,
                  linkage: list | None = None, initial: bool = False):
         # items: name -> [record, offset, size, kind, usage, digits, scale, signed, sign, pic, dims, children, justified, blank_zero]
-        self.items = items
+        self.items = dict(items)  # a run adds temporary items (function results): they are not the program's
         self.records = records  # record name -> size
         self.values = values  # [(name, value, all)] initial VALUE clauses, in order
         self.conds = conds  # condition name -> (item name, [(lo, hi)])
@@ -163,6 +163,8 @@ class Program:
 
     # ---------------------------------------------------------- state
     def reset(self) -> None:
+        for k in [k for k in self.items if k not in self.records and self.items[k][0] == k]:
+            del self.items[k]  # temporary function results of the run before
         self.mem = {r: bytearray(size) for r, size in self.records.items()}
         done = {r: bytearray(size) for r, size in self.records.items()}  # bytes already given their first value
         fd_buffers = {f[3] for f in self.file_defs}  # GnuCOBOL starts file record areas as binary zeros (measured)
@@ -181,6 +183,8 @@ class Program:
         self.idx = {n: 1 for n in self.index_names}
         self.files = {f[0]: FileState(*f) for f in self.file_defs}
         self.steps = 0
+        # a program that loops over its input takes a step per record or more: the guard grows with the input
+        self.loop_limit = max(self.LOOP_LIMIT, 8 * sum(len(v) for v in self.io.inputs.values()))
         self._alters: dict[str, str] = {}  # ALTER: paragraph -> where its GO TO goes now
         self._switches: dict[int, bool] = {}  # SWITCH-n, read from the environment on first use
         self._written: dict[str, bytes] = {}  # files this run wrote and closed, by name: a later OPEN reads these
@@ -1856,8 +1860,8 @@ class Program:
     # ---------------------------------------------------------- program flow
     def tick(self) -> None:
         self.steps += 1
-        if self.steps > self.LOOP_LIMIT:
-            raise CobolError(f"the program ran more than {self.LOOP_LIMIT} loop steps; a loop probably never ends")
+        if self.steps > self.loop_limit:
+            raise CobolError(f"the program ran more than {self.loop_limit} loop steps; a loop probably never ends")
 
     def loop(self):
         while True:
