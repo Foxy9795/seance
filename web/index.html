@@ -412,7 +412,7 @@
     --lift2: inset 0 1px 0 rgba(255,255,255,.04), 0 14px 34px rgba(0,0,0,.38); --ease: cubic-bezier(.2,.7,.2,1); }
   body { background-image: radial-gradient(1200px 520px at 62% -180px, rgba(233,168,62,.085), transparent 70%), radial-gradient(900px 640px at -10% 120%, rgba(111,211,174,.04), transparent 70%); }
   /* header */
-  .top { background: rgba(21,19,26,.82); backdrop-filter: saturate(140%) blur(12px); border-bottom-color: var(--edge); gap: 12px; padding: 0 16px; }
+  .top { background: #15131a; backdrop-filter: none; border-bottom-color: var(--edge); gap: 12px; padding: 0 16px; }
   .top::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, transparent, rgba(233,168,62,.32) 30%, rgba(233,168,62,.32) 70%, transparent); pointer-events: none; }
   .brand { font-size: 1.28rem; }
   .searchbtn { flex: 0 1 600px; height: 38px; border-radius: 10px; gap: 10px; padding: 0 8px 0 12px; font-size: .95rem; box-shadow: inset 0 1px 2px rgba(0,0,0,.35); transition: border-color .16s ease, box-shadow .16s ease; }
@@ -430,7 +430,7 @@
   h1 { font-size: 2.05rem; letter-spacing: .004em; }
   .lede { font-size: 1.02rem; line-height: 1.6; }
   .page-head { margin-bottom: 18px; }
-  .pbar { background: rgba(13,11,15,.86); backdrop-filter: blur(10px) saturate(130%); border-bottom-color: var(--edge); margin-left: -34px; margin-right: -34px; padding-left: 34px; padding-right: 34px; }
+  .pbar { background: #0e0c10; backdrop-filter: none; border-bottom-color: var(--edge); margin-left: -34px; margin-right: -34px; padding-left: 34px; padding-right: 34px; }
   .tabs button { font-size: .98rem; padding: 13px 14px 12px; }
   .tabs button[aria-selected=true] { font-weight: 600; }
   /* surfaces */
@@ -455,7 +455,7 @@
   select, input[type=text], input[type=search], input[type=number] { height: 34px; border-radius: 8px; }
   textarea { border-radius: 8px; }
   .seg { border-radius: 9px; }
-  .menu, .dd { border-radius: 12px; border-color: var(--edge2); background: rgba(31,27,36,.97); box-shadow: 0 18px 44px rgba(0,0,0,.55); }
+  .menu, .dd { border-radius: 12px; border-color: #3a3442; background: #1f1b24; box-shadow: 0 18px 44px rgba(0,0,0,.6); }
   .dd .dd-opt { font-size: inherit; }
   .selbar { border-radius: 10px; }
   /* stat tiles */
@@ -490,7 +490,11 @@
   dialog { border-radius: 14px; border-color: var(--edge2); background: linear-gradient(180deg, rgba(255,255,255,.026), rgba(255,255,255,0) 180px), var(--panel); }
   .dlg-head { border-bottom-color: var(--edge); } .dlg-foot { border-top-color: var(--edge); }
   .dlg-head h2 { font: 600 1.18rem/1.3 var(--serif); }
-  .toast { border-radius: 12px; background: rgba(31,27,36,.96); backdrop-filter: blur(8px); }
+  .toast { border-radius: 12px; background: #1f1b24; backdrop-filter: none; animation: toastIn .2s var(--ease); }
+  .toast.out { transform: translateY(6px); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  /* every floating surface is opaque: nothing behind a menu, the header, a toast or a dialog shows through */
+  dialog[open]::backdrop { background: rgba(5,4,7,.8); }
   /* calm motion: short fades and a small slide, no scaling and no bounce */
   .enter > .panel, .enter > .stats, .enter > .note, .enter .cards > .card, .enter > .sect, .enter > .vsum { animation: settle .24s var(--ease) backwards; }
   @keyframes settle { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }

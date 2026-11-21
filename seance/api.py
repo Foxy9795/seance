@@ -6,6 +6,7 @@ way: the editor saves Python that the checker then runs.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
 import hmac
@@ -18,8 +19,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field, field_validator
+from starlette.routing import Route
 
 from . import __version__, config
+from .mcp_server import HttpEndpoint
 from .programs import (
     MAX_SOURCE_BYTES,
     ProgramError,
@@ -34,7 +37,18 @@ from .recorder import ROOT, LegacyRuntimeError, cobc_available, cobc_path, cobol
 
 sys.path.insert(0, str(ROOT))
 
-app = FastAPI(title="Séance")
+# the MCP server is also served by the app, at /mcp, so any MCP client can reach it with a URL and no paths
+MCP_ENDPOINT = HttpEndpoint()
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(_app):
+    async with MCP_ENDPOINT.running():
+        yield
+
+
+app = FastAPI(title="Séance", lifespan=_lifespan)
+app.router.routes.append(Route("/mcp", endpoint=MCP_ENDPOINT))
 
 # Threat model: this app compiles and runs code you give it, so a hostile web page must not be able
 # to drive it. Two defenses: (1) only answer requests addressed to 127.0.0.1/localhost, which stops

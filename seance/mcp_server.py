@@ -1,12 +1,19 @@
-"""MCP server that lets Kiro run the legacy COBOL program and the Séance checker.
+"""MCP server: lets Kiro, or any other MCP client, run the original COBOL program and the Séance checker.
 
-Start (stdio): python -m seance.mcp_server
+Three ways to reach it (docs/MCP.md has a ready config for each client):
+  stdio            python -m seance.mcp_server, or python scripts/seance_mcp.py from any Python and any folder
+  HTTP             python -m seance.mcp_server --http [--port 8765], then http://127.0.0.1:8765/mcp
+  inside the app   http://127.0.0.1:8000/mcp while `seance serve` runs
 """
 
 from __future__ import annotations
 
+import argparse
+import functools
 import sys
+from contextlib import asynccontextmanager
 
+import anyio.to_thread
 from mcp.server.fastmcp import FastMCP
 
 from .recorder import ROOT, LegacyRuntimeError, cobc_available, get_model
@@ -17,9 +24,29 @@ from .verify import verify
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-mcp = FastMCP("seance")
+INSTRUCTIONS = (
+    "Séance runs the original COBOL program with GnuCOBOL beside its Python translation and compares every byte they write. "
+    "Start with list_programs. Read describe_program before writing a migration. When unsure what the COBOL does for an input, "
+    "ask run_legacy_program: its output is the ground truth. Finish with verify_migration: 'Spirit matched' means the Python "
+    "reproduced every byte, 'Spirit restless' means the Python is wrong, not the saved test data."
+)
+
+mcp = FastMCP("seance", instructions=INSTRUCTIONS)
 
 MAX_LINES = 500
+LOOPBACK_HOSTS = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+LOOPBACK_ORIGINS = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+
+
+def tool(fn):
+    """Register fn as an MCP tool that runs in a worker thread, so a long check never stalls the server or the app it runs in."""
+
+    @functools.wraps(fn)
+    async def run(**kwargs):
+        return await anyio.to_thread.run_sync(functools.partial(fn, **kwargs))
+
+    mcp.tool()(run)
+    return fn
 
 
 def _programs() -> list[str]:
@@ -40,7 +67,7 @@ def _model(program: str):
         raise ValueError(str(exc)) from exc
 
 
-@mcp.tool()
+@tool
 def list_programs() -> str:
     """List the legacy COBOL programs Séance knows about, what files each reads and writes, and whether the COBOL runtime is available."""
     runtime = "available" if cobc_available() else "MISSING (GnuCOBOL not found)"
@@ -53,7 +80,7 @@ def list_programs() -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
+@tool
 def list_samples() -> str:
     """List the sample programs that ship with Séance (not in the workspace until loaded), and which are already loaded."""
     from .samples import catalog
@@ -63,7 +90,7 @@ def list_samples() -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
+@tool
 def load_sample(name: str) -> str:
     """Copy a sample program (with its saved test data and Python) into the workspace so it can be described, checked and edited."""
     from .programs import ProgramError
@@ -75,7 +102,7 @@ def load_sample(name: str) -> str:
     return f"loaded: {', '.join(result['added']) or 'nothing new'}" + (f" (already there: {', '.join(result['already'])})" if result["already"] else "")
 
 
-@mcp.tool()
+@tool
 def describe_program(program: str) -> str:
     """Plain-English spec of a legacy program: record layouts, behavior by paragraph with line numbers,
     where values silently round or truncate, and any statements that need human review."""
@@ -83,7 +110,7 @@ def describe_program(program: str) -> str:
     return generate_spec(program).markdown
 
 
-@mcp.tool()
+@tool
 def extract_business_rules(program: str) -> str:
     """The business rules of a program in plain English with their line numbers (decisions, cases, calculations with their
     rounding, loops, error handling), then the data lineage from input fields to output fields, as Gherkin scenarios. Read
@@ -101,7 +128,7 @@ def extract_business_rules(program: str) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
+@tool
 def assess_workspace() -> str:
     """Size, complexity, translation readiness and last verdict of every program and job in the workspace, and the order a
     migration can follow (programs that depend on nothing else first)."""
@@ -118,7 +145,7 @@ def assess_workspace() -> str:
     return "\n".join(out)
 
 
-@mcp.tool()
+@tool
 def describe_layout(program: str) -> str:
     """Every file the program uses with its record layout (field, bytes, type, storage), plus console input."""
     _check(program)
@@ -141,7 +168,7 @@ def describe_layout(program: str) -> str:
     return "\n".join(out)
 
 
-@mcp.tool()
+@tool
 def run_legacy_program(program: str, input_lines: list[str] | None = None, input_files: dict[str, list[str]] | None = None,
                        console_input: list[str] | None = None) -> str:
     """Run the ORIGINAL compiled COBOL program and return everything it produced: each output file, the console
@@ -182,7 +209,7 @@ def run_legacy_program(program: str, input_lines: list[str] | None = None, input
     return "\n".join(out)
 
 
-@mcp.tool()
+@tool
 def record_legacy_fixtures(program: str) -> str:
     """Run the original program on generated edge-case and random input and save the results as test sets."""
     _check(program)
@@ -194,7 +221,7 @@ def record_legacy_fixtures(program: str) -> str:
         raise ValueError(str(exc)) from exc
 
 
-@mcp.tool()
+@tool
 def draft_python(program: str) -> str:
     """Translate the COBOL into a Python program at migrated/<program>.py (the old file is kept as .bak).
     Every line is tagged with its COBOL line. Statements it cannot translate raise NotImplementedError naming the
@@ -209,7 +236,7 @@ def draft_python(program: str) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
+@tool
 def measure_test_strength(program: str, implementation: str = "") -> str:
     """Plant small bugs in the Python one at a time (> to >=, ROUNDED dropped, a constant changed) and replay the
     saved test sets. Reports how many were caught and the COBOL line of each survivor: a survivor is a spot the
@@ -229,7 +256,7 @@ def measure_test_strength(program: str, implementation: str = "") -> str:
     return "\n".join(out)
 
 
-@mcp.tool()
+@tool
 def fill_test_gaps(program: str, implementation: str = "") -> str:
     """For every planted bug the saved tests missed, search for an input that tells it apart from the original Python.
     Each input found is checked against the real COBOL and, when the COBOL agrees, saved as a new test set (gap-...).
@@ -248,7 +275,7 @@ def fill_test_gaps(program: str, implementation: str = "") -> str:
     return "\n".join(out)
 
 
-@mcp.tool()
+@tool
 def where_used(name: str) -> str:
     """Every line in the workspace that names a data item, condition, paragraph or file, and whether the line defines it,
     changes it or only uses it. Use it to follow the impact of a change to a field across programs."""
@@ -262,7 +289,7 @@ def where_used(name: str) -> str:
     return "\n".join(out)
 
 
-@mcp.tool()
+@tool
 def verify_migration(program: str, implementation: str = "", examples: int = 30) -> str:
     """Check a Python migration against the real COBOL program: saved test sets plus fresh random runs of both.
     `implementation` is a module path such as migrated.payroll (default: migrated.<program>).
@@ -278,5 +305,61 @@ def verify_migration(program: str, implementation: str = "", examples: int = 30)
     return to_markdown(report, ROOT)
 
 
+class HttpEndpoint:
+    """The MCP server as an ASGI endpoint inside the app, at /mcp. `running()` belongs in the app's lifespan; each run gets
+    its own session manager, because a manager can only be started once. Only requests addressed to this machine are
+    answered, and a browser page may only call it from the app's own address."""
+
+    def __init__(self) -> None:
+        self.manager = None
+
+    @asynccontextmanager
+    async def running(self):
+        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        security = TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=LOOPBACK_HOSTS,
+                                             allowed_origins=LOOPBACK_ORIGINS)
+        manager = StreamableHTTPSessionManager(app=mcp._mcp_server, security_settings=security)
+        async with manager.run():
+            self.manager = manager
+            try:
+                yield
+            finally:
+                self.manager = None
+
+    async def __call__(self, scope, receive, send) -> None:
+        from starlette.responses import PlainTextResponse
+
+        headers = {k.lower(): v.decode("latin-1") for k, v in scope.get("headers") or []}
+        origin = headers.get(b"origin", "").rstrip("/").lower()
+        if origin and origin != f"http://{headers.get(b'host', '')}".lower():
+            await PlainTextResponse("Requests from other web pages are refused.", status_code=403)(scope, receive, send)
+            return
+        if self.manager is None:
+            await PlainTextResponse("The MCP endpoint starts with the app; it is not running.", status_code=503)(scope, receive, send)
+            return
+        await self.manager.handle_request(scope, receive, send)
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="python -m seance.mcp_server", description="Séance's MCP server. It talks over stdio unless --http is given.")
+    p.add_argument("--http", action="store_true", help="serve streamable HTTP on 127.0.0.1 instead of stdio")
+    p.add_argument("--port", type=int, default=8765, help="port for --http (default 8765)")
+    a = p.parse_args(argv)
+    if a.http:
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        mcp.settings.port = a.port
+        # no web page has any business calling it, so a request that carries an Origin header is refused
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True, allowed_hosts=[f"127.0.0.1:{a.port}", f"localhost:{a.port}", f"[::1]:{a.port}"], allowed_origins=[])
+        print(f"Séance MCP server: http://127.0.0.1:{a.port}/mcp", file=sys.stderr)
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
+    return 0
+
+
 if __name__ == "__main__":
-    mcp.run()
+    sys.exit(main())

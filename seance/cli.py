@@ -239,6 +239,10 @@ Start here
   seance setup [--mcp-config]      GnuCOBOL 3.1.2 (downloaded and checked on Windows); Kiro's MCP settings
   seance doctor                    check this machine, with a fix for each problem
 
+MCP (Kiro, VS Code, Cursor, Claude, Windsurf, Gemini, Antigravity, Codex)
+  seance mcp-config --client NAME  the settings for that client (--mode local|portable|http, --write)
+  seance mcp [--http]              run the MCP server (stdio, or HTTP on 127.0.0.1:8765)
+
 Workspace
   seance samples list|load|remove  the sample library (load NAME, or load --all)
   seance check-all [--junit FILE]  check every program and job; exit code 1 if any is restless
@@ -287,6 +291,14 @@ def main(argv=None) -> int:
         return _samples(argv[1:])
     if argv and argv[0] == "check-all":
         return _check_all(argv[1:])
+    if argv and argv[0] == "mcp-config":
+        from .mcp_clients import main as mcp_config_main
+
+        return mcp_config_main(argv[1:])
+    if argv and argv[0] == "mcp":
+        from .mcp_server import main as mcp_main
+
+        return mcp_main(argv[1:])
     p = argparse.ArgumentParser(prog="seance", epilog="Also: 'seance serve' starts the app; 'seance setup' gets GnuCOBOL; 'seance doctor' checks this machine; "
            "'seance check-all [--junit FILE]' checks the whole workspace (for CI); 'seance samples list|load|remove' manages the sample library; "
            "'seance --version'.")

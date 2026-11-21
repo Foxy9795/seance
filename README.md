@@ -252,9 +252,12 @@ Séance compiles and runs code you give it, so treat it like a local dev server.
 - **Spec** (`.kiro/specs/seance/`): requirements, design and tasks.
 - **Rules check** (`scripts/check_rules.py`, also run by the tests): the Kiroween submission rules and the steering rules, as code.
 
-`.kiro/settings/mcp.json` starts the MCP server with this folder's virtual environment. After cloning, run
-`.\.venv\Scripts\seance setup --mcp-config` (or `.\scripts\setup.ps1 -McpConfig`) to write your folder's paths into it;
-other servers and settings in the file are kept. `seance doctor` says when the paths in it do not exist on your machine.
+The MCP server works in any MCP client, not only Kiro, and three ways: `python scripts/seance_mcp.py` (a launcher that
+finds this folder's `.venv` from any Python and any folder, so a committed settings file has no machine paths), the
+full path of this machine's `.venv` Python, or the URL `http://127.0.0.1:8000/mcp` while the app runs.
+`seance mcp-config --client kiro --mode portable --write` writes `.kiro/settings/mcp.json` in the portable form, keeping
+other servers and settings; `--client all` prints the settings for VS Code, Cursor, Claude Code, Claude Desktop,
+Windsurf, Gemini CLI, Antigravity and Codex. `docs/MCP.md` has the details, and `seance doctor` checks the Kiro file.
 
 ## Command Line
 

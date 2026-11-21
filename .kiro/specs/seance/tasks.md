@@ -51,3 +51,13 @@ Status is checked against the repository, not against intent. `[x]` means a test
 - [x] `scripts/check_rules.py` and `tests/test_rules.py`
 - [ ] Demo video recorded from `docs/hackathon/DEMO.md` (under 3 minutes)
 - [ ] Devpost write-up questions answered in `docs/hackathon/KIRO_WRITEUP.md`
+
+## R10 Release 1.2 (plan, in order)
+- [ ] Every floating surface opaque: menus, dropdowns, command bar, toasts, header, program bar, tooltips
+- [ ] MCP that works on any machine and in any MCP client: stdlib launcher, portable Kiro config, `seance mcp-config --client`, HTTP endpoint at `/mcp`, `docs/MCP.md`
+- [ ] Home page that shows the product: workspace overview, how to add a program, every feature with a way to try it
+- [ ] Real programs from the web as test data: NIST COBOL-85 suite, AWS CardDemo, Open Mainframe Project course labs; fix what they expose
+- [ ] Language gaps: edited pictures, CORRESPONDING, abbreviated conditions, class conditions, exception functions, FORMATTED-DATE family, GLOBAL, POINTER and ADDRESS OF, Report Writer, SCREEN SECTION, BMS maps, IMS
+- [ ] Divergence locator: when a check is restless, name the first paragraph and field where the Python and the COBOL disagree
+- [ ] Antigravity review prompt for this release
+- [ ] Docs, version, tag, archive

@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.metadata as metadata
 import json
 import re
+import shutil
 import socket
 import sys
 import tempfile
@@ -194,8 +195,11 @@ def check_address(port: int = config.PORT) -> Check:
 
 
 def check_mcp(root: Path) -> Check:
+    from .mcp_clients import LAUNCHER
+
     path = root / ".kiro" / "settings" / "mcp.json"
-    fix = "Run: python -m seance setup --mcp-config   (writes this folder's paths into .kiro/settings/mcp.json, keeping other settings)"
+    fix = ("Run: python -m seance mcp-config --client kiro --mode portable --write   (no machine paths, so it works wherever the "
+           "repository is cloned; other settings are kept). docs/MCP.md has the other clients.")
     if not path.exists():
         return Check("warn", "Kiro MCP server", ".kiro/settings/mcp.json is missing", fix)
     try:
@@ -206,11 +210,25 @@ def check_mcp(root: Path) -> Check:
         return Check("warn", "Kiro MCP server", "no server named seance in .kiro/settings/mcp.json", fix)
     if entry.get("disabled"):
         return Check("warn", "Kiro MCP server", "the seance server is disabled in .kiro/settings/mcp.json", "Set \"disabled\": false.")
-    command = Path(entry.get("command", ""))
-    resolved = command if command.is_absolute() else root / command
-    if not resolved.exists():
+    if entry.get("url"):
+        return Check("ok", "Kiro MCP server", f"connects to {entry['url']} while the app runs (python -m seance serve)")
+    command = str(entry.get("command", ""))
+    args = [str(a) for a in entry.get("args") or []]
+    if any(sep in command for sep in "/\\"):
+        p = Path(command) if Path(command).is_absolute() else root / command
+        found = str(p) if p.exists() else None
+    else:
+        found = shutil.which(command)
+    if not found:
         return Check("warn", "Kiro MCP server", f"its command {command} does not exist on this machine", fix)
-    return Check("ok", "Kiro MCP server", f"starts with {command}")
+    if "WindowsApps" in found:
+        return Check("warn", "Kiro MCP server", f"{command} on PATH is the Microsoft Store placeholder, not Python",
+                     "Install Python 3.12 from python.org with 'Add to PATH', or run: python -m seance mcp-config --client kiro --write")
+    if any(a.replace("\\", "/").endswith(LAUNCHER) for a in args) and not (root / LAUNCHER).is_file():
+        return Check("warn", "Kiro MCP server", f"{LAUNCHER} is missing", "Restore it from the repository: git checkout -- " + LAUNCHER)
+    portable = not Path(command).is_absolute() and not any(Path(a).is_absolute() for a in args)
+    how = "no machine paths, so it works wherever the repository is cloned" if portable else "this machine's paths"
+    return Check("ok", "Kiro MCP server", f"starts with {command} {' '.join(args)} ({how})".replace("  ", " "))
 
 
 def check_ui_tools() -> Check:

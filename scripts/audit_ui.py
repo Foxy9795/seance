@@ -1,7 +1,8 @@
 """Scripted UI audit: walks every screen and dialog in Edge and reports problems.  python scripts/audit_ui.py  (python -m seance serve first)
 
 Checks, on each screen: script and console errors, native dropdowns (every list must be the page's own), controls without a name,
-interactive targets smaller than 24 px, text below WCAG AA contrast, duplicate ids, sideways overflow, and dialogs without a name.
+interactive targets smaller than 24 px, text below WCAG AA contrast, duplicate ids, sideways overflow, dialogs without a name, and
+floating surfaces (menus, lists, the header, toasts, dialogs) that are not fully opaque.
 Loads three samples for the run and removes them at the end. Exit code 1 when anything is found.
 """
 import subprocess
@@ -46,6 +47,11 @@ PROBE = r"""
     const size = parseFloat(cs.fontSize), bold = parseInt(cs.fontWeight) >= 700; const need = size >= 24 || (size >= 18.66 && bold) ? 3 : 4.5;
     if (ratio < need && !el.closest('[disabled], [aria-disabled=true]') && cs.opacity === '1') { const k = path(el) + t.slice(0, 20); if (!seen.has(k)) { seen.add(k); out.push(['low-contrast', `${ratio.toFixed(1)}:1 ${path(el)} "${t.slice(0, 40)}"`]); } }
   }
+  // floating surfaces must be opaque, so no text behind them shows through
+  document.querySelectorAll('.menu, .dd, .toast, header.top, .pbar, dialog[open], .tcard').forEach((el) => {
+    if (!vis(el)) return; const bgc = getComputedStyle(el).backgroundColor; const c = parse(bgc);
+    if (!c || c[3] < 1) out.push(['see-through', `${path(el)} ${bgc}`]);
+  });
   // ids, overflow
   const ids = {}; document.querySelectorAll('[id]').forEach((e) => { ids[e.id] = (ids[e.id] || 0) + 1; }); Object.entries(ids).forEach(([k, v]) => { if (v > 1) out.push(['duplicate-id', k]); });
   if (document.documentElement.scrollWidth > innerWidth + 1) out.push(['sideways-scroll', `${document.documentElement.scrollWidth} > ${innerWidth}`]);
@@ -106,6 +112,7 @@ def main() -> int:
                 ("palette", None, "#palDlg[open]"),
                 ("shortcuts", None, "#keysDlg[open]"),
                 ("guide", None, "#guideDlg[open]"),
+                ("help menu", '[data-menu="helpMenu"]', "#helpMenu:not([hidden])"),
             ):
                 if opener:
                     page.click(opener)

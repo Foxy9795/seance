@@ -15,8 +15,11 @@ development server: it is for code you trust, on your own machine.
 - The page makes no requests to other hosts. Séance sends nothing anywhere and has no telemetry.
 - `seance setup` downloads one file, the GnuCOBOL 3.1.2 build, from its GitHub release, and refuses it unless its
   SHA-256 matches the value fixed in `seance/toolchain.py`.
-- The MCP server runs over standard input and output for Kiro only. Kiro asks before using a tool that writes files;
-  only the read-only tools are approved in advance in `.kiro/settings/mcp.json`.
+- The MCP server talks over standard input and output, or over HTTP at `/mcp` on the app (and on 127.0.0.1:8765 with
+  `seance mcp --http`). Over HTTP it answers only requests addressed to this machine; the app's `/mcp` refuses requests
+  made by a web page on any other address, and the standalone server refuses every request made by a web page. Any
+  program running under your account can call it, exactly as it could start the stdio server. In the Kiro settings
+  Séance writes, only the tools that read are approved in advance; Kiro asks before the others. `docs/MCP.md` has more.
 
 ## Reporting a problem
 
