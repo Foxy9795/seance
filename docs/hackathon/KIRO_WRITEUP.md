@@ -21,17 +21,17 @@ the same inputs and comparing every output byte. Category: Resurrection.
   (`docs/STRESS_NIST.md`), 275 tests pass, and fourteen small programs in `tests/probes/` run on both sides.
 
 ## How Kiro was used
-**IDE, CLI, Web, Crew**: Built in Kiro IDE. [Did you try the CLI, Web or Crew? How did they differ?]
+**IDE, CLI, Web, Crew**: Built in Kiro IDE. The whole project was built in the IDE. The CLI, Web and Crew clients were not used.
 **Spec-driven development**: `.kiro/specs/seance/` holds `requirements.md` (WHEN/THEN, R1 to R9), `design.md` (pipeline,
 verification, gap filling, correctness properties, rejected alternatives) and `tasks.md` (status checked against the
-repository). [How did the spec shape the build compared with vibe coding?]
+repository). The spec fixed the order of work (analyze, record, generate, verify) and the definition of done before any code was written, so each later change could be checked against a requirement and a task instead of a feeling. Each requirement names its test, which is why the test suite grew with the features.
 **Steering**: `product.md` fixes the product principle (the proof is the product), the numeric rules (Decimal only,
 never float), the stack and the theme. `cobol-migration.md` tells Kiro how to mirror COBOL storage with `store()`,
 that a mismatch means the Python is wrong, and to finish with `verify_migration`. `scripts/check_rules.py` turns the
 numeric and theme rules into a check that fails the build (a `float()` in the runtime failed it once, and was fixed).
-[Which rule changed Kiro's output the most?]
+The rule that a mismatch means the Python is wrong, never the saved test data, changed the most: fixes went into the Python or the translator every time, and fixtures were never edited to make a result pass.
 **Hooks**: `verify-migration-on-save` re-runs the verifier whenever a file in `migrated/` is saved, so a wrong
-migration is flagged at once. [Confirm it fired in your session, and what it caught.]
+migration is flagged at once. The hook is configured and enabled in `.kiro/hooks/`. It tells Kiro to fix the Python and never to edit fixtures or the COBOL.
 **MCP**: `seance/mcp_server.py` exposes 14 tools (stdio, HTTP, and inside the app). `run_legacy_program` is the key one: Kiro
 asks the real COBOL what it does for any input instead of guessing from the source. `fill_test_gaps` lets Kiro close test
 gaps itself. Read-only tools are auto-approved; tools that write files are not. The settings are written for nine agents,
@@ -47,7 +47,7 @@ other (`<=` changed to `<` at 500) never changes the output, because the tax is 
 "likely equivalent", with the number of edge hits behind the claim, not as a pass.
 **Review loop**: a second AI agent (Antigravity) reviewed each release independently and produced written findings
 (`docs/review/`). Each finding was reproduced on GnuCOBOL before it was fixed in Kiro, and each fix became a test or a probe
-program, so the same bug cannot come back. [Add what this changed about how you work with Kiro.]
+program, so the same bug cannot come back. It made the written finding plus a reproducing probe the unit of work: Kiro is asked to fix one reproduced finding at a time, and it is done only when the probe passes on both sides.
 **Custom agents / Powers**: None. The project defines no custom agents (`.kiro/` has steering, a hook, a spec and an MCP server).
 
 ## What was not written here
