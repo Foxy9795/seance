@@ -1,5 +1,6 @@
 """Release tooling: packaging metadata, the GnuCOBOL download, the setup check."""
 import hashlib
+import os
 import re
 import subprocess
 import sys
