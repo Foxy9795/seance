@@ -1,0 +1,25 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ODO1.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 N PIC 9 VALUE 3.
+       01 GRP.
+          05 ARR OCCURS 1 TO 7 TIMES DEPENDING ON N PIC X.
+       01 N2 PIC 9 VALUE 2.
+       01 GRP2.
+          05 HEAD PIC XX VALUE "HH".
+          05 ARR2 OCCURS 1 TO 5 TIMES DEPENDING ON N2 PIC XX.
+       01 L PIC 99.
+       PROCEDURE DIVISION.
+           COMPUTE L = FUNCTION LENGTH(GRP).
+           DISPLAY "LEN=" L.
+           COMPUTE L = LENGTH OF GRP2.
+           DISPLAY "LENGTH-OF=" L.
+           MOVE 5 TO N2.
+           COMPUTE L = LENGTH OF GRP2.
+           DISPLAY "LENGTH-OF=" L.
+           COMPUTE L = FUNCTION LENGTH(GRP2).
+           DISPLAY "LEN=" L.
+           MOVE 1 TO N.
+           DISPLAY "LEN=" FUNCTION LENGTH(GRP).
+           STOP RUN.

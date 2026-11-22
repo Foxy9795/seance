@@ -457,7 +457,7 @@ class Parser:
             return f'S.r("{self.take().value}")'
         if self.word() == "LENGTH" and self.word(1) == "OF":
             self.i += 2
-            return f"D(S.length_of({self.ref().py}))"
+            return self._length_of(self.ref())
         return self.ref().py
 
     _in_fn_arg = False
@@ -495,6 +495,20 @@ class Parser:
             call = f"{call}.sub({start}{', ' + length if length else ''})"
         return call
 
+    def _length_of(self, r) -> str:
+        """LENGTH OF a data item. A group that holds an OCCURS DEPENDING ON table is as long as its DEPENDING ON item says, not as long as
+        the table can get."""
+        expr = self._odo_length_expr(r)
+        return f"D({expr})" if expr else f"D(S.length_of({r.py}))"
+
+    def _odo_length_expr(self, r) -> str | None:
+        odo = [d for d in walk(r.item) if d is not r.item and d.depending and d.depending in self.names.by_name]
+        if not odo or ".sub(" in r.py:
+            return None
+        d = odo[0]
+        dep = self.names.key[id(self.names.resolve(d.depending, []))]
+        return f'S.length_dyn({r.py}, {d.occurs}, {d.size}, "{dep}")'
+
     def _constant_length(self) -> str | None:
         """FUNCTION LENGTH of a literal or of a fixed-size item is a number cobc works out when it compiles: a
         numeric literal, which DISPLAY shows without leading zeros. Anything else is left to the run."""
@@ -508,6 +522,11 @@ class Parser:
         elif self.is_data():
             r = self.ref()
             fixed = ".sub(" not in r.py and not any(getattr(x, "depending", None) for x in _walk_up(r.item))
+            if ".sub(" not in r.py and self.is_op(")") and any(d is not r.item and d.depending for d in walk(r.item)):
+                self.i += 1
+                expr = self._odo_length_expr(r)
+                if expr:
+                    return f"S.fn_uint({expr})"  # the group holds a table whose length changes: a function result, as libcob gives it
             if fixed and self.is_op(")"):
                 size = r.item.size
         if size is None or not self.is_op(")"):
@@ -609,7 +628,7 @@ class Parser:
             return f'S.n("{tok.value}")'
         if tok.kind == "word" and tok.value == "LENGTH" and self.word(1) == "OF":
             self.i += 2
-            return f"D(S.length_of({self.ref().py}))"
+            return self._length_of(self.ref())
         if tok.kind == "str":
             raise Unsupported(f"a text literal {tok.value!r} where a number is needed")
         return self.ref().num
@@ -2283,6 +2302,8 @@ def _data_literals(names: Names, records: dict[str, int], model: ProgramModel) -
             extra["linage"] = lin
         if f.depending and f.depending in names.by_name:
             extra["depending"] = key_of(f.depending)  # RECORD VARYING ... DEPENDING ON
+            if f.contains:
+                extra["minrec"] = f.contains[0]  # a record shorter than this is status 44
         if f.same_record:  # SAME RECORD AREA: the buffer is shared, so WRITE finds the file by its own records
             extra["records"] = [names.key[id(r)] for r in f.records]
         buffer = names.file_buffer.get(f.name, f.records[0].name)

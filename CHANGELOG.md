@@ -3,6 +3,15 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.11] - 2026-11-22
+The last items of the second audit, each measured on GnuCOBOL 3.1.2 and kept as a program in `tests/probes/`.
+### Fixed
+- FILE STATUS corners: OPEN EXTEND of a missing indexed file that is not OPTIONAL is 35 (not 05); a WRITE to an indexed or relative file opened I-O with sequential access is 48; DELETE FILE of a file that is not there is 35; a WRITE of a record shorter than the smallest RECORD VARYING allows is 44 (a longer one is cut, status 00).
+- A short record read from a variable-length sequential file leaves the rest of the record area as it was (a LINE SEQUENTIAL record is still padded with spaces, which is what GnuCOBOL does).
+- `FUNCTION LENGTH` and `LENGTH OF` of a group that holds an OCCURS DEPENDING ON table follow the DEPENDING ON item, and `FUNCTION LENGTH` of it prints as a function result does.
+- A program with an OCCURS DEPENDING ON table that has an entry after it, or another such table inside it, is refused with a message, as GnuCOBOL refuses it.
+### Still open (also in the README, under Limits)
+- GLOBAL data and files shared between the programs of one source file (4 NIST programs); `BLANK WHEN ZERO` on a field with `V` (GnuCOBOL gives it an extra byte and digit: a compiler quirk, not copied); several record descriptions on one indexed file; `bigcheck` for a file larger than memory; the commands use the workspace of the folder Séance is installed in.
 ## [1.2.10] - 2026-11-22
 ### Changed (the page)
 - Lighter dashboard: smaller cards, one line of progress (translated, verified, coverage, missing copybooks) instead of a second row of cards and a funnel, less motion. The health ring no longer has a seam at the top.

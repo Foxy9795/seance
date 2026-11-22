@@ -317,6 +317,7 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             raise LayoutError(f"{it.name}: a {it.usage} item needs a PIC clause.")
     for r in roots:
         _place(r, 0)
+        _check_odo(r)
     for line, name, first, last_name, root in pending_renames:
         root.renames.append(_renames(line, name, first, last_name, root))
     return roots
@@ -383,6 +384,20 @@ def _place(it: Item, offset: int) -> int:
         it.size = 0
     return it.size
 
+
+def _check_odo(record: "Item") -> None:
+    """What GnuCOBOL 3.1.2 refuses: an OCCURS DEPENDING ON inside another, and any entry after one that is not subordinate to it."""
+    order = list(walk(record))
+    for k, d in enumerate(order):
+        if not d.depending:
+            continue
+        sub = list(walk(d))
+        for inner in sub[1:]:
+            if inner.depending:
+                raise LayoutError(f"{inner.name} cannot have OCCURS DEPENDING ON inside {d.name}, which has one too.")
+        after = [x for x in order[k + len(sub):] if not x.redefines]
+        if after:
+            raise LayoutError(f"{d.name} cannot have OCCURS DEPENDING ON because {after[0].name} follows it in the same record.")
 
 def walk(it: Item):
     yield it

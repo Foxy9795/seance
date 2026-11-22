@@ -625,6 +625,16 @@ class Program:
         return spec[10][-1][0] if spec[10] else 1
 
     # ---------------------------------------------------------- files
+    def fn_uint(self, n) -> "Ref":
+        from . import intrinsics
+
+        return self._fn_store(intrinsics.Result("uint", n=int(n)))
+
+    def length_dyn(self, ref, occurs: int, elem: int, dep: str) -> int:
+        """LENGTH of a group with an OCCURS DEPENDING ON table: the maximum less the entries beyond the DEPENDING ON item."""
+        n = max(0, min(int(self.n(dep)), occurs))
+        return self._addr(ref)[2] - (occurs - n) * elem
+
     def length_of(self, ref) -> int:
         """LENGTH OF: the bytes of an item (one occurrence of a table entry)."""
         ref = ref if isinstance(ref, Ref) else Ref(self.resolve(ref))
@@ -637,6 +647,10 @@ class Program:
             f = self.files[name]
             if f.mode:
                 self._status(f, "41")
+                ok = False
+                continue
+            if self._file_data(f.assign) is None and f.assign not in self.io.outputs:
+                self._fail(f, "35", f"DELETE FILE {f.name}: file {f.assign} does not exist")
                 ok = False
                 continue
             self.io.inputs.pop(f.assign, None)
@@ -814,7 +828,7 @@ class Program:
             n = int.from_bytes(f.data[f.pos:f.pos + 2], "big")
             chunk = f.data[f.pos + 4:f.pos + 4 + n]
             f.pos += 4 + n
-            buf[0:f.size] = chunk[:f.size].ljust(f.size, b" ")
+            buf[0:min(len(chunk), f.size)] = chunk[:f.size]  # the bytes after a short record stay as they were (measured)
             self._set_depending(f, min(len(chunk), f.size))
             self._status(f, "00")
         else:
@@ -941,6 +955,8 @@ class Program:
             return self._linage_write(f, record, advancing, eop)
         size = self.items[record][2] if record in self.items else f.size
         if f.extra.get("depending"):  # RECORD VARYING ... DEPENDING ON: the item gives this record's length
+            if f.extra.get("minrec") and self._dep_len(f) < f.extra["minrec"]:
+                return self._fail(f, "44", f"WRITE {record}: the record is shorter than the smallest this file allows")
             size = max(0, min(self._dep_len(f), f.size))
         data = bytes(self.mem[f.record][0:size])
         if f.organization == "line":
@@ -1036,7 +1052,7 @@ class Program:
         f.table, f.seq, f.extent = {}, 0, 0
         if mode in ("input", "io", "extend"):
             if self._file_data(f.assign) is None:
-                if f.extra.get("optional") or mode == "extend":
+                if f.extra.get("optional") or (mode == "extend" and f.organization != "indexed"):
                     self._status(f, "05")
                     return
                 f.mode = None
@@ -1151,10 +1167,12 @@ class Program:
         return True
 
     def _k_write(self, f: FileState, record: str) -> bool:
-        if f.mode not in ("output", "extend", "io"):
+        if f.mode not in ("output", "extend", "io") or (f.mode == "io" and f.extra.get("access", "sequential") == "sequential"):
             return self._fail(f, "48", f"WRITE {record}: the file is not open for output")
         rec = bytes(self.mem[f.record][0:f.size])
         if f.extra.get("depending"):
+            if f.extra.get("minrec") and self._dep_len(f) < f.extra["minrec"]:
+                return self._fail(f, "44", f"WRITE {record}: the record is shorter than the smallest this file allows")
             rec = rec[:max(0, min(self._dep_len(f), f.size))]
         seq_access = f.extra.get("access", "sequential") == "sequential"
         if f.organization == "relative":

@@ -1,0 +1,36 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. FIL11.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT FV ASSIGN TO "FV11.DAT" ORGANIZATION SEQUENTIAL
+               FILE STATUS S3.
+           SELECT FL ASSIGN TO "FL11.DAT" ORGANIZATION LINE SEQUENTIAL
+               FILE STATUS S4.
+       DATA DIVISION.
+       FILE SECTION.
+       FD FV RECORD VARYING FROM 2 TO 10 DEPENDING ON LEN.
+       01 FVR PIC X(10).
+       FD FL.
+       01 FLR PIC X(10).
+       WORKING-STORAGE SECTION.
+       01 S3 PIC XX. 01 S4 PIC XX.
+       01 LEN PIC 9(4).
+       PROCEDURE DIVISION.
+           OPEN OUTPUT FV.
+           MOVE "12345" TO FVR. MOVE 5 TO LEN. WRITE FVR.
+           CLOSE FV.
+           OPEN OUTPUT FL.
+           MOVE "12345" TO FLR. WRITE FLR.
+           CLOSE FL.
+           OPEN INPUT FV.
+           MOVE "ZZZZZZZZZZ" TO FVR.
+           READ FV.
+           DISPLAY "VARYING REC=" FVR " LEN=" LEN.
+           CLOSE FV.
+           OPEN INPUT FL.
+           MOVE "ZZZZZZZZZZ" TO FLR.
+           READ FL.
+           DISPLAY "LINE REC=" FLR.
+           CLOSE FL.
+           STOP RUN.

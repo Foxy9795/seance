@@ -105,3 +105,15 @@ def test_loops_written_over_two_lines_are_counted(tmp_path):
     (tmp_path / "legacy" / "lp").mkdir(parents=True)
     (tmp_path / "legacy" / "lp" / "lp.cbl").write_text(src, encoding="utf-8")
     assert "1 loop" in _derived_purpose(load_model("lp", tmp_path))
+
+def test_an_odo_table_must_be_last_in_its_record(tmp_path):
+    """GnuCOBOL 3.1.2 refuses an entry after an OCCURS DEPENDING ON table, and one inside another."""
+    from seance.model import ModelError, load_model
+
+    src = ("       IDENTIFICATION DIVISION.\n       PROGRAM-ID. OD.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n"
+           "       01 N PIC 9 VALUE 2.\n       01 GRP.\n          05 ARR OCCURS 1 TO 5 TIMES DEPENDING ON N PIC X.\n"
+           "          05 POST-VAL PIC X.\n       PROCEDURE DIVISION.\n           STOP RUN.\n")
+    (tmp_path / "legacy" / "od").mkdir(parents=True)
+    (tmp_path / "legacy" / "od" / "od.cbl").write_text(src, encoding="utf-8")
+    with pytest.raises(ModelError, match="follows it"):
+        load_model("od", tmp_path)

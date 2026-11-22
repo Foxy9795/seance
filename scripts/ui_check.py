@@ -128,7 +128,7 @@ try:
         body = page.inner_text("body")
         check("documentation page holds the words and the feature list", "Spirit matched" in body and "What you can do" in body)
         page.goto("http://127.0.0.1:8100/#/agent")
-        time.sleep(1.5)
+        page.wait_for_function("document.body.innerText.includes('mcpServers')", timeout=20000)
         check("AI Agent page holds the MCP settings", "mcpServers" in page.inner_text("body") or "mcp" in page.inner_text("body").lower())
         page.goto("http://127.0.0.1:8100/#/activity")
         time.sleep(1)

@@ -304,6 +304,11 @@ The tests load the sample library into the workspace for the run and remove it a
   GLOBAL data shared between programs of one file. A program that uses them is accepted; an untranslatable statement raises
   an error naming its line, so the check fails there. `docs/STRESS.md` measures the translator against GnuCOBOL's own test
   programs (165 of 464 usable ones match; the suite is deliberately full of edge cases).
+- `BLANK WHEN ZERO` on a field with a `V` is not matched: GnuCOBOL 3.1.2 gives it an extra byte and an extra decimal digit, which looks
+  like a compiler quirk rather than a rule (`build`-style probe in `CHANGELOG.md` 1.2.11). An indexed file with several record
+  descriptions that share a key name is refused (qualify the name with OF).
+- `seance bigcheck` reads the whole input and both outputs into memory: for a file larger than the machine's memory, split it.
+  The commands work on the workspace of the folder Séance is installed in, so run them from there.
 - IMS and the REPORT and SCREEN sections are the main things to add next.
 
 ## Documentation
@@ -315,7 +320,7 @@ The tests load the sample library into the workspace for the run and remove it a
 | `SECURITY.md` | What Séance does that matters for security, and how to report a problem |
 | `docs/COMPARISON.md` | Ten products that do part of this job, and where Séance differs |
 | `docs/STRESS.md` | The translator measured against GnuCOBOL's own test programs |
-| `docs/STRESS_NIST.md` | The NIST COBOL-85 suite: 324 of 366 programs match GnuCOBOL byte for byte |
+| `docs/STRESS_NIST.md` | The NIST COBOL-85 suite: 325 of 366 programs match GnuCOBOL byte for byte |
 | `docs/review/ANTIGRAVITY_PROMPT_1.2.md` | The prompt for an independent bug hunt with Antigravity |
 | `docs/review/` | An independent review, the prompt that ran it, and how each finding was resolved |
 | `.kiro/specs/seance/` | Requirements, design and tasks |
