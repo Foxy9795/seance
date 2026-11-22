@@ -194,9 +194,6 @@ def compare_jobs(job: Job, case: JobCase, expected: JobResult, actual: JobResult
 
 # ---------------------------------------------------------------- saved sets
 
-def _safe(dsn: str) -> str:
-    return re.sub(r"[^A-Za-z0-9.&#@$-]", "_", dsn).replace("&", "T")
-
 
 def save(job: str, name: str, case: JobCase, result: JobResult, label: str, root: Path = ROOT) -> None:
     d = root / "fixtures" / job / name

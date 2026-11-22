@@ -181,7 +181,4 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-def launcher_ok(root: Path = ROOT) -> bool:
-    return (root / LAUNCHER).is_file()
-
 

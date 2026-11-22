@@ -134,9 +134,6 @@ class IO:
         """Write a text output file the way GnuCOBOL does: trailing spaces dropped, one line per row."""
         self.outputs[name] = "".join(r.rstrip(" ") + "\n" for r in rows).encode(ENC)
 
-    def write_records(self, name: str, rows: list[str], size: int) -> None:
-        self.outputs[name] = "".join(r.ljust(size)[:size] for r in rows).encode(ENC)
-
     def print(self, *parts) -> None:
         self.stdout += "".join(str(p) for p in parts) + "\n"
 

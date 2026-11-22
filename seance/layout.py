@@ -65,10 +65,6 @@ class Item:
     usage_words: str = ""  # its own USAGE clause as written (COMP-3, BINARY, ...), which items under a group inherit
     renames: list["Item"] = field(default_factory=list, repr=False)  # on an 01: its level 66 RENAMES items
 
-    @property
-    def is_table(self) -> bool:
-        return self.occurs > 0
-
     def dims(self) -> list[tuple[int, int]]:
         """(count, stride) for each OCCURS on this item and its ancestors, outermost first."""
         out, node = [], self

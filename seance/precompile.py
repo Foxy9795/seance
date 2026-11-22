@@ -20,9 +20,6 @@ _EDGE_L, _EDGE_R = r"(?<![A-Za-z0-9_-])", r"(?![A-Za-z0-9_-])"
 _TOKEN = re.compile(r"\s*(>=|<=|<>|[=<>()]|'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|[+-]?\d+(?:\.\d+)?|" + WORD + r")", re.I)
 
 
-class PrecompileError(ValueError):
-    pass
-
 
 # ---------------------------------------------------------------- outside quotes
 

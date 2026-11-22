@@ -354,9 +354,6 @@ def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 
     return diffs, units
 
 
-def count_differing(diffs: list[Diff]) -> int:
-    return len(diffs)
-
 
 # ---------------------------------------------------------------- generating
 

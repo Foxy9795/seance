@@ -131,9 +131,6 @@ def from_float(x: Decimal) -> Dec:
         return Dec.of(x.quantize(q, rounding=ROUND_HALF_UP))
 
 
-def _ctx_unused():
-    return localcontext(Context(prec=WORK))
-
 
 _PI: Decimal | None = None
 
@@ -1003,6 +1000,3 @@ NAMES = {
     "SUM", "TAN", "TEST-DATE-YYYYMMDD", "TEST-DAY-YYYYDDD", "TEST-NUMVAL", "TEST-NUMVAL-C", "TEST-NUMVAL-F", "TRIM",
     "UPPER-CASE", "VARIANCE", "WHEN-COMPILED", "YEAR-TO-YYYY",
 }
-TEXT_ARGS = {"UPPER-CASE", "LOWER-CASE", "REVERSE", "TRIM", "LENGTH", "BYTE-LENGTH", "NUMVAL", "NUMVAL-C", "NUMVAL-F",
-             "ORD", "CONCATENATE", "SUBSTITUTE", "SUBSTITUTE-CASE", "STORED-CHAR-LENGTH", "TEST-NUMVAL", "TEST-NUMVAL-C",
-             "TEST-NUMVAL-F"}  # arguments read as text: LOWER-CASE(NAME(2:19)) must not read NAME as a number

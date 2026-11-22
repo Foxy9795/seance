@@ -46,16 +46,6 @@ def write_source(path, text: str) -> None:
     Path(path).write_bytes(text.encode("latin-1"))
 
 
-def read_for_people(path) -> str:
-    """A COBOL file for reading on screen: UTF-8 when it is UTF-8, otherwise one character per byte."""
-    from pathlib import Path
-
-    data = Path(path).read_bytes()
-    try:
-        return data.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        return data.decode("latin-1")
-
 
 def expand_tabs(line: str, fixed: bool) -> str:
     """Tabs as cobc reads them (measured): in fixed format a tab inside the sequence area and indicator column moves to column 8,
