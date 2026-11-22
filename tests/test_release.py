@@ -119,7 +119,7 @@ def test_the_app_runs_the_setup_check():
     assert r.status_code == 200 and r.json()["ok"] is True
 
 def test_bare_command_shows_an_overview():
-    proc = subprocess.run([sys.executable, "-m", "seance"], capture_output=True, text=True, encoding="utf-8", cwd=ROOT, timeout=60)
+    proc = subprocess.run([sys.executable, "-m", "seance"], capture_output=True, text=True, encoding="utf-8", cwd=ROOT, timeout=60, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
     assert proc.returncode == 0 and "seance serve" in proc.stdout and "seance doctor" in proc.stdout
 
 
