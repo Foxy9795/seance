@@ -168,7 +168,8 @@ try:
         click(page, "#runBtn")
         wait_for(page, "document.querySelector('.word')", 60)
         time.sleep(1)
-        say(page, "Spirit restless. One byte differs, and the smallest failing input is shown." if wrong else "Run Check result.", 7)
+        say(page, "Spirit restless. The floats drift by a cent, and Séance shows exactly which lines differ." if wrong else "Run Check result.", 7)
+        page.screenshot(path=str(SRC / "build" / "shot_restless.png"))
         try:
             page.select_option("#implSel", index=0)
         except Exception:
@@ -196,6 +197,7 @@ try:
         except Exception:
             say(page, "Mutation testing and test generation run from this tab.", 4)
 
+        page.screenshot(path=str(SRC / "build" / "shot_mutation.png"))
         # 7. How it was built with Kiro
         card(page, "Built with Kiro", ["Spec: requirements, design, tasks", "Steering: product rules and COBOL migration rules",
                                        "Hook: re-verify on save", "MCP server: 14 tools, runs the real COBOL",

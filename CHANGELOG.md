@@ -3,6 +3,14 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.12]
+
+### Changed
+- Removed dead code: the old guide/tour/sample picker in the page and unused Python helpers.
+
+### Added
+- `scripts/record_demo.py` records a captioned demo video (under 3 minutes) on a throwaway copy.
+
 ## [1.2.11] - 2026-11-22
 The last items of the second audit, each measured on GnuCOBOL 3.1.2 and kept as a program in `tests/probes/`.
 ### Fixed
