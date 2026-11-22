@@ -163,7 +163,7 @@ def display_text(spec, data: bytes) -> str:
         return _display_raw(spec, data.decode(ENC))
     v = decode(spec, data)
     n = _scaled(v, scale)
-    width = NATIVE_DIGITS.get(size, digits) if usage in ("native", "index") else digits
+    width = 9 if usage == "index" else NATIVE_DIGITS.get(size, digits) if usage == "native" else digits
     text = str(n % (10**width)).zfill(width)
     if scale < 0:  # PIC 999PP: the P positions print as zeros
         text = text + "0" * -scale
@@ -173,7 +173,7 @@ def display_text(spec, data: bytes) -> str:
         text = "." + text.zfill(scale)
     elif scale:
         text = text[:-scale] + "." + text[-scale:]
-    if signed:
+    if signed or usage == "index":  # an index data item prints with its sign
         negative = v.is_signed() if usage == "display" else v < 0
         mark = "-" if negative else "+"
         text = text + mark if spec[5] == "trailing_sep" else mark + text  # an overpunched sign still prints in front

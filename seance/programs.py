@@ -167,7 +167,7 @@ def program_info(name: str, root: Path = ROOT) -> dict:
     try:
         model = load_model(name, root)
         info.update({
-            "title": name.replace("_", " ").title(),
+            "title": model.program_id.upper() if model.program_id and model.program_id.lower().replace("-", "_") == name else name.replace("_", " ").title(),
             "program_id": model.program_id,
             "format": "fixed" if model.fixed else "free",
             "purpose": _purpose(model),
@@ -177,6 +177,7 @@ def program_info(name: str, root: Path = ROOT) -> dict:
             "calls": [m.program_id for m in model._every()[1:]],
             "io": model.describe_io(),
             "unsupported": model.unsupported,
+            "copybooks": sorted(f.name for f in (root / "legacy" / name).iterdir() if f.suffix.lower() in (".cpy", ".copy", ".cpb")),
             "notes": model.notes,
             "kinds": kinds_of(model),
             "error": None,
@@ -275,6 +276,11 @@ def delete_program(name: str, root: Path = ROOT, keep_build: bool = False) -> No
     clear_reports(name, root)
 
 
+def _lf(text: str) -> str:
+    """Text as lines ended by one newline: write_text turns each newline into CR LF on Windows, so a CR LF that came in would end up CR CR LF."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = None, root: Path = ROOT,
                    programs: dict[str, str] | None = None) -> dict:
     """Add a program, then analyze, compile, record, describe and draft the Python. Cleans up on failure.
@@ -303,13 +309,13 @@ def create_program(name: str, cobol: str, copybooks: dict[str, str] | None = Non
     created = [src, root / "fixtures" / name, root / "build" / name, root / "migrated" / f"{name}.py", root / "docs" / "specs" / f"{name}.md"]
     try:
         src.mkdir(parents=True)
-        (src / f"{name}.cbl").write_text(cobol, encoding="utf-8")
+        (src / f"{name}.cbl").write_text(_lf(cobol), encoding="utf-8")
         for cb_name, cb_text in copybooks.items():
-            (src / f"{cb_name}.cpy").write_text(cb_text, encoding="utf-8")
+            (src / f"{cb_name}.cpy").write_text(_lf(cb_text), encoding="utf-8")
         for sub_name, sub_text in programs.items():
             if sub_name.lower() == name.lower():
                 raise ProgramError(f"A called program cannot have the same file name as the main program ({sub_name}).")
-            (src / f"{sub_name.lower()}.cbl").write_text(sub_text, encoding="utf-8")
+            (src / f"{sub_name.lower()}.cbl").write_text(_lf(sub_text), encoding="utf-8")
         try:
             model = load_model(name, root)
         except ModelError as exc:

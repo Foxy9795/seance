@@ -37,3 +37,22 @@ def test_ordinal_in_an_alphabet():
     assert plain.symbolic["SC-D"] == "A"
     with pytest.raises(ValueError):
         special_names.parse("SYMBOLIC CHARACTERS SC-Z IS 0")
+
+
+def test_two_different_stops_are_not_a_match():
+    from seance.cases import Case, Result, compare, stop_kind
+    from types import SimpleNamespace
+
+    assert stop_kind("libcob: subscript out of bounds") == "subscript"
+    assert stop_kind("CobolError: the program ran more than 5 loop steps; a loop") == "hang"
+    model = SimpleNamespace(all_files=[])
+    cobol = Result(error="libcob: subscript out of bounds")
+    python = Result(error="CobolError: the program ran more than 2000000 loop steps; a loop probably never ends")
+    diffs, _ = compare(model, cobol, python)
+    assert diffs
+
+
+def test_windows_line_ends_are_not_doubled():
+    from seance.programs import _lf
+
+    assert _lf("A\r\nB\rC\n") == "A\nB\nC\n"

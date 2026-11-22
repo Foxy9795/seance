@@ -388,7 +388,7 @@ def create_job(name: str, jcl: str, root: Path = ROOT) -> dict:
     folder = root / "legacy" / name
     try:
         folder.mkdir(parents=True)
-        (folder / f"{name}.jcl").write_text(jcl, encoding="utf-8")
+        (folder / f"{name}.jcl").write_text(jcl.replace("\r\n", "\n").replace("\r", "\n"), encoding="utf-8")
         try:
             job = load_job(name, root)
         except JclError as exc:

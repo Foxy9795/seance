@@ -61,6 +61,7 @@ from seance.rt import IO, CobolError  # noqa: E402
 SETS = sorted(p for p in (HERE / "data").iterdir() if (p / "set.json").exists())
 TEXT_FILES = {text_files!r}  # line sequential files: a line ending is not part of the data
 RECORD_SIZE = {record_size!r}  # fixed-length record files
+CLOCK = "2026/10/31 23:59:58.00"  # the moment the COBOL ran at when it was recorded
 PRINT_FILES = {print_files!r}  # record files made only of text: a print file carries line and page breaks between records
 
 
@@ -94,9 +95,12 @@ def test_matches_the_cobol(folder):
     console = (folder / "console.txt").read_text(encoding="utf-8")
     if meta.get("error"):  # the COBOL itself stopped here (for example a missing file): so must the Python
         with pytest.raises(CobolError):  # the runtime's own error; any other exception is a crash, not a match
-            program.main(IO(files, meta["stdin"]))
+            io = IO(files, meta["stdin"])
+            io.clock = CLOCK
+            program.main(io)
         return
     io = IO(files, meta["stdin"])
+    io.clock = CLOCK
     io = program.main(io) or io
     for assign, data in expected.items():
         assert same(assign, io.outputs.get(assign), data), f"output file {{assign}} differs from the COBOL's"

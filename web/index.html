@@ -350,7 +350,7 @@
   .pal-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: .82rem; }
 
   /* toasts and tour */
-  #toasts { position: fixed; z-index: 120; bottom: 18px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; width: min(560px, 94vw); pointer-events: none; }
+  #toasts { position: fixed; z-index: 120; bottom: 18px; right: 18px; display: grid; gap: 8px; width: min(420px, 94vw); pointer-events: none; }
   .toast { transition: opacity .18s ease, transform .22s ease; pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; background: var(--panel2); border: 1px solid var(--line2); border-left-width: 3px; border-radius: 8px; box-shadow: 0 14px 34px rgba(0,0,0,.55); animation: toastIn .34s cubic-bezier(.2,1.1,.3,1); white-space: pre-line; }
   .toast.out { opacity: 0; transform: translateY(10px) scale(.97); }
   @keyframes toastIn { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: none; } }
@@ -581,9 +581,49 @@ body:has(dialog[open]) { overflow: hidden; }
 body[data-samples="0"] .sample-only, body[data-samples="0"] [data-act="tour"], body[data-samples="0"] [data-act="samples"], body[data-samples="0"] .h-proof { display: none !important; }
 /* WCAG 1.4.11: the edge of a field or a button must be 3:1 against what is behind it */
 select, input[type=text], input[type=search], input[type=number], textarea, .btn:not(.ghost), .seg, .chipbtn { border-color: #7d7589; }
+.tip { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 6px; border: 1px solid #8a8294; border-radius: 50%; font: italic 700 .68rem Georgia, serif; color: var(--muted); cursor: help; vertical-align: middle; position: relative; }
+.tip:hover, .tip:focus-visible { color: var(--text); border-color: var(--amber); outline: none; }
+.tip::after { content: attr(data-tip); position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-30%); width: max-content; max-width: min(340px, 80vw); padding: 9px 11px; background: #211d27; border: 1px solid #6f6879; border-radius: 8px; color: var(--text); font: 400 .82rem/1.45 var(--sans, system-ui); font-style: normal; text-align: left; white-space: normal; box-shadow: 0 8px 28px rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 90; }
+.tip:hover::after, .tip:focus-visible::after { opacity: 1; }
+.info-wrap { position: relative; }
+.infotip { position: absolute; right: -40px; top: calc(100% + 10px); width: min(460px, 92vw); max-height: min(78vh, 640px); overflow: auto; overscroll-behavior: contain; padding: 14px 16px; background: #1d1a22; border: 1px solid #6f6879; border-radius: 12px; box-shadow: 0 14px 44px rgba(0,0,0,.6); font-size: .86rem; line-height: 1.5; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .14s ease, transform .14s ease, visibility .14s; z-index: 100; }
+.info-wrap:hover .infotip, .info-wrap:focus-within .infotip { opacity: 1; visibility: visible; transform: none; }
+.infotip h3 { font-size: 1.05rem; margin-bottom: 6px; } .infotip h4 { margin: 12px 0 4px; font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; color: var(--amber); }
+.infotip ol { padding-left: 18px; display: grid; gap: 4px; } .infotip dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; } .infotip dt { font-weight: 600; } .infotip dd { margin: 0; color: var(--muted); }
+.h-hero { grid-template-columns: 1fr !important; }
+.leaving { opacity: 0; transform: translateX(-10px); transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
+/* the Check tab keeps the proof in view; the advanced panels open on a click (and stay as you left them) */
+#strengthPanel > .head, #historyPanel > .head { cursor: pointer; position: relative; padding-right: 74px; }
+#strengthPanel > .head::after, #historyPanel > .head::after { content: "Show"; position: absolute; right: 16px; top: 16px; font-size: .78rem; color: var(--amber); border: 1px solid var(--amber); border-radius: 999px; padding: 1px 10px; }
+body[data-adv-strength] #strengthPanel > .head::after, body[data-adv-history] #historyPanel > .head::after { content: "Hide"; }
+body:not([data-adv-strength]) #strengthPanel > :not(.head), body:not([data-adv-history]) #historyPanel > :not(.head) { display: none; }
+#vWork .stats > div:nth-child(n+5) { display: none; }
+/* dashboard */
+.dash { display: grid; grid-template-columns: minmax(230px, 280px) 1fr; gap: 14px; align-items: stretch; margin-bottom: 14px; }
+.health { display: flex; gap: 14px; align-items: center; padding: 16px; background: var(--panel); border: 1px solid var(--line2); border-radius: 12px; }
+.hring { --p: 0; width: 76px; height: 76px; flex: none; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--good) calc(var(--p) * 1%), #2a2630 0); position: relative; }
+.hring::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: var(--panel); } .hring b { position: relative; font-size: 1.1rem; }
+.dash .stats { margin: 0; }
+.wiz { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 4px 0 10px; }
+.wiz li { display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 8px; border: 1px solid var(--line2); border-radius: 999px; color: var(--muted); }
+.wiz li .wn { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; border: 1px solid #8a8294; font-size: .8rem; }
+.wiz li.done { color: var(--text); } .wiz li.done .wn { background: var(--good); border-color: var(--good); color: #0b1a12; }
+.wiz li.cur { color: var(--text); border-color: var(--amber); background: rgba(233,168,62,.08); } .wiz li.cur .wn { border-color: var(--amber); color: var(--amber); }
+.next { margin: 0 0 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.funnel { display: grid; gap: 6px; margin: 0 0 16px; } .funnel > div { display: grid; grid-template-columns: 90px 1fr 46px; gap: 10px; align-items: center; font-size: .85rem; color: var(--muted); }
+.funnel i { display: block; height: 10px; border-radius: 6px; background: #2a2630; position: relative; overflow: hidden; } .funnel i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--good); border-radius: 6px; transition: width .5s ease; } .funnel b { text-align: right; color: var(--text); }
+.issue { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--bad); border-radius: 10px; background: rgba(224,96,96,.07); }
+.importbox { display: grid; justify-items: center; gap: 6px; padding: 38px 20px; margin: 8px 0 14px; text-align: center; border: 2px dashed #7d7589; border-radius: 16px; cursor: pointer; color: var(--muted); transition: border-color .15s, background-color .15s; }
+.importbox:hover, .importbox:focus-visible, body.dragging .importbox { border-color: var(--amber); background: rgba(233,168,62,.07); outline: none; } .importbox b { font-size: 1.2rem; color: var(--text); } .importbox small { max-width: 62ch; }
+body.dragging::after { content: "Drop your COBOL files to add them"; position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; font-size: 1.6rem; background: rgba(14,12,16,.82); border: 3px dashed var(--amber); color: var(--text); pointer-events: none; }
+#importBar { position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 130; display: flex; gap: 10px; align-items: center; padding: 9px 16px; background: #1f1b24; border: 1px solid var(--amber); border-radius: 999px; box-shadow: 0 8px 28px rgba(0,0,0,.5); }
+.h-feat.locked { opacity: .55; cursor: not-allowed; filter: grayscale(.6); } .h-feat.locked .h-go { color: var(--muted); }
+.words { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; } .words dt { font-weight: 600; } .words dd { margin: 0; color: var(--muted); }
+.side-foot { display: grid; gap: 2px; }
+@media (max-width: 860px) { .dash { grid-template-columns: 1fr; } }
 </style>
 </head>
-<body data-density="comfortable" data-motion="system" data-side="on">
+<body data-density="comfortable" data-motion="system" data-side="on" data-samples="0">
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="top" role="banner">
@@ -597,11 +637,31 @@ select, input[type=text], input[type=search], input[type=number], textarea, .btn
       <div class="body sm" id="runtimeInfo"></div>
     </div>
   </div>
+  <div class="info-wrap" id="infoWrap">
+    <button class="icon-btn" id="infoBtn" aria-label="What is Séance, and how do I use it?" aria-describedby="infoTip"><i data-ic="info" data-size="18"></i></button>
+    <div class="infotip" id="infoTip" role="tooltip">
+      <h3>What Séance does</h3>
+      <p>It proves that the Python written for your COBOL gives the same answers as the COBOL. The original program is compiled and run by GnuCOBOL; its output is the answer key. Every byte the Python writes is compared with it.</p>
+      <h4>How to use it</h4>
+      <ol><li><b>Add</b> your COBOL: drop the files anywhere on the page, or press <i>Add Program</i>. Copybooks and called programs go in the same drop.</li>
+        <li>Séance <b>runs the original</b> on edge values and random records, and <b>writes the Python</b>.</li>
+        <li>Press <b>Check</b>. Both run on every saved input and on fresh random data.</li>
+        <li>Put <b>your own data</b> in the Test Data tab (any size; drop several files at once).</li></ol>
+      <h4>The tabs of a program</h4>
+      <dl><dt>Overview</dt><dd>what the program is, and the result of its last check</dd>
+        <dt>Code</dt><dd>the COBOL and the Python side by side; click a Python line to see its COBOL line</dd>
+        <dt>Analysis</dt><dd>flow of the paragraphs, business rules, data dictionary, where each field comes from</dd>
+        <dt>Check</dt><dd>runs the proof, shows coverage, and plants small bugs to see if the tests notice</dd>
+        <dt>Try Input</dt><dd>runs both sides on one input you type</dd>
+        <dt>Test Data</dt><dd>your own input files, the saved test sets, and output from your own mainframe</dd></dl>
+      <h4>The words</h4>
+      <p><b>Spirit matched</b>: every byte is the same. <b>Spirit restless</b>: they differ, and the Python is what to fix. <b>Coverage</b>: how many COBOL statements the saved runs reach.</p>
+      <p class="faint">A file too big for the page (several GB)? Run <code>python -m seance bigcheck PROGRAM FILE</code>. Nothing you add leaves this machine.</p>
+    </div>
+  </div>
   <div class="menu-wrap">
     <button class="icon-btn" id="helpBtn" data-menu="helpMenu" aria-haspopup="true" aria-expanded="false" aria-label="Help" title="Help"><i data-ic="help" data-size="18"></i></button>
     <div class="menu" id="helpMenu" role="menu" hidden>
-      <button role="menuitem" data-act="tour"><i data-ic="compass"></i>Guided tour<small>A walk through a real check, with a sample program</small></button>
-      <button role="menuitem" data-act="samples"><i data-ic="book"></i>Sample library<small>Load an example to explore</small></button>
       <button role="menuitem" data-act="keys"><i data-ic="keyboard"></i>Keyboard shortcuts</button>
       <button role="menuitem" data-act="about"><i data-ic="info"></i>About and supported COBOL</button>
     </div>
@@ -619,6 +679,9 @@ select, input[type=text], input[type=search], input[type=number], textarea, .btn
     <nav class="side-list" id="sideList" aria-label="Program list"></nav>
     <div class="side-foot">
       <button data-act="assess"><i data-ic="layers"></i>Assessment</button>
+      <button data-act="agent"><i data-ic="plug"></i>AI Agent</button>
+      <button data-act="docs"><i data-ic="book"></i>Documentation</button>
+      <button data-act="activity"><i data-ic="list"></i>Activity Log</button>
     </div>
   </aside>
   <div class="scrim" id="scrim"></div>
@@ -629,6 +692,9 @@ select, input[type=text], input[type=search], input[type=number], textarea, .btn
 
     <!-- Assessment -->
     <section class="view" id="vPort" hidden aria-labelledby="portTitle"></section>
+
+    <!-- Documentation, AI agent, activity log -->
+    <section class="view" id="vDoc" hidden aria-labelledby="docTitle"></section>
 
     <!-- Program -->
     <section class="view" id="vProg" hidden aria-labelledby="pTitle">
@@ -815,6 +881,7 @@ const IC = {
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
   locate: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5M11 8v6M8 11h6"/>',
 };
+function tip(text) { return `<span class="tip" tabindex="0" role="img" aria-label="${esc(text)}" data-tip="${esc(text)}">i</span>`; }
 const ic = (n, s = 16) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
 const hydrateIcons = (root = document) => $$('[data-ic]', root).forEach((el) => { el.outerHTML = ic(el.dataset.ic, +el.dataset.size || 16); });
 const WISP = (mood, size = 28) => `<svg class="wisp" data-mood="${mood}" width="${size}" height="${Math.round(size * 1.12)}" viewBox="0 0 80 90" aria-hidden="true">
@@ -898,7 +965,10 @@ function ago(s) {
 const kindBadges = (p) => (p.kinds || []).map((k) => `<span class="badge">${esc(KIND_LABEL[k] || k)}</span>`).join('') + (p.sample ? '<span class="badge sample" title="Loaded from the sample library">Sample</span>' : '');
 
 /* ================================================================ small UI parts */
+const LOG = [];
+function logEvent(kind, text) { LOG.unshift({ t: new Date(), kind: kind || 'info', text: String(text) }); if (LOG.length > 400) LOG.pop(); }
 function say(msg, kind = '', opts = {}) {
+  logEvent(kind, msg);
   const box = $('toasts'); const el = document.createElement('div');
   el.className = 'toast ' + kind; el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   el.innerHTML = `<div class="tmsg">${esc(msg)}</div>${opts.action ? '<button class="btn sm" data-a>' + esc(opts.action.label) + '</button>' : ''}<button class="icon-btn sm" aria-label="Dismiss">${ic('x', 14)}</button>`;
@@ -1069,6 +1139,7 @@ window.addEventListener('resize', syncSide);
 const parseHash = () => {
   const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (a === 'assessment') return { view: 'port' };
+  if (['docs', 'agent', 'activity'].includes(a)) return { view: 'doc', kind: a };
   return a === 'p' && b ? { view: 'prog', name: b, tab: TABS.includes(c) ? c : null } : { view: 'work' };
 };
 const goWork = () => { if (location.hash !== '#/') location.hash = '#/'; else route(); };
@@ -1081,6 +1152,14 @@ function enter(el) { el.classList.remove('enter'); void el.offsetWidth; el.class
 async function route() {
   ['xrefDlg', 'recDlg'].forEach((id) => { const d = $(id); if (d?.open) d.close(); }); /* a page change closes the dialogs left over from the last page */
   const r = parseHash();
+  $('vDoc').hidden = r.view !== 'doc';
+  if (r.view === 'doc') {
+    const was = S.view; S.view = 'doc'; S.name = null; closeFloating?.();
+    $('vProg').hidden = true; $('vWork').hidden = true; $('vPort').hidden = true; renderDoc(r.kind); renderSide();
+    document.title = { docs: 'Documentation', agent: 'AI Agent', activity: 'Activity Log' }[r.kind] + ' · Séance';
+    if (was !== 'doc') { enter($('vDoc')); window.scrollTo(0, 0); }
+    return;
+  }
   if (r.view === 'prog' && !prog(r.name)) { if (S.programs.length || S.loaded) say(`There is no program named “${r.name}”.`, 'error'); location.replace('#/'); return; }
   if (r.view === 'port') {
     const was = S.view; S.view = 'port'; S.name = null; closeFloating?.();
@@ -1223,7 +1302,7 @@ document.addEventListener('click', (e) => {
   const a = el.dataset.act, arg = el.dataset.arg;
   const map = {
     add: openAdd, tour: () => startGuide(), guide: () => openGuide(), samples: () => openSamples({ tour: false }), keys: openKeys, about: openAbout, settings: openSettings,
-    palette: openPalette, checkAll: () => checkAll(), export: () => doExport(arg), assess: goAssessment, rules: exportRules, redraft: () => redraft(S.name), record: () => recordAgain(S.name), remove: () => deleteProgram(S.name),
+    palette: openPalette, checkAll: () => checkAll(), export: () => doExport(arg), assess: goAssessment, docs: () => { location.hash = '#/docs'; }, agent: () => { location.hash = '#/agent'; }, activity: () => { location.hash = '#/activity'; }, rules: exportRules, redraft: () => redraft(S.name), record: () => recordAgain(S.name), remove: () => deleteProgram(S.name),
     copyPath: () => copyText(`legacy/${S.name}/`, 'Folder path copied.'), removeSamples: removeSamples,
     rowOpen: () => goTo(arg), rowCheck: () => startCheck(arg), rowExport: () => doExport('python', arg), rowDelete: () => deleteProgram(arg),
     selCheck: () => checkAll([...S.sel]), selDelete: deleteSelected, selClear: () => { S.sel.clear(); renderWork(); },
@@ -1299,8 +1378,8 @@ const FEATURES = [
   { group: 'Prove', icon: 'shield', blurb: 'Evidence, not a promise.', items: [
     { id: 'check', icon: 'shield', title: 'Byte-for-byte check', body: 'Every recorded run of the real COBOL replayed through the Python, then fresh random runs of both.', sample: 'payroll', tab: 'check' },
     { id: 'shrink', icon: 'bug', title: 'Smallest failing input', body: 'A difference shrinks to the smallest input that shows it. Watch a float bug get caught.', sample: 'loan', tab: 'check', impl: 'naive' },
-    { id: 'mutate', icon: 'flask', title: 'Test strength', body: 'Small bugs planted in the Python one at a time show whether the tests would notice.', sample: 'payroll', tab: 'check' },
-    { id: 'gaps', icon: 'zap', title: 'Gap filling', body: 'Inputs that catch what the tests missed, confirmed by the COBOL and saved as new tests.', sample: 'payroll', tab: 'check' },
+    { id: 'mutate', icon: 'flask', title: 'Mutation testing', body: 'Small bugs planted in the Python one at a time show whether the tests would notice.', sample: 'payroll', tab: 'check' },
+    { id: 'gaps', icon: 'zap', title: 'Generate missing tests', body: 'Inputs that catch what the tests missed, confirmed by the COBOL and saved as new tests.', sample: 'payroll', tab: 'check' },
     { id: 'parallel', icon: 'upload', title: 'Parallel run', body: 'Compare with output from your own mainframe, not only with GnuCOBOL.', sample: 'payroll', tab: 'data' },
     { id: 'receipt', icon: 'download', title: 'Reports, receipts and CI', body: 'HTML and Markdown reports with SHA-256 receipts, a package with its own tests, JUnit for CI.', sample: 'payroll', tab: 'check' },
   ] },
@@ -1311,10 +1390,9 @@ async function ensureHomeData() {
   HOME.loading = true;
   try {
     const [cat, info] = await Promise.all([HOME.cat ? HOME.cat : api('/api/samples').catch(() => ({ samples: [], groups: [] })), HOME.info ? HOME.info : mcpInfo()]);
-  document.body.dataset.samples = String(cat.samples?.length || 0);
     HOME.cat = cat; HOME.info = info;
   } finally { HOME.loading = false; }
-  if (S.view === 'work') renderHomeParts();
+  if (S.view === 'work' || S.view === 'doc') renderHomeParts();
 }
 async function mcpInfo() { try { return await api(`/api/mcp-config?client=${enc(HOME.mcp.client)}&mode=${enc(HOME.mcp.mode)}`); } catch (e) { return { error: e.message, clients: [] }; } }
 function renderHomeParts() { $$('[data-home-part]').forEach((el) => { const f = HOME_PARTS[el.dataset.homePart]; if (f) el.innerHTML = f(); }); }
@@ -1327,14 +1405,7 @@ function heroHtml() {
       <p class="eyebrow">COBOL to Python, with proof</p>
       <h1 id="workTitle">Prove your COBOL migration is correct</h1>
       <p class="lede">Séance compiles your original COBOL with GnuCOBOL, writes Python for it, runs both on the same inputs and compares every byte they write. When they differ, it shows the smallest input that proves it.</p>
-      <div class="h-cta"><button class="btn primary lg" data-act="add">${ic('plus')}Add Program</button><button class="btn lg sample-only" data-try="check">${ic('play')}Try It On A Sample</button><button class="btn ghost lg sample-only" data-act="tour">${ic('compass')}Guided Tour</button></div>
-      <button class="h-drop" data-act="add">${ic('upload', 20)}<span><b>Drop your COBOL here, or anywhere on this page.</b> Programs (.cbl, .cob), copybooks (.cpy) and JCL jobs (.jcl). Bring the copybooks and the programs it CALLs along with it.</span></button>
-    </div>
-    <div class="h-proof" role="img" aria-label="Example of a finished check: the COBOL and the Python wrote identical lines">
-      <div class="hp-head">${ic('file', 15)}<b>PAYROLL</b><span class="hp-badge">${ic('check', 13)}Spirit matched</span></div>
-      <div class="hp-cols"><div><span class="hp-lbl">COBOL, run by GnuCOBOL</span>${cobol.map((l) => `<code>${esc(l)}</code>`).join('')}</div><div><span class="hp-lbl">Python, written by Séance</span>${cobol.map((l) => `<code>${esc(l)}</code>`).join('')}</div></div>
-      <div class="hp-foot"><span><b>1,240</b> lines identical</span><span><b>12 of 12</b> planted bugs caught</span><span><b>100%</b> of statements run</span></div>
-      <p class="hp-cap">An example of what a finished check shows</p>
+      <div class="h-drop" role="note">${ic('upload', 20)}<span><b>Drop your COBOL files anywhere on this page and they are added at once.</b> Programs (.cbl, .cob), copybooks (.cpy) and JCL jobs (.jcl): drop them together and each program takes the copybooks and the programs it CALLs from the same drop. To add one by pasting it, use <b>Add Program</b> at the top right.</span></div>
     </div>
   </section>`;
 }
@@ -1349,11 +1420,15 @@ function stepsHtml() {
     <ol class="h-steps">${steps.map(([i, t, b], n) => `<li><span class="h-num" aria-hidden="true">${n + 1}</span><span class="h-ic">${ic(i, 20)}</span><b>${t}</b><p>${b}</p></li>`).join('')}</ol></section>`;
 }
 function featuresHtml() {
-  return `<section class="h-sect" id="homeFeatures" aria-labelledby="hWhat"><div class="h-sect-head"><h2 id="hWhat">What you can do</h2><p class="muted">Each one opens on a sample program, so you can see it working before you add your own.</p></div>
+  const locked = !S.programs.length;
+  return `<section class="h-sect" id="homeFeatures" aria-labelledby="hWhat"><div class="h-sect-head"><h2 id="hWhat">What you can do</h2><p class="muted">${locked ? '🔒 These open once you have imported a COBOL program.' : 'Each one opens on your own program.'}</p></div>
     <div class="h-groups">${FEATURES.map((g) => `<div class="h-group"><h3 class="h-gtitle">${ic(g.icon, 17)}${g.group}</h3><p class="muted sm">${g.blurb}</p>
-      <div class="h-feats">${g.items.map((f) => `<button class="h-feat" data-try="${f.id}"><span class="h-fic">${ic(f.icon, 18)}</span><span class="h-ftxt"><b>${f.title}</b><span>${f.body}</span><span class="h-go">${f.route === 'assessment' ? 'Open the assessment' : prog(f.sample) ? 'Open ' + esc(prog(f.sample).title) : 'Open on the ' + esc(f.sample.replace(/_/g, ' ')) + ' sample'}${ic('right', 14)}</span></span></button>`).join('')}</div></div>`).join('')}</div></section>`;
+      <div class="h-feats">${g.items.map((f) => locked
+        ? `<div class="h-feat locked" aria-disabled="true"><span class="h-fic">${ic(f.icon, 18)}</span><span class="h-ftxt"><b>${f.title}</b><span>${f.body}</span><span class="h-go">🔒 Requires a COBOL program</span></span></div>`
+        : `<button class="h-feat" data-try="${f.id}"><span class="h-fic">${ic(f.icon, 18)}</span><span class="h-ftxt"><b>${f.title}</b><span>${f.body}</span><span class="h-go">${f.route === 'assessment' ? 'Open the assessment' : 'Open on ' + esc(S.programs[0].title)}${ic('right', 14)}</span></span></button>`).join('')}</div></div>`).join('')}</div></section>`;
 }
 function samplesHtml() {
+  return ''; /* there is no sample library */
   const cat = HOME.cat; if (!cat) return `<div class="h-sect">${skeleton(3)}</div>`; if (!cat.samples?.length) return '';
   return `<section class="h-sect" aria-labelledby="hSamples"><div class="h-sect-head"><h2 id="hSamples">Sample library</h2><p class="muted">Real programs with saved test data. Once loaded they are ordinary programs: edit them, check them, delete them.</p><button class="btn sm" data-act="samples">${ic('book', 14)}Browse By Topic</button></div>
     <div class="h-samples">${cat.samples.map((s) => `<div class="h-sample"><div class="row between"><b>${esc(s.title)}</b>${s.recommended ? '<span class="badge new">Start here</span>' : prog(s.name) ? '<span class="badge">Loaded</span>' : ''}</div><p class="clamp">${esc(s.summary)}</p>
@@ -1371,6 +1446,7 @@ function agentHtml() {
         <h3 class="h-sub">What the agent can do</h3><ul class="plain h-tools">${tools.map(([t, d]) => `<li><code>${t}</code> ${d}</li>`).join('')}</ul>
       </div>
       <div class="h-agent-r">${m?.error ? `<div class="note bad">${esc(m.error)}</div>` : `
+        <p class="status ${m?.written ? 'good' : ''}" style="margin-bottom:8px">${m?.written ? '✓ The settings are in ' + esc(m.project_file) + '. Reconnect the server in your agent.' : 'Not written yet. Press Write to add them to ' + esc(m?.project_file || 'your agent settings') + '.'}</p>
         <div class="row between"><span class="sm muted">${m ? esc(m.where) : ''}</span><span class="row"><button class="btn sm" id="mcpCopy">${ic('copy', 14)}Copy</button>${m?.can_write ? `<button class="btn sm primary" id="mcpWrite">${ic('download', 14)}Write ${esc(m.project_file)}</button>` : ''}</span></div>
         <pre class="h-code" tabindex="0" aria-label="Settings to paste">${esc(m?.text || '')}</pre>${m?.note ? `<p class="faint sm">${esc(m.note)}</p>` : ''}`}
       </div>
@@ -1383,14 +1459,91 @@ function supportHtml() {
       ${(a.not_yet || []).length ? `<div><h3 class="warn">${ic('alert', 16)}Not yet</h3><ul class="plain">${a.not_yet.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>` : ''}</div></section>`;
 }
 const HOME_PARTS = { samples: samplesHtml, agent: agentHtml, features: featuresHtml };
+/* ================================================================ dashboard: where the migration stands and what to do next */
+S.issues = []; /* programs not added yet because a copybook is missing */
+const IMPORT_TYPES = '.cbl  .cob  .cobol  .cpy  .copy  .jcl';
+const translatedOk = (p) => !p.error && (isJob(p) || (p.draft?.translated && !p.draft.gaps));
+function wizardHtml(ps) {
+  const n = ps.length; const every = (f) => n > 0 && ps.every(f);
+  const done = [n > 0, every((p) => !p.error), every(translatedOk), every((p) => statusOf(p).key === 'matched'), false];
+  const cur = done.findIndex((d) => !d); const labels = ['Import', 'Analyze', 'Translate', 'Verify', 'Export'];
+  const first = (f) => ps.find(f);
+  let next = '';
+  if (cur === 0) next = '<b>Next:</b> import your COBOL. Drop the files in the box below.';
+  else if (cur === 1) next = `<b>Next:</b> some programs cannot be read. See “Needs attention” below.`;
+  else if (cur === 2) { const p = first((q) => !q.error && !translatedOk(q)); next = `<b>Next:</b> <button class="btn primary sm" data-go="${esc(p.name)}" data-tab="code">${ic('pen', 14)}Open ${esc(p.title)}</button> some statements need a person.`; }
+  else if (cur === 3) next = `<b>Next:</b> <button class="btn primary sm" data-act="checkAll">${ic('play', 14)}Check All</button> to prove the Python gives the same answers.`;
+  else { const p = ps[0]; next = `<b>Done.</b> Everything matches. <button class="btn primary sm" data-go="${esc(p.name)}" data-tab="overview">${ic('download', 14)}Open a program to export it</button>`; }
+  return `<ol class="wiz" aria-label="Migration steps">${labels.map((l, i) => `<li class="${done[i] ? 'done' : i === cur ? 'cur' : ''}" ${i === cur ? 'aria-current="step"' : ''}><span class="wn">${done[i] ? '✓' : i + 1}</span>${l}</li>`).join('')}</ol><p class="next">${next}</p>`;
+}
+function badgeOf(p) {
+  const k = statusOf(p).key;
+  if (k === 'matched') return '<span class="status good">Verified</span>';
+  if (k === 'restless' || k === 'broken') return '<span class="status bad">Failed</span>';
+  if (k === 'running') return '<span class="status">In progress</span>';
+  if (k === 'stale' || (p.draft && p.draft.gaps)) return '<span class="status warn">Warning</span>';
+  return translatedOk(p) ? '<span class="status">Ready</span>' : '<span class="status warn">Warning</span>';
+}
+function issuesHtml() {
+  return S.issues.map((it, i) => `<div class="issue" role="alert"><div><b>Missing copybook ${esc(it.name)}</b> <span class="muted sm">needed by ${esc(it.program)}. The program was not added yet.</span></div>
+    <div class="row"><label class="btn sm primary" for="loc${i}" tabindex="0">Locate ${esc(it.name)}.cpy</label><input type="file" id="loc${i}" data-issue="${i}" hidden accept=".cpy,.copy,.cpb,.cbl,.txt"><button class="btn ghost sm" data-ignore="${i}">Ignore</button></div></div>`).join('');
+}
+function dashboardHtml(ps) {
+  const n = ps.length; const verified = ps.filter((p) => statusOf(p).key === 'matched').length; const translated = ps.filter(translatedOk).length;
+  const readable = ps.filter((p) => !p.error).length; const cbs = ps.reduce((a, p) => a + (p.copybooks?.length || 0), 0);
+  const health = n ? Math.round(100 * (translated + verified) / (2 * n)) : 0;
+  const cov = ps.map((p) => lastOf(p).coverage).filter((c) => c != null); const avg = cov.length ? Math.round(cov.reduce((a, c) => a + c, 0) / cov.length) + '%' : '–';
+  const card = (v, l, cls = '') => `<div><b class="${cls}">${v}</b><span>${l}</span></div>`;
+  const fun = [['Imported', n], ['Readable', readable], ['Translated', translated], ['Verified', verified]];
+  const attn = [];
+  for (const p of ps) {
+    const st = statusOf(p).key;
+    if (p.error) attn.push([p, 'Cannot be read', String(p.error).split('\n').filter(Boolean).slice(-1)[0]]);
+    else {
+      if (p.unsupported?.length) attn.push([p, `${p.unsupported.length} unsupported statement${p.unsupported.length === 1 ? '' : 's'}`, p.unsupported.slice(0, 2).join('; ')]);
+      else if (p.draft?.gaps) attn.push([p, `${p.draft.gaps} statement${p.draft.gaps === 1 ? '' : 's'} need a person`, 'The translator left these for you.']);
+      if (st === 'restless') attn.push([p, 'The Python differs from the COBOL', 'Open the Check tab for the smallest input that shows it.']);
+      if (st === 'stale') attn.push([p, 'Changed since the last check', 'Run the check again.']);
+    }
+  }
+  return `<div class="dash"><div class="health"><div class="hring" style="--p:${health}"><b>${health}%</b></div><div><b>Workspace health</b><p class="muted sm">${health >= 90 ? 'Ready to export.' : health >= 50 ? 'Getting there.' : 'Just started.'} Half comes from programs translated without gaps, half from programs verified.</p></div></div>
+    <div class="stats">${card(n, per(n, 'Program', 'Programs') + ' loaded')}${card(ps.filter(isJob).length, 'JCL jobs')}${card(cbs, 'Copybooks found')}${card(S.issues.length, 'Missing copybooks', S.issues.length ? 'bad' : '')}${card(`${translated}/${n}`, 'Translated')}${card(`${verified}/${n}`, 'Verified', verified === n && n ? 'good' : '')}${card(avg, 'Test coverage')}</div></div>
+    ${wizardHtml(ps)}
+    <div class="funnel" role="img" aria-label="${fun.map(([l, v]) => `${l} ${v} of ${n}`).join(', ')}">${fun.map(([l, v]) => `<div><span>${l}</span><i style="--w:${n ? Math.round(100 * v / n) : 0}%"></i><b>${v}</b></div>`).join('')}</div>
+    ${issuesHtml()}
+    ${attn.length ? `<div class="panel"><div class="head"><div><h2>Needs attention ${tip('What is stopping a program from being verified: it cannot be read, the translator left statements, or the Python differs from the COBOL.')}</h2></div></div><div class="body flush"><table><tbody>${attn.slice(0, 10).map(([p, t, d]) => `<tr class="link" data-go="${esc(p.name)}" data-tab="${p.error || p.unsupported?.length || p.draft?.gaps ? 'code' : 'check'}" tabindex="0"><td><b>${esc(p.title)}</b></td><td>${badgeOf(p)}</td><td><b>${esc(t)}</b><br><span class="muted sm">${esc(d || '')}</span></td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+}
+function renderDoc(kind) {
+  const el = $('vDoc'); const a = S.about || {};
+  const foot = `<footer class="h-foot">Séance ${esc(a.version || '')} · runs offline on this machine · nothing you add leaves it</footer>`;
+  if (kind === 'agent') {
+    ensureHomeData();
+    el.innerHTML = `<div class="page-head"><div><h1 id="docTitle">AI Agent</h1><p class="lede">Séance is also an MCP server. An agent such as Kiro can read the spec, run the original COBOL on any input and check its own Python.</p></div></div><div data-home-part="agent">${agentHtml()}</div>${foot}`; return;
+  }
+  if (kind === 'activity') {
+    const rows = LOG.filter((l) => !S.logErrors || l.kind === 'error');
+    el.innerHTML = `<div class="page-head"><div><h1 id="docTitle">Activity Log</h1><p class="lede">Everything the page told you since it opened: imports, compiler and translation messages, checks and errors.</p></div>
+      <div class="row"><label class="check"><input type="checkbox" id="logErr" ${S.logErrors ? 'checked' : ''}> <span>Errors only</span></label><button class="btn sm" id="logClear">Clear</button></div></div>
+      <div class="panel"><div class="body flush">${rows.length ? `<table><tbody>${rows.map((l) => `<tr><td class="faint mono" style="white-space:nowrap">${l.t.toLocaleTimeString()}</td><td><span class="status ${l.kind === 'error' ? 'bad' : l.kind === 'ok' ? 'good' : ''}">${l.kind === 'error' ? 'Error' : l.kind === 'ok' ? 'Done' : 'Info'}</span></td><td style="white-space:pre-line">${esc(l.text)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">Nothing yet.</div>'}</div></div>${foot}`; return;
+  }
+  el.innerHTML = `<div class="page-head"><div><h1 id="docTitle">Documentation</h1><p class="lede">How Séance works, what it can do, and what it runs.</p></div></div>
+    ${stepsHtml()}${featuresHtml()}${supportHtml()}
+    <section class="h-sect"><div class="h-sect-head"><h2>The words</h2></div><dl class="words"><dt>Spirit matched</dt><dd>Every byte the Python wrote is the same as the real COBOL wrote.</dd><dt>Spirit restless</dt><dd>They differ. The Python is what to fix, never the saved data.</dd><dt>Coverage</dt><dd>How many COBOL statements the saved runs reach.</dd><dt>Mutation testing</dt><dd>Séance breaks the Python on purpose in small ways and checks that the tests notice.</dd><dt>Generate missing tests</dt><dd>Finds inputs that tell a planted bug from the real program, checks them against the COBOL and saves them.</dd><dt>Parallel run</dt><dd>You give Séance the input and the output your own mainframe produced. The Python is compared with that.</dd></dl></section>${foot}`;
+}
+$('vDoc').addEventListener('change', (e) => { if (e.target.id === 'logErr') { S.logErrors = e.target.checked; renderDoc('activity'); } });
+$('vDoc').addEventListener('click', (e) => { if (e.target.id === 'logClear') { LOG.length = 0; renderDoc('activity'); } });
 function emptyWorkspaceHtml() {
-  ensureHomeData();
-  return `<div class="home">${heroHtml()}${stepsHtml()}<div data-home-part="features">${featuresHtml()}</div><div data-home-part="samples">${samplesHtml()}</div><div data-home-part="agent">${agentHtml()}</div>${supportHtml()}
-    <p class="h-foot">Séance ${esc(S.about?.version || '')} · runs offline on this machine · nothing you add leaves it</p></div>`;
+  return `<div class="home"><div class="page-head"><div><h1 id="workTitle">Welcome to Séance</h1><p class="lede">Move COBOL to Python, and prove the Python gives the same answers. Start by importing your COBOL.</p></div></div>
+    ${wizardHtml([])}${issuesHtml()}
+    <label class="importbox" for="pickHome" tabindex="0" id="importBox">${ic('upload', 34)}<b>Drop your COBOL files here</b><span>or <u>Browse files</u></span>
+      <small>Accepted: <code>${IMPORT_TYPES}</code></small><small>Drop a program together with its copybooks and the programs it CALLs. Each JCL job goes in as its own job. Data files are added later, in a program's Test Data tab.</small></label>
+    <input type="file" id="pickHome" multiple hidden accept=".cbl,.cob,.cobol,.cpy,.copy,.cpb,.jcl,.pco">
+    <div class="row" style="justify-content:center;margin:6px 0 22px"><button class="btn" data-act="docs">${ic('book', 15)}Open the tutorial</button></div>
+    <div data-home-part="features">${featuresHtml()}</div></div>`;
 }
 function exploreHtml() {
   ensureHomeData();
-  return `<div class="home explore"><div class="h-sect-head h-explore-head"><h2>Explore</h2><p class="muted">Everything Séance does, each on a program you can open now.</p></div>
+  return `<div class="home explore"><div class="h-sect-head h-explore-head"><h2>Explore</h2><p class="muted">Everything Séance does, each on a program of yours.</p></div>
     <div data-home-part="features">${featuresHtml()}</div><div data-home-part="agent">${agentHtml()}</div><div data-home-part="samples">${samplesHtml()}</div></div>`;
 }
 async function loadSampleThen(name, btn) {
@@ -1478,11 +1631,10 @@ function renderWorkInner() {
           <td class="num">${c.compared != null ? c.compared.toLocaleString() : '–'}</td>
           <td class="num hide-sm${c.coverage != null && c.coverage < 100 ? ' warn' : ''}">${c.coverage != null ? c.coverage + '%' : '–'}</td><td class="act"><button class="icon-btn sm" data-rowmenu="${esc(p.name)}" aria-label="Actions for ${esc(p.title)}" aria-haspopup="menu">${ic('more', 16)}</button></td></tr>`; }).join('')}</tbody></table></div></div>`;
   el.innerHTML = `
-    <div class="page-head"><div><h1 id="workTitle">Workspace</h1><p class="lede">Each program is your original COBOL, the Python for it, and the evidence that the two behave the same.</p></div>
+    <div class="page-head"><div><h1 id="workTitle">Dashboard</h1><p class="lede">Where your migration stands, and what to do next.</p></div>
       <div class="row"><button class="btn" data-act="checkAll" ${ca ? 'disabled' : ''}>${ic('play')}Check All</button></div></div>
     ${ca ? `<div class="panel body" style="margin-bottom:14px"><div class="row between"><span><span class="spin" aria-hidden="true"></span> &nbsp;Checking <b>${ca.done + 1}</b> of ${ca.total}: ${esc(ca.current)}</span><button class="btn sm" id="stopAll">Stop After This One</button></div></div>` : ''}
-    <div class="stats"><div><b>${ps.length}</b><span>${per(ps.length, 'Program', 'Programs')}</span></div><div><b class="good">${count('matched')}</b><span>Spirit matched</span></div><div><b class="${count('restless') ? 'bad' : ''}">${count('restless')}</b><span>Spirit restless</span></div><div><b>${count('new')}</b><span>Not checked</span></div><div><b>${lines.toLocaleString()}</b><span>Output lines compared</span></div><div><b>${cov.length ? Math.round(cov.reduce((a, c) => a + c, 0) / cov.length) + '%' : '–'}</b><span>Average coverage</span></div></div>
-    ${ps.length ? `<div class="vsum">${vbarHtml([['good', count('matched')], ['bad', count('attention')], ['new', count('new')]], `${count('matched')} of ${ps.length} verified`)}<span class="sm muted"><b class="good">${count('matched')}</b> of ${plural(ps.length, 'program')} verified${count('attention') ? ` · <b class="bad">${count('attention')}</b> need attention` : ''}${count('new') ? ` · ${count('new')} not checked yet` : ''}</span></div>` : ''}
+    ${dashboardHtml(ps)}
     ${S.sel.size ? `<div class="selbar" role="region" aria-label="Selected programs"><span><b>${S.sel.size}</b> selected</span><span class="row"><button class="btn sm" data-act="selCheck">${ic('play', 14)}Run Checks</button><button class="btn danger sm" data-act="selDelete">${ic('trash', 14)}Delete</button><button class="btn ghost sm" data-act="selClear">Clear</button></span></div>` : ''}
     <div class="toolbar"><div class="chips" role="group" aria-label="Filter by result">${STATUS_FILTERS.map(([k, l]) => `<button class="chipbtn" data-filter="${k}" aria-pressed="${S.filter.status === k}">${l} <b>${count(k)}</b></button>`).join('')}</div>
       <div class="row"><div class="searchbox"><span aria-hidden="true">${ic('search', 15)}</span><input type="search" id="wsSearch" placeholder="Filter by name" aria-label="Filter programs" value="${esc(S.filter.q)}"></div>
@@ -1490,8 +1642,7 @@ function renderWorkInner() {
         <select id="sortSel" aria-label="Sort by">${[['name', 'Name'], ['status', 'Needs attention first'], ['recent', 'Last checked'], ['lines', 'Lines compared']].map(([k, l]) => `<option value="${k}" ${prefs.sort === k ? 'selected' : ''}>Sort: ${l}</option>`).join('')}</select>
         <div class="seg" role="group" aria-label="View"><button data-view="list" aria-pressed="${prefs.view !== 'cards'}" title="List" aria-label="List view">${ic('list', 15)}</button><button data-view="cards" aria-pressed="${prefs.view === 'cards'}" title="Cards" aria-label="Card view">${ic('grid', 15)}</button></div></div></div>
     ${rows.length ? list : `<div class="panel"><div class="empty-state">Nothing matches these filters. <button class="btn sm" id="clearFilters">Clear Filters</button></div></div>`}
-    ${samples ? `<div class="note" style="margin-top:14px"><div class="row between"><span>${plural(samples, 'program')} here came from the sample library.</span><button class="btn sm" data-act="removeSamples">Remove Samples</button></div></div>` : ''}
-    ${exploreHtml()}`;
+    `;
   if (S.refocus) { const t = $(S.refocus); S.refocus = null; if (t) { t.focus(); t.setSelectionRange?.(t.value.length, t.value.length); } }
 }
 function openRowMenu(btn) {
@@ -1866,7 +2017,7 @@ function reportHtml(r, status, p) {
   html += `<div class="sect"><table><thead><tr><th>Saved set</th><th class="num">Input</th><th class="num">Compared</th><th class="num">Differ</th></tr></thead><tbody>${r.sets.map((s) => `<tr><td>${esc(s.label.split(' (')[0])}${s.python_error && !s.cobol_error ? `<br><span class="bad sm">Python stopped: ${esc(s.python_error)}</span>` : ''}</td><td class="num muted">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' console lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num">${s.compared}</td><td class="num ${s.differing ? 'bad' : 'good'}">${s.differing}</td></tr>`).join('')}</tbody></table></div>`;
   if (cov) {
     const miss = cov.missed || [];
-    html += `<div class="body sect"><div class="row between"><b>Coverage</b><span class="muted">${cov.reached} of ${cov.statements} COBOL statements reached</span></div><div class="meter"><i style="width:${cov.percent}%"></i></div>
+    html += `<div class="body sect"><div class="row between"><b>Coverage ${tip('How many of the COBOL statements the saved runs actually execute. A statement no run reaches is not tested at all.')}</b><span class="muted">${cov.reached} of ${cov.statements} COBOL statements reached</span></div><div class="meter"><i style="width:${cov.percent}%"></i></div>
       ${miss.length ? `<p class="muted sm">Never reached, so a difference there would go unseen: ${miss.slice(0, 14).map((m) => `<a href="#" data-miss="${m.line}" data-prog="${esc(m.program)}">${m.program ? esc(m.program) + ' ' : ''}line ${m.line}</a>`).join(', ')}${miss.length > 14 ? ' …' : ''}. Add test data that reaches them.</p>` : '<p class="good sm">Every COBOL statement is reached by the saved runs.</p>'}</div>`;
   }
   if (f) {
@@ -1897,8 +2048,8 @@ async function renderCheck() {
   const live = mut && !mut.error ? mut.mutants : [];
   const surv = live.filter((m) => !m.caught && m.verdict !== 'equivalent'); const same = live.filter((m) => !m.caught && m.verdict === 'equivalent');
   const rowResult = (m) => (m.caught ? '<td class="good">Caught</td>' : m.verdict === 'equivalent' ? '<td><span class="tag amber">Likely equivalent</span></td>' : '<td class="bad">Slipped through</td>');
-  const strength = job ? '' : `<div class="panel" id="strengthPanel"><div class="head"><div><h2>Test strength</h2><p class="muted sm">Breaks the Python on purpose in small ways (a &gt; becomes &gt;=, a ROUNDED goes away, a constant changes) and checks that the saved runs notice each one. Anything that slips through can be hunted down: the search looks for an input that tells the two apart, checks it against the real COBOL and saves it as a test set.</p></div>
-      <div class="row">${surv.length ? `<button class="btn primary" id="runGaps" ${running ? 'disabled' : ''}>${grun ? '<span class="spin"></span>Searching…' : ic('flask') + 'Find Inputs That Catch These'}</button>` : ''}<button class="btn" id="runStrength" ${running ? 'disabled' : ''}>${mrun ? '<span class="spin"></span>Measuring…' : ic('flask') + 'Run Mutation Test'}</button></div></div>
+  const strength = job ? '' : `<div class="panel" id="strengthPanel"><div class="head"><div><h2>Mutation testing (test strength) ${tip('Séance changes the Python on purpose, one small bug at a time (a > becomes >=, a constant changes). If the saved runs still pass, they could not tell the bug from the real program: that is a gap in the tests, not in your Python.')}</h2><p class="muted sm">Breaks the Python on purpose in small ways (a &gt; becomes &gt;=, a ROUNDED goes away, a constant changes) and checks that the saved runs notice each one. Anything that slips through can be hunted down: the search looks for an input that tells the two apart, checks it against the real COBOL and saves it as a test set.</p></div>
+      <div class="row">${surv.length ? `<button class="btn primary" id="runGaps" ${running ? 'disabled' : ''}>${grun ? '<span class="spin"></span>Searching…' : ic('flask') + 'Generate Missing Tests'}</button>` : ''}<button class="btn" id="runStrength" ${running ? 'disabled' : ''}>${mrun ? '<span class="spin"></span>Measuring…' : ic('flask') + 'Run Mutation Test'}</button></div></div>
     ${mut ? (mut.error ? `<div class="body"><div class="note bad">${esc(mut.error)}</div></div>` : `<div class="body"><div class="note ${surv.length ? 'bad' : 'good'}"><b>${surv.length ? `${plural(surv.length, 'bug')} slipped through.` : same.length ? 'Nothing is left that a test could catch.' : 'Every planted bug was caught.'}</b> ${mut.caught} of ${mut.total} caught by ${mut.records} saved records.${same.length ? ` ${same.length} judged equivalent: the output did not change when the code was tested at its edge, so the change most likely makes no difference.` : ''}</div></div>
       <table><thead><tr><th>Where</th><th>Planted bug</th><th>Result</th></tr></thead><tbody>${mut.mutants.map((m) => `<tr><td>${m.cobol_line ? `<a href="#" data-line="${m.cobol_line}">COBOL line ${m.cobol_line}</a>` : `Python line ${m.line}`}</td><td>${esc(m.change)}</td>${rowResult(m)}</tr>`).join('')}</tbody></table>`) : ''}
     ${gaps ? gapHtml(gaps) : ''}</div>`;
@@ -1996,31 +2147,31 @@ async function renderData() {
   if (!here(name, 'data')) return;
   const targets = job ? [] : lay.files.filter((f) => f.input).map((f) => `<option value="file:${esc(f.assign)}">${esc(PSEUDO[f.assign] || f.assign)}</option>`);
   if (lay?.console_input?.length) targets.push('<option value="console">Console input</option>');
-  el.innerHTML = `<div class="panel"><div class="head"><div><h2>Saved test sets</h2><p class="muted sm">The real COBOL's output for each set is the expected answer.</p></div><button class="btn" id="recordAgain" title="Run the real COBOL again on the generated data and save its answers">${ic('refresh')}Record Again</button></div>
+  el.innerHTML = `<div class="panel"><div class="head"><div><h2>Saved test sets ${tip('Each set is an input plus what the real COBOL wrote for it. The Python must write exactly the same.')}</h2><p class="muted sm">The real COBOL's output for each set is the expected answer.</p></div><button class="btn" id="recordAgain" title="Run the real COBOL again on the generated data and save its answers">${ic('refresh')}Record Again</button></div>
       <div class="body flush"><table><thead><tr><th>Set</th><th class="num">Input</th><th></th></tr></thead><tbody>${sets.map((s) => `<tr><td>${esc(s.label)}${s.gap ? ' <span class="tag">Gap filler</span>' : ''}${s.golden ? ` <span class="tag amber">Mainframe</span> <span class="tag ${s.cobol_agrees ? 'good' : 'bad'}">${s.cobol_agrees ? 'GnuCOBOL agrees' : 'GnuCOBOL differs'}</span>${s.filled_from_cobol?.length ? `<br><span class="faint sm">${esc(s.filled_from_cobol.join(', '))} taken from the GnuCOBOL run</span>` : ''}` : ''}${s.cobol_error ? `<br><span class="faint sm">The COBOL stopped: ${esc(s.cobol_error)}</span>` : ''}</td><td class="num muted">${[s.records ? s.records + ' records' : '', s.console_lines ? s.console_lines + ' lines' : ''].filter(Boolean).join(', ') || '–'}</td><td class="num"><span class="row" style="justify-content:flex-end;gap:6px;flex-wrap:nowrap">${isJob(prog(S.name)) ? '' : `<button class="btn sm" data-viewset="${esc(s.set)}" data-label="${esc(s.label)}">View Records</button>`}${s.removable ? `<button class="btn danger sm" data-rm="${esc(s.set)}">Remove</button>` : ''}</span></td></tr>`).join('') || '<tr><td colspan="3" class="muted">No sets yet. Use Record Again.</td></tr>'}</tbody></table></div></div>
-    ${targets.length ? `<div class="panel"><div class="head"><div><h2>Add your own data</h2><p class="muted sm">A real input file makes the strongest test. The COBOL runs on it first; other inputs come from the first saved set.</p></div></div>
+    ${targets.length ? `<div class="panel"><div class="head"><div><h2>Add your own data ${tip('Real data is the strongest test. Drop one or several files, any size. Séance runs the real COBOL on them and saves its answers as a new set.')}</h2><p class="muted sm">A real input file makes the strongest test. The COBOL runs on it first; other inputs come from the first saved set.</p></div></div>
       <div class="body"><div class="drop" id="dataDrop"><p style="margin-bottom:10px">Drop a data file here, or choose one</p><div class="row" style="justify-content:center;align-items:flex-end;gap:14px">
         <label class="block" style="text-align:left">For <select id="uploadTarget">${targets.join('')}</select></label>
         <label class="block" style="text-align:left">Encoding <select id="uploadCode"><option value="">ASCII (as GnuCOBOL writes)</option><option value="cp037">EBCDIC, code page 037 (US)</option><option value="cp1140">EBCDIC, code page 1140 (US, Euro)</option><option value="cp500">EBCDIC, code page 500 (International)</option><option value="cp273">EBCDIC, code page 273 (German)</option><option value="cp1047">EBCDIC, code page 1047 (Open Systems)</option></select></label>
-        <label class="btn primary" for="uploadFile" tabindex="0" id="uploadLabel">${ic('upload')}Choose File</label><input type="file" id="uploadFile" hidden></div></div>
+        <label class="btn primary" for="uploadFile" tabindex="0" id="uploadLabel">${ic('upload')}Choose File</label><input type="file" id="uploadFile" multiple hidden></div></div>
       <p class="faint sm" style="margin-top:10px">EBCDIC files are converted field by field from the record layout: text and zoned numbers change code, packed and binary fields keep their bytes.</p></div></div>` : (job ? '<div class="note">A job is fed by generated data sets. Add data to the programs it runs to test them with real files.</div>' : '')}
     ${mainframePanel(lay, job)}`;
   bindMainframe(lay);
 }
 async function uploadData(file) {
-  const name = S.name; const target = $('uploadTarget').value;
-  if (file.size > DATA_MAX) { say(`${file.name} is ${mb(file.size)}. The page keeps an uploaded file in memory, so it takes up to ${mb(DATA_MAX)} here. For a bigger file run: python -m seance bigcheck ${name} "path\\to\\file". It runs the COBOL and the Python on the whole file and compares every byte.`, 'error'); return; }
-  const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(new Error('The file could not be read.')); r.readAsDataURL(file); });
-  const body = { filename: file.name, base64: b64, console: target === 'console', file: target.startsWith('file:') ? target.slice(5) : null, code_page: $('uploadCode').value || null };
-  say('Running the COBOL on your data…');
-  try { const r = await send(`/api/data/${enc(name)}`, body, 'POST', 300000); say(`Added ${r.label} (${plural(r.records, 'record')}). The next check uses it.`, 'ok'); forget(name, ['sets']); if (here(name, 'data')) renderData(); await refreshProgram(name); }
+  const name = S.name; const target = $('uploadTarget')?.value || '';
+  const q = new URLSearchParams({ filename: file.name }); if (target === 'console') q.set('console', 'true'); else if (target.startsWith('file:')) q.set('file', target.slice(5)); if ($('uploadCode')?.value) q.set('code_page', $('uploadCode').value);
+  say(`Sending ${file.name} (${mb(file.size)}) and running the COBOL on it…`);
+  try { const res = await fetch(`/api/data-raw/${enc(name)}?${q}`, { method: 'POST', headers: { 'X-Seance-Token': TOKEN, 'Content-Type': 'application/octet-stream' }, body: file });
+    const r = await res.json().catch(() => ({})); if (!res.ok) throw new Error(r.detail || `The server answered ${res.status}.`); say(`Added ${r.label} (${plural(r.records, 'record')}). The next check uses it.`, 'ok'); forget(name, ['sets']); if (here(name, 'data')) renderData(); await refreshProgram(name); }
   catch (err) { say(err.message, 'error'); }
 }
-$('pData').addEventListener('change', (e) => { if (e.target.id === 'uploadFile') { const f = e.target.files[0]; e.target.value = ''; if (f) uploadData(f); } });
+const uploadAll = async (files) => { for (const f of files) await uploadData(f); };
+$('pData').addEventListener('change', (e) => { if (e.target.id === 'uploadFile') { const fs = [...e.target.files]; e.target.value = ''; uploadAll(fs); } });
 $('pData').addEventListener('keydown', (e) => { if (e.target.id === 'uploadLabel' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $('uploadFile').click(); } });
 $('pData').addEventListener('dragover', (e) => { if (e.target.closest('#dataDrop')) { e.preventDefault(); $('dataDrop').classList.add('over'); } });
 $('pData').addEventListener('dragleave', () => $('dataDrop')?.classList.remove('over'));
-$('pData').addEventListener('drop', (e) => { if (e.target.closest('#dataDrop')) { e.preventDefault(); $('dataDrop').classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) uploadData(f); } });
+$('pData').addEventListener('drop', (e) => { if (e.target.closest('#dataDrop')) { e.preventDefault(); $('dataDrop').classList.remove('over'); uploadAll([...e.dataTransfer.files]); } });
 $('pData').addEventListener('click', (e) => { const v = e.target.closest('[data-viewset]'); if (v) openRecords(S.name, v.dataset.viewset, v.dataset.label); });
 $('pData').addEventListener('click', async (e) => {
   const rm = e.target.closest('[data-rm]');
@@ -2047,16 +2198,25 @@ function keepFocus(fallback) {
     const t = (fallback && document.querySelector(fallback)) || $('main'); t?.focus?.({ preventScroll: true });
   }, 60);
 }
+document.addEventListener('click', (e) => {
+  const run = e.target.closest('#strengthPanel button'); if (run) document.body.dataset.advStrength = '1'; /* running it opens the results */
+  const h = e.target.closest('#strengthPanel > .head, #historyPanel > .head'); if (!h || e.target.closest('button, a, input, select')) return;
+  const k = h.parentElement.id === 'strengthPanel' ? 'advStrength' : 'advHistory'; if (k in document.body.dataset) delete document.body.dataset[k]; else document.body.dataset[k] = '1';
+});
+async function fadeOut(names) {
+  const rows = names.flatMap((n) => [...document.querySelectorAll(`[data-go="${CSS.escape(n)}"]`)]); rows.forEach((r) => r.classList.add('leaving'));
+  if (rows.length) await sleep(190);
+}
 async function deleteProgram(name) {
   const p = prog(name); if (!p) return;
   if (prefs.confirmDelete && !(await confirmBox({ title: `Delete ${p.title}?`, body: 'This removes its COBOL, Python and saved test data from the workspace. It cannot be undone.', ok: 'Delete', danger: true }))) return;
-  try { await api('/api/programs/' + enc(name), { method: 'DELETE' }); forget(name); delete S.lastTab[name]; S.sel.delete(name); await loadPrograms(); if (S.name === name) goWork(); say(`Deleted ${p.title}.`, 'ok'); keepFocus(); } catch (e) { say(e.message, 'error'); }
+  try { await fadeOut([name]); await api('/api/programs/' + enc(name), { method: 'DELETE' }); forget(name); delete S.lastTab[name]; S.sel.delete(name); await loadPrograms(); if (S.name === name) goWork(); say(`Deleted ${p.title}.`, 'ok'); keepFocus(); } catch (e) { say(e.message, 'error'); }
 }
 async function deleteSelected() {
   const names = [...S.sel].filter((n) => prog(n)); if (!names.length) return;
   const titles = names.map((n) => prog(n).title);
   if (!(await confirmBox({ title: `Delete ${plural(names.length, 'program')}?`, body: `${titles.slice(0, 8).join(', ')}${titles.length > 8 ? ' and ' + (titles.length - 8) + ' more' : ''}\n\nThis removes their COBOL, Python and saved test data from the workspace. It cannot be undone.`, ok: 'Delete', danger: true }))) return;
-  let gone = 0; for (const n of names) { try { await api('/api/programs/' + enc(n), { method: 'DELETE' }); forget(n); delete S.lastTab[n]; S.sel.delete(n); gone++; } catch (e) { say(`${n}: ${e.message}`, 'error'); } }
+  await fadeOut(names); let gone = 0; for (const n of names) { try { await api('/api/programs/' + enc(n), { method: 'DELETE' }); forget(n); delete S.lastTab[n]; S.sel.delete(n); gone++; } catch (e) { say(`${n}: ${e.message}`, 'error'); } }
   await loadPrograms(); say(`Deleted ${plural(gone, 'program')}.`, 'ok'); keepFocus('#selAll');
 }
 function doExport(what, name = S.name) {
@@ -2208,9 +2368,9 @@ async function renderPort() {
       : `<tr class="link" data-go="${esc(r.name)}" data-tab="analysis" tabindex="0"><td><b>${esc(r.title)}</b>${r.sample ? ' <span class="badge sample">Sample</span>' : ''}</td><td>${(r.kinds || []).map((x) => `<span class="badge">${esc(KIND_LABEL[x] || x)}</span>`).join(' ') || '<span class="faint">batch</span>'}</td><td class="num">${r.lines.toLocaleString()}</td>
         <td class="num"><span class="rating ${ratingCls(r.rating)}">${esc(r.rating)}</span> <span class="faint">${r.complexity}</span></td><td class="num">${r.goto || '–'}</td><td class="num">${r.calls || '–'}</td><td class="num">${r.files || '–'}</td><td class="num ${r.unreferenced ? 'warn' : ''}">${r.unreferenced || '–'}</td>
         <td><span class="tag ${r.readiness === 'Ready' ? 'good' : 'amber'}">${esc(r.readiness)}</span>${r.gaps ? ` <span class="faint xs">${r.gaps} to do</span>` : ''}</td><td>${verified(r)}</td></tr>`).join('')}</tbody></table></div></div>
-    <div class="panel"><div class="head"><div><h2>Dependencies</h2><p class="muted sm">Which programs call, link to or run which, and what they read and write.</p></div><label class="check"><input type="checkbox" id="portFiles" ${S.portFiles ? 'checked' : ''}> <span>Show files and tables</span></label></div>
-      <div class="body">${graphHtml(gnodes, d.edges.filter((e) => ids.has(e.from) && ids.has(e.to)))}</div></div>
-    <div class="panel"><div class="head"><div><h2>Migration order</h2><p class="muted sm">Programs that depend on nothing else in the workspace come first. Later waves can start once the earlier ones are verified.</p></div></div>
+    <div class="panel"><div class="head"><div><h2>Dependencies ${tip('Which programs call, link to or run which, and the files and tables they read and write.')}</h2><p class="muted sm">Which programs call, link to or run which, and what they read and write.</p></div><label class="check"><input type="checkbox" id="portFiles" ${S.portFiles ? 'checked' : ''}> <span>Show files and tables</span></label></div>
+      <div class="body">${d.edges.some((e) => ids.has(e.from) && ids.has(e.to)) ? graphHtml(gnodes, d.edges.filter((e) => ids.has(e.from) && ids.has(e.to))) : `<p class="muted">No program here calls, links to or runs another, so there is nothing to draw. ${plural(t.programs + t.jobs, 'program')} stand on their own and can be migrated in any order.</p>`}</div></div>
+    <div class="panel"><div class="head"><div><h2>Migration order ${tip('A program that calls another should move after it. Wave 1 depends on nothing else here; a later wave can start once the earlier ones are verified.')}</h2><p class="muted sm">Programs that depend on nothing else in the workspace come first. Later waves can start once the earlier ones are verified.</p></div></div>
       <div class="body stack">${d.waves.map((w, i) => `<div><b>Wave ${i + 1}</b> <span class="faint">${plural(w.length, 'program')}</span><div class="chips" style="margin-top:6px">${w.map((n) => `<a class="chipbtn" href="#/p/${enc(n)}/analysis" data-go="${esc(n)}" data-tab="analysis">${esc(prog(n)?.title || n)}</a>`).join('')}</div></div>`).join('') || '<span class="muted">Nothing to order.</span>'}</div></div>`;
 }
 $('vPort').addEventListener('click', (e) => {
@@ -2226,7 +2386,7 @@ async function historyHtml(name, impl) {
   let rows; try { rows = (await getHistory(name, impl)).history; } catch { return ''; }
   if (rows.length < 1) return '';
   const spark = [...rows].reverse().slice(-24).map((r) => `<i class="${r.matched ? '' : 'x'}" style="height:${r.matched ? 22 : 12}px" title="${esc(r.verdict)} · ${esc(r.at)}"></i>`).join('');
-  return `<div class="panel"><div class="head"><div><h2>Check history</h2><p class="muted sm">Every check of this Python, newest first. The hashes show which code and data each verdict belongs to.</p></div><div class="spark" aria-hidden="true">${spark}</div></div>
+  return `<div class="panel" id="historyPanel"><div class="head"><div><h2>Check history ${tip('Every check of this Python. The hashes show which code and which data each result belongs to, so an old result is never mistaken for the current one.')}</h2><p class="muted sm">Every check of this Python, newest first. The hashes show which code and data each verdict belongs to.</p></div><div class="spark" aria-hidden="true">${spark}</div></div>
     <div class="body flush scroll" style="max-height:300px"><table class="hist"><thead><tr><th>When</th><th>Verdict</th><th class="num">Compared</th><th class="num">Differ</th><th class="num">Runs</th><th class="num">Coverage</th><th>Python</th></tr></thead><tbody>
     ${rows.slice(0, 15).map((r) => `<tr><td class="muted">${esc(r.at || '')}</td><td><span class="tag ${r.matched ? 'good' : 'bad'}">${esc(r.verdict)}</span></td><td class="num">${(r.compared ?? 0).toLocaleString()}</td><td class="num ${r.differing ? 'bad' : ''}">${r.differing}</td><td class="num">${r.random_runs ?? ''}</td><td class="num">${r.coverage != null ? r.coverage + '%' : '–'}</td><td class="mono xs faint">${esc(r.python || '')}</td></tr>`).join('')}</tbody></table></div></div>`;
 }
@@ -2297,6 +2457,80 @@ async function notSource(f) {
     return `${f.name} does not look like COBOL or JCL. If it is a data file: ${DATA_HINT[0].toLowerCase()}${DATA_HINT.slice(1)}`;
   return null;
 }
+/* Dropping or choosing files adds them at once. Every program in the drop becomes a program of its own, with the copybooks and the
+   called programs that came with it; a JCL file becomes a job. A data file dropped on a program's page becomes test data for it. */
+let adding = false, importTimer = null;
+function importBar(text) {
+  let b = $('importBar'); if (!text) { clearInterval(importTimer); b?.remove(); return; }
+  if (!b) { b = document.createElement('div'); b.id = 'importBar'; b.setAttribute('role', 'status'); b.innerHTML = '<span class="spin" aria-hidden="true"></span><span id="importTxt"></span>'; document.body.appendChild(b); }
+  $('importTxt').textContent = text;
+}
+function importStages(label) {
+  const stages = ['Reading the files…', 'Reading copybooks…', 'Resolving the CALL tree…', 'Compiling with GnuCOBOL…', 'Running the original on test inputs…', 'Translating to Python…', 'Building the workspace…'];
+  let i = 0; importBar(`${label}: ${stages[0]}`); clearInterval(importTimer);
+  importTimer = setInterval(() => { i = Math.min(i + 1, stages.length - 1); const t = $('importTxt'); if (t) t.textContent = `${label}: ${stages[i]}`; }, 2200);
+}
+const MISSING_COPY = /copybook (\S+) was not found/;
+async function autoAdd(files) {
+  files = [...files]; if (!files.length) return;
+  if (adding) { say('Still adding the last files. Drop these again in a moment.', 'error'); return; }
+  const progs = [], jobs = [], copy = {}, data = []; const onProgram = S.name && prog(S.name) && !isJob(prog(S.name));
+  for (const f of files) {
+    const why = await notSource(f);
+    if (why) { if (onProgram) data.push(f); else say(why + ` Accepted here: ${IMPORT_TYPES.replace(/\s+/g, ' ')}.`, 'error'); continue; }
+    const text = await f.text(); const stem = f.name.replace(/\.[^.]+$/, '');
+    if (looksLikeJcl(text, f.name)) jobs.push({ name: suggestJob(text), text });
+    else if (/\.(cpy|copy)$/i.test(f.name) || !/PROCEDURE\s+DIVISION/i.test(text)) copy[stem.toUpperCase()] = text;
+    else progs.push({ stem, text, called: /PROCEDURE\s+DIVISION\s+USING/i.test(text) });
+  }
+  let mains = progs.filter((p) => !p.called); const subs = progs.filter((p) => p.called);
+  if (!mains.length && subs.length) mains = [subs.shift()];
+  if ($('addDlg').open) $('addDlg').close();
+  const total = mains.length + jobs.length;
+  if (!total) {
+    if (data.length) { await uploadAll(data); return; }
+    if (Object.keys(copy).length) say('Those are copybooks. Drop them together with the program that uses them (or use Locate on a program that is missing one).', 'error');
+    return;
+  }
+  adding = true; const done = []; let n = 0;
+  const copybooks = Object.entries(copy).map(([name, text]) => ({ name, text })); const programs = subs.map((s) => ({ name: s.stem.toLowerCase(), text: s.text }));
+  try {
+    for (const p of mains) {
+      const name = suggestName(p.text); n++; const payload = { name, cobol: p.text, copybooks, programs };
+      const old = S.programs.find((x) => x.name === name);
+      if (old && !old.error) { say(`${name} is already in the workspace. Delete it first to add it again.`, 'error'); continue; }
+      if (old) { try { await api('/api/programs/' + enc(name), { method: 'DELETE' }); } catch { /* adding it again will say what is wrong */ } }
+      importStages(`${name}${total > 1 ? ` (${n} of ${total})` : ''}`);
+      try { done.push(await send('/api/programs', payload, 'POST', 1800000)); }
+      catch (err) { const m = MISSING_COPY.exec(err.message); if (m) { S.issues.push({ kind: 'copybook', name: m[1], program: name, payload }); say(`${name}: the copybook ${m[1]} is missing. Use Locate on the dashboard to add it.`, 'error'); } else say(`${name}: ${err.message}`, 'error'); }
+    }
+    for (const j of jobs) {
+      n++; importStages(`Job ${j.name}${total > 1 ? ` (${n} of ${total})` : ''}`);
+      try { done.push(await send('/api/jobs', { name: j.name, jcl: j.text }, 'POST', 1800000)); } catch (err) { say(`${j.name}: ${err.message}`, 'error'); }
+    }
+  } finally { adding = false; importBar(null); }
+  if (done.length) await loadPrograms();
+  done.forEach((r) => forget(r.name));
+  if (done.length === 1) { S.impl[done[0].name] = null; goTo(done[0].name, 'overview'); say(`Added ${done[0].name}. Run the check next.`, 'ok', { action: { label: 'Run Check', run: () => startCheck(done[0].name) } }); }
+  else if (done.length) { goWork(); say(`Added ${plural(done.length, 'program')}.`, 'ok'); }
+  else if (S.issues.length) { goWork(); renderWork(); }
+}
+async function retryIssue(i, file) {
+  const it = S.issues[i]; if (!it) return;
+  const stem = file.name.replace(/\.[^.]+$/, '').toUpperCase(); const text = await file.text();
+  it.payload.copybooks = [...it.payload.copybooks.filter((c) => c.name !== stem), { name: stem, text }]; S.issues.splice(i, 1); importStages(it.program);
+  try { const r = await send('/api/programs', it.payload, 'POST', 1800000); forget(r.name); await loadPrograms(); say(`Added ${r.name}.`, 'ok'); goTo(r.name, 'overview'); }
+  catch (err) { const m = MISSING_COPY.exec(err.message); if (m) { it.name = m[1]; S.issues.push(it); say(`Still missing: ${m[1]}.`, 'error'); } else say(err.message, 'error'); }
+  finally { importBar(null); if (S.view === 'work') renderWork(); }
+}
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'pickHome') { const fs = [...e.target.files]; e.target.value = ''; autoAdd(fs); }
+  else if (e.target.dataset?.issue != null) { const f = e.target.files[0]; const i = Number(e.target.dataset.issue); e.target.value = ''; if (f) retryIssue(i, f); }
+});
+document.addEventListener('click', (e) => { const g = e.target.closest('[data-ignore]'); if (g) { S.issues.splice(Number(g.dataset.ignore), 1); if (S.view === 'work') renderWork(); } });
+document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('label.importbox, label[for^="loc"]')) { e.preventDefault(); $(e.target.htmlFor)?.click(); } });
+['dragenter', 'dragover'].forEach((ev) => window.addEventListener(ev, (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) document.body.classList.add('dragging'); }));
+['dragleave', 'drop'].forEach((ev) => window.addEventListener(ev, (e) => { if (ev === 'drop' || !e.relatedTarget) document.body.classList.remove('dragging'); }));
 async function takeFiles(list) {
   const progs = []; let jcl = null, taken = 0;
   for (const f of list) {
@@ -2315,14 +2549,14 @@ async function takeFiles(list) {
   renderAdded(); return taken;
 }
 $('pickLabel').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pickFiles').click(); } });
-$('pickFiles').addEventListener('change', (e) => { takeFiles([...e.target.files]); e.target.value = ''; });
+$('pickFiles').addEventListener('change', (e) => { const fs = [...e.target.files]; e.target.value = ''; autoAdd(fs); });
 $('addCobol').addEventListener('input', () => { if (!$('addName').dataset.touched) $('addName').value = suggestName($('addCobol').value); if (looksLikeJcl($('addCobol').value)) { $('addJcl').value = $('addCobol').value; $('addCobol').value = ''; setAddMode('job'); } });
 $('addJcl').addEventListener('input', () => { if (!$('addName').dataset.touched) $('addName').value = suggestJob($('addJcl').value); });
 $('addName').addEventListener('input', () => ($('addName').dataset.touched = '1'));
 const dropZone = $('drop');
 ['dragenter', 'dragover'].forEach((ev) => dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.add('over'); }));
 ['dragleave', 'drop'].forEach((ev) => dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.remove('over'); }));
-dropZone.addEventListener('drop', (e) => takeFiles([...e.dataTransfer.files]));
+dropZone.addEventListener('drop', (e) => autoAdd([...e.dataTransfer.files]));
 $('addDlg').addEventListener('close', () => { $('addStatus').innerHTML = ''; });
 $('addGo').addEventListener('click', (e) => {
   const job = add.mode === 'job'; const text = job ? $('addJcl').value : $('addCobol').value;
@@ -2340,7 +2574,7 @@ $('addGo').addEventListener('click', (e) => {
   });
 });
 window.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
-window.addEventListener('drop', (e) => { if (!e.dataTransfer?.files?.length || e.target.closest?.('#drop, #dataDrop')) return; e.preventDefault(); openAdd([...e.dataTransfer.files]); });
+window.addEventListener('drop', (e) => { if (!e.dataTransfer?.files?.length || e.target.closest?.('#drop, #dataDrop')) return; e.preventDefault(); autoAdd([...e.dataTransfer.files]); });
 
 /* ================================================================ settings, shortcuts, about */
 function openSettings() {
@@ -2579,13 +2813,13 @@ async function init() {
     await loadPrograms();
   } catch (e) { $('vWork').hidden = false; $('vWork').innerHTML = `<div class="note bad"><b>Séance could not start.</b><br>${esc(e.message)}</div>`; return; }
   S.loaded = true; renderRuntime(); await route();
-  if (!prefs.guideSeen) { openGuide(); setPref('guideSeen', true); } // seen once shown: closing it is asynchronous, and a reload must not bring it back
+  /* no welcome dialog: the info icon in the top bar explains the product */
 }
 init();
 let staleShown = false;
 async function checkBuild() {
   if (staleShown) return;
-  try { const a = await api('/api/about'); if (a.build && a.build !== BUILD) { staleShown = true; say('Séance was updated while this page was open. Reload to use the new version.', 'error', { action: { label: 'Reload', run: () => location.reload() } }); } } catch { /* the server may be restarting */ }
+  try { const a = await api('/api/about'); if (a.build && a.build !== BUILD) { staleShown = true; say('Séance was updated while this page was open. Reload to use the new version. Nothing is lost: your programs, test data and results are saved on disk.', 'error', { action: { label: 'Reload', run: () => location.reload() } }); } } catch { /* the server may be restarting */ }
 }
 window.addEventListener('focus', checkBuild);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkBuild(); });

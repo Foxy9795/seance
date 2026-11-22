@@ -14,7 +14,9 @@ import json
 import secrets
 import subprocess
 import sys
+from pathlib import Path
 
+from fastapi.exceptions import RequestValidationError
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
@@ -48,6 +50,16 @@ async def _lifespan(_app):
 
 
 app = FastAPI(title="Séance", lifespan=_lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def _bad_request(request: Request, exc: RequestValidationError):
+    """A request the page should not have sent (or a limit that is left): say which part and why, not a raw validation dump."""
+    parts = []
+    for e in exc.errors()[:3]:
+        where = ".".join(str(x) for x in e.get("loc", ()) if x not in ("body", "query"))
+        parts.append(f"{where + ': ' if where else ''}{e.get('msg', 'is not valid')}")
+    return JSONResponse({"detail": "The request was not accepted. " + "; ".join(parts)}, status_code=422)
 
 
 @app.exception_handler(Exception)
@@ -89,7 +101,8 @@ async def require_token(request: Request, call_next):
         sent = request.headers.get("x-seance-token", "")
         if not hmac.compare_digest(sent, app.state.token):
             return JSONResponse({"detail": "Missing or wrong session token. Reload the page."}, status_code=403)
-        if request.method in ("POST", "PUT") and "application/json" not in request.headers.get("content-type", ""):
+        raw = request.url.path.startswith("/api/data-raw/")  # a file body: streamed, not JSON
+        if request.method in ("POST", "PUT") and not raw and "application/json" not in request.headers.get("content-type", ""):
             return JSONResponse({"detail": "Content-Type must be application/json."}, status_code=415)
     return await call_next(request)
 
@@ -140,8 +153,8 @@ class Copybook(BaseModel):
 class NewProgram(BaseModel):
     name: str = ""
     cobol: str
-    copybooks: list[Copybook] = Field(default_factory=list, max_length=40)
-    programs: list[Copybook] = Field(default_factory=list, max_length=20)  # programs it CALLs
+    copybooks: list[Copybook] = Field(default_factory=list)
+    programs: list[Copybook] = Field(default_factory=list)  # programs it CALLs
 
 
 class NewJob(BaseModel):
@@ -151,14 +164,14 @@ class NewJob(BaseModel):
 
 class GoldenFile(BaseModel):
     file: str
-    base64: str = Field(max_length=7_000_000)
+    base64: str = Field()
 
 
 class GoldenData(BaseModel):
     filename: str = "mainframe"
-    inputs: list[GoldenFile] = Field(default_factory=list, max_length=10)
-    outputs: list[GoldenFile] = Field(default_factory=list, max_length=10)
-    console_output_base64: str | None = Field(default=None, max_length=7_000_000)
+    inputs: list[GoldenFile] = Field(default_factory=list)
+    outputs: list[GoldenFile] = Field(default_factory=list)
+    console_output_base64: str | None = None
     console_input: list[str] | None = Field(default=None, max_length=200)
     code_page: str | None = None
 
@@ -212,8 +225,8 @@ class SaveSource(BaseModel):
 
 class TestData(BaseModel):
     filename: str = "data.txt"
-    text: str | None = Field(default=None, max_length=5_000_000)
-    base64: str | None = Field(default=None, max_length=7_000_000)
+    text: str | None = None
+    base64: str | None = None
     file: str | None = None  # which input file it is for (ASSIGN name); None when there is only one
     console: bool = False  # the upload is console input, one value per line
     code_page: str | None = None  # EBCDIC code page of a mainframe file, such as cp037
@@ -273,7 +286,8 @@ def _mcp_info(client: str, mode: str) -> dict:
     if mode == "portable" and c.portable == "none":
         note = f"{c.name} starts servers outside the project folder, so these settings use this machine's full paths. " + note
     return {"clients": [{"key": k, "name": v.name} for k, v in CLIENTS.items()], "client": client, "mode": mode, "text": render(c, mode),
-            "where": where, "note": note.strip(), "can_write": bool(c.project_file), "project_file": c.project_file or ""}
+            "where": where, "note": note.strip(), "can_write": bool(c.project_file), "project_file": c.project_file or "",
+            "written": bool(c.project_file and (ROOT / c.project_file).is_file() and "seance" in (ROOT / c.project_file).read_text(encoding="utf-8", errors="replace"))}
 
 
 @app.get("/api/mcp-config")
@@ -528,6 +542,35 @@ async def upload_data(program: str, body: TestData):
         stdin, target = None, body.file
     try:
         return await run_in_threadpool(add_uploaded, program, body.filename, data, target, stdin, ROOT, body.code_page)
+    except (ValueError, LegacyRuntimeError) as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/data-raw/{program}")
+async def upload_data_raw(program: str, request: Request, filename: str = "upload.dat", file: str | None = None, code_page: str | None = None,
+                          console: bool = False):
+    """The same as /api/data, but the file is the request body: the page does not have to hold a copy of it, and there is no size limit."""
+    _require(program)
+    if not cobc_available():
+        raise HTTPException(503, "GnuCOBOL runtime not found")
+    import os
+    import tempfile
+
+    from .cases import ENC, add_uploaded
+
+    fd, tmp = tempfile.mkstemp(prefix="seance_upload_")
+    try:
+        with os.fdopen(fd, "wb") as out:
+            async for chunk in request.stream():
+                out.write(chunk)
+        data = Path(tmp).read_bytes()
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+    stdin, target = (data.decode(ENC).splitlines(), None) if console else (None, file)
+    if console:
+        data = b""
+    try:
+        return await run_in_threadpool(add_uploaded, program, filename, data, target, stdin, ROOT, code_page or None)
     except (ValueError, LegacyRuntimeError) as exc:
         raise HTTPException(400, str(exc))
 

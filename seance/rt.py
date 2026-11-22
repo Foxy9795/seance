@@ -744,7 +744,7 @@ class Program:
         on; with neither the run stops, as GnuCOBOL's does."""
         self._status(f, code)
         if self._run_declarative(f) or f.status:
-            return False
+            return None  # a hard error: not False, so neither AT END / INVALID KEY nor their NOT branches run
         raise CobolError(f"{message} (status = {code})")
 
     def _done(self, f: FileState, ok: bool, phrase: bool) -> bool:
@@ -1174,8 +1174,7 @@ class Program:
 
     def _k_rewrite(self, f: FileState, record: str) -> bool:
         if f.mode != "io":
-            self._status(f, "49")
-            raise CobolError(f"REWRITE {record}: the file is not open I-O")
+            return self._fail(f, "49", f"REWRITE {record}: the file is not open I-O")  # FILE STATUS and declaratives apply
         rec = bytes(self.mem[f.record][0:f.size])
         pk = self._primary(f, rec)
         if f.extra.get("access", "sequential") == "sequential":
@@ -1410,7 +1409,7 @@ class Program:
         if where:
             fargs.append(where)
         rand = self.io.__dict__.setdefault("rand_state", [1])  # one C library generator per run
-        env = intrinsics.Env(cmp=self._fn_cmp, decimal_point="," if self.comma else ".", currency=self.currency,
+        env = intrinsics.Env(cmp=self._fn_cmp, current_date=self._current_date_text(), decimal_point="," if self.comma else ".", currency=self.currency,
                              rand_state=rand, when_compiled=self.when_compiled)
         return self._fn_store(intrinsics.call(name, fargs, env))
 
@@ -1690,9 +1689,30 @@ class Program:
             else:
                 self.move(text, target)
             return
-        clock = {"date": "261031", "date-yyyymmdd": "20261031", "day": "26304", "day-yyyyddd": "2026304",
-                 "time": "23595800", "day-of-week": "6"}[source]
+        now = self._now()
+        clock = {"date": now.strftime("%y%m%d"), "date-yyyymmdd": now.strftime("%Y%m%d"), "day": now.strftime("%y%j"),
+                 "day-yyyyddd": now.strftime("%Y%j"), "time": now.strftime("%H%M%S") + f"{now.microsecond // 10000:02d}",
+                 "day-of-week": str(now.isoweekday())}[source]
         self.move(clock if self.kind(target) != "num" else Decimal(clock), target)
+
+    def _now(self):
+        """The time of the run: the checker pins it (io.clock, or COB_CURRENT_DATE as libcob reads it) so both sides see the same
+        moment; a program run on its own sees the real time."""
+        import datetime
+        import os
+
+        text = getattr(self.io, "clock", None) or os.environ.get("COB_CURRENT_DATE")
+        if text:
+            try:
+                return datetime.datetime.strptime(text.strip(), "%Y/%m/%d %H:%M:%S.%f" if "." in text else "%Y/%m/%d %H:%M:%S")
+            except ValueError:
+                pass
+        return datetime.datetime.now()
+
+    def _current_date_text(self) -> str:
+        now = self._now()
+        offset = "+0000" if getattr(self.io, "clock", None) else now.astimezone().strftime("%z") or "+0000"
+        return now.strftime("%Y%m%d%H%M%S") + f"{now.microsecond // 10000:02d}" + offset
 
     # ---------------------------------------------------------- string verbs
     def string(self, parts: list, into, pointer=None) -> bool:
@@ -1740,7 +1760,10 @@ class Program:
                 k = text.find(d, pos)
                 if k >= 0 and (best is None or k < best[0]):
                     best = (k, d, is_all)
-            if best is None:
+            if not delims:  # no DELIMITED BY: each target takes as many characters as it holds
+                size = self._addr(ref)[2]
+                piece, used, pos_next = text[pos:pos + size], "", min(len(text), pos + size)
+            elif best is None:
                 piece, used, pos_next = text[pos:], "", len(text)
             else:
                 k, d, is_all = best
@@ -1805,6 +1828,52 @@ class Program:
             hi = hi if k < 0 else k
         return lo, hi
 
+    def inspect_run(self, ref, phrases: list) -> None:
+        """INSPECT TALLYING / REPLACING as libcob does it: one pass, the phrases in order, and a character one phrase has taken is
+        not taken by another. phrases: ("t", mode, counter, pattern, before, after) to count, ("r", mode, None-or-pattern, new, before, after)
+        to replace; mode is characters, all, leading or first."""
+        text = self._target_text(ref)
+        marks: dict = {"t": [None] * len(text), "r": [None] * len(text)}  # counting and replacing keep separate marks (measured)
+        counts: dict = {}
+        for kind, mode, a, b, before, after in phrases:
+            counter, pattern, new = (a, b, None) if kind == "t" else (None, a, b)
+            lo, hi = self._region(ref, before, after)
+            mk = marks[kind]
+            if kind == "r":
+                new = self._text(new)
+            if mode == "characters":
+                for i in range(lo, hi):
+                    if mk[i] is None:
+                        mk[i] = True if kind == "t" else (new[:1] or " ")
+                        if kind == "t":
+                            counts[repr(counter)] = counts.get(repr(counter), [counter, 0])
+                            counts[repr(counter)][1] += 1
+                continue
+            p = self._text(pattern)
+            n = len(p)
+            if not n:
+                continue
+            i = lo
+            while i <= hi - n:
+                if text.startswith(p, i):
+                    if all(mk[i + j] is None for j in range(n)):
+                        for j in range(n):
+                            mk[i + j] = True if kind == "t" else (new[j] if j < len(new) else " ")
+                        if kind == "t":
+                            counts[repr(counter)] = counts.get(repr(counter), [counter, 0])
+                            counts[repr(counter)][1] += 1
+                        i += n
+                        if mode == "first":
+                            break
+                        continue
+                elif mode == "leading":
+                    break
+                i += 1
+        for counter, k in counts.values():
+            self.move(self.n(counter) + k, counter)
+        if any(isinstance(m, str) for m in marks["r"]):
+            self._put_target(ref, "".join(m if isinstance(m, str) else c for m, c in zip(marks["r"], text)))
+
     def inspect_tally(self, ref, counter, mode: str, pattern=None, before=None, after=None) -> None:
         text = self._text(ref)
         lo, hi = self._region(ref, before, after)
@@ -1854,7 +1923,9 @@ class Program:
         text = self._target_text(ref)
         lo, hi = self._region(ref, before, after)
         a, b = self._text(src), self._text(dst)
-        table = {ch: b[i] if i < len(b) else ch for i, ch in enumerate(a)}
+        table: dict = {}
+        for i, ch in enumerate(a):
+            table.setdefault(ch, b[i] if i < len(b) else ch)  # a character listed twice converts by its first place (libcob)
         self._put_target(ref, text[:lo] + "".join(table.get(c, c) for c in text[lo:hi]) + text[hi:])
 
     # ---------------------------------------------------------- program flow

@@ -154,18 +154,27 @@ def run_python(module, case: Case, limit: float | None = None) -> Result:
     import threading
 
     box: list[Result] = []
-    t = threading.Thread(target=lambda: box.append(_run_python(module, case)), daemon=True)
+
+    def work() -> None:
+        import decimal
+
+        decimal.getcontext().prec = 60  # a thread starts with 28 digits; the program's numbers need the same 60 as the main thread's
+        box.append(_run_python(module, case))
+
+    t = threading.Thread(target=work, daemon=True)
     t.start()
-    t.join(limit or RUN_LIMIT_SECONDS)
+    limit = limit or RUN_LIMIT_SECONDS + 2.0 * sum(len(v) for v in case.files.values()) / 1e6  # the Python reads about half a MB a second
+    t.join(limit)
     if box:
         return box[0]
-    return Result(error=f"TimeoutError: the Python did not finish in {limit or RUN_LIMIT_SECONDS} seconds")
+    return Result(error=f"TimeoutError: the Python did not finish in {int(limit)} seconds")
 
 
 def _run_python(module, case: Case) -> Result:
     from .rt import IO
 
     io = IO(dict(case.files), list(case.stdin))
+    io.clock = FIXED_CLOCK  # the COBOL runs on COB_CURRENT_DATE = this; the Python is told the same moment
     main = getattr(module, "main", None)
     if main is None:
         return Result(error="the Python module has no main(io) function")
@@ -280,6 +289,20 @@ def decode_fields(f: FileDef, unit: bytes) -> list[tuple[str, str]]:
     return out_slot + out
 
 
+def stop_kind(message: str) -> str | None:
+    """What kind of stop an error message describes, whoever worded it: a hang, a bad subscript, a bad reference modification, or a file
+    status. None when it is something else."""
+    m = message.lower()
+    if "loop steps" in m or m.startswith("timeouterror") or "did not finish" in m:
+        return "hang"
+    if "subscript" in m:
+        return "subscript"
+    if "offset" in m or "reference modification" in m or "ref-mod" in m or "length of" in m and "out of bounds" in m:
+        return "reference modification"
+    st = re.search(r"status\s*=\s*(\d\d)", m)
+    return f"file status {st.group(1)}" if st else None
+
+
 def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 50) -> tuple[list[Diff], int]:
     """Differences between two results, and the number of output records/lines compared."""
     diffs: list[Diff] = []
@@ -295,8 +318,11 @@ def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 
         else:
             # the status a file error carries is part of the stop: libcob says "(status = 35)", the runtime says the same
             e_code, a_code = (re.search(r"status\s*=\s*(\d\d)", m) for m in (expected.error, actual.error))
+            e_kind, a_kind = stop_kind(expected.error), stop_kind(actual.error)
             if e_code and a_code and e_code.group(1) != a_code.group(1):
                 diffs.append(Diff("run", -1, expected.error, actual.error))
+            elif (e_kind == "hang") != (a_kind == "hang") or (e_kind and a_kind and e_kind != a_kind):
+                diffs.append(Diff("run", -1, f"stopped: {e_kind or expected.error}", f"stopped: {a_kind or actual.error}"))  # not the same stop
     elif expected.return_code != actual.return_code:
         diffs.append(Diff("run", -1, f"return code {expected.return_code}", f"return code {actual.return_code}"))
     streams = sorted(set(expected.outputs) | set(actual.outputs))
@@ -807,7 +833,7 @@ def add_uploaded(program: str, filename: str, data: bytes, target_file: str | No
         if f.organization == "relative":
             data = pack_file(f, units)
         n = len(units)
-        if n > MAX_DATA_RECORDS:
+        if MAX_DATA_RECORDS and n > MAX_DATA_RECORDS:
             raise ValueError(f"The file has {n} records. The limit is {MAX_DATA_RECORDS}; split it into smaller files.")
         names = set_names(program, root)
         base = load_set(program, names[0], root)[0] if names else Case()
@@ -818,7 +844,8 @@ def add_uploaded(program: str, filename: str, data: bytes, target_file: str | No
         n = len(case.stdin)
     from .config import RUN_TIMEOUT
 
-    result = run_cobol(compile_legacy(program, root), model, case, RUN_TIMEOUT)
+    size_mb = sum(len(v) for v in case.files.values()) / 1e6
+    result = run_cobol(compile_legacy(program, root), model, case, RUN_TIMEOUT + int(size_mb * 0.5))  # a big file gets time to match
     stem = re.sub(r"[^a-z0-9]+", "-", Path(filename or "data").stem.lower()).strip("-")[:30] or "data"
     name, k = f"yours-{stem}", 2
     while set_dir(program, name, root).exists():
@@ -865,7 +892,7 @@ def add_golden(program: str, filename: str, inputs: dict[str, bytes], outputs: d
         if fixed and data and len(data) % max(f.size, 1):
             raise ValueError(f"The input for {assign} is {len(data)} bytes, which is not a whole number of {f.size}-byte records.")
         units = [data[i:i + f.size] for i in range(0, len(data), f.size)] if fixed else _units(None, data)
-        if len(units) > MAX_DATA_RECORDS:
+        if MAX_DATA_RECORDS and len(units) > MAX_DATA_RECORDS:
             raise ValueError(f"The input for {assign} has {len(units)} records. The limit is {MAX_DATA_RECORDS}.")
         case.files[assign] = pack_file(f, units) if f.organization == "relative" else data
         case.records[assign] = units

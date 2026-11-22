@@ -827,10 +827,12 @@ class Parser:
         self.accept(end_word)
         return on_err, not_err
 
-    def guarded(self, line, call, on_err, not_err) -> Node:
+    def guarded(self, line, call, on_err, not_err, tri=False) -> Node:
+        """tri: a file statement. It answers True (done), False (at end / invalid key) or None (a hard error, status 3x or 4x, which
+        runs neither phrase)."""
         if on_err is None and not_err is None:
             return self.code(line, call)
-        return Node("guarded", line, {"call": call, "on_err": on_err or [], "not_err": not_err or []})
+        return Node("guarded", line, {"call": call, "on_err": on_err or [], "not_err": not_err or [], "tri": tri})
 
     def targets(self, allow_rounded=True) -> list[tuple[RefX, bool | str]]:
         out = []
@@ -965,12 +967,14 @@ class Parser:
         if self.word() in self.names.switch_names:
             calls = []
             while self.word() in self.names.switch_names:
-                n = self.names.switch_names[self.take().value]
+                ns = []
+                while self.word() in self.names.switch_names:  # SET SW-1 SW-2 TO ON
+                    ns.append(self.names.switch_names[self.take().value])
                 self.expect("TO")
                 on = self.accept("ON")
                 if not on:
                     self.expect("OFF")
-                calls.append(f"S.set_switch({n}, {on})")
+                calls += [f"S.set_switch({n}, {on})" for n in ns]
             return self.code(line, "; ".join(calls))
         tgts = []
         while self.word() in self.names.indexes or self.is_data():
@@ -984,7 +988,9 @@ class Parser:
             sign = "+" if self.t[self.i - 1].value == "UP" else "-"
             self.expect("BY")
             amount = self.operand_num()
-            return self.code(line, "; ".join(f'S.set_index("{n}", S.idx_value("{n}") {sign} int({amount}))' for k, n in tgts if k == "idx"))
+            outs = [f'S.set_index("{n}", S.idx_value("{n}") {sign} int({amount}))' if k == "idx"
+                    else f"S.move(S.n({n.target}) {sign} {amount}, {n.target})" for k, n in tgts]  # an index data item (USAGE INDEX) steps like a number
+            return self.code(line, "; ".join(outs))
         self.expect("TO")
         if self.word() in self.names.indexes:
             src = f'S.idx_value("{self.take().value}")'
@@ -1184,6 +1190,9 @@ class Parser:
                 return f"not ({subject[1]})"
             self._last = None
             return f"bool({subject[1]}) == bool({self.cond_or()})"
+        op = self.relop()  # WHEN > 10, WHEN NOT < 5, WHEN GREATER THAN OR EQUAL TO 3
+        if op is not None:
+            return f'S.cmp({subject}, "{op}", {self.comparand()})'
         negate = self.accept("NOT")
         lo = self.comparand()
         if self.accept("THRU", "THROUGH"):
@@ -1424,7 +1433,7 @@ class Parser:
         if at_end is None and not_at_end is None and inv is None and not_inv is None:
             return self.code(line, call)
         call = call[:-1] + ", phrase=True)"
-        return Node("if", line, {"cond": call, "then": ok, "else": fail})
+        return Node("if", line, {"cond": call, "then": ok, "else": fail, "tri": True})
 
     def key_phrases(self, stop, end_word):
         """[INVALID KEY statements] [NOT INVALID KEY statements]."""
@@ -1445,7 +1454,7 @@ class Parser:
         self.accept(end_word)
         if inv is not None or not_inv is not None:
             call = call[:-1] + ", phrase=True)"
-        return self.guarded(line, call, inv, not_inv)
+        return self.guarded(line, call, inv, not_inv, tri=True)
 
     def s_REWRITE(self, line, stop):
         rec = self.ref()
@@ -1807,6 +1816,7 @@ class Parser:
 
     def s_INSPECT(self, line, stop):
         target = self.ref().py
+        phrases = []  # every phrase of the statement runs in one pass over the field (libcob's inspect marks)
         calls = []
         if self.accept("TALLYING"):
             while self.is_data():
@@ -1815,12 +1825,15 @@ class Parser:
                 while True:
                     if self.accept("CHARACTERS"):
                         b, a = self._before_after()
-                        calls.append(f'S.inspect_tally({target}, {counter}, "characters", None, {b}, {a})')
+                        phrases.append(f'("t", "characters", {counter}, None, {b}, {a})')
                     elif self.word() in ("ALL", "LEADING"):
                         mode = self.take().value.lower()
-                        pat = self.value()
-                        b, a = self._before_after()
-                        calls.append(f'S.inspect_tally({target}, {counter}, "{mode}", {pat}, {b}, {a})')
+                        while True:  # FOR LEADING 'S' AFTER 'U' 'T' AFTER 'U': more patterns without repeating the keyword
+                            pat = self.value()
+                            b, a = self._before_after()
+                            phrases.append(f'("t", "{mode}", {counter}, {pat}, {b}, {a})')
+                            if self.peek().kind != "str" and not (self.word() in FIGURATIVE):
+                                break
                     else:
                         break
         if self.accept("REPLACING"):
@@ -1829,7 +1842,7 @@ class Parser:
                     self.expect("BY")
                     new = self.value()
                     b, a = self._before_after()
-                    calls.append(f'S.inspect_replace({target}, "characters", None, {new}, {b}, {a})')
+                    phrases.append(f'("r", "characters", None, {new}, {b}, {a})')
                 elif self.word() in ("ALL", "LEADING", "FIRST"):
                     mode = self.take().value.lower()
                     while True:
@@ -1837,11 +1850,13 @@ class Parser:
                         self.expect("BY")
                         new = self.value()
                         b, a = self._before_after()
-                        calls.append(f'S.inspect_replace({target}, "{mode}", {pat}, {new}, {b}, {a})')
+                        phrases.append(f'("r", "{mode}", {pat}, {new}, {b}, {a})')
                         if self.peek().kind != "str" and not (self.word() in FIGURATIVE):
                             break
                 else:
                     break
+        if phrases:
+            calls.append(f"S.inspect_run({target}, [{', '.join(phrases)}])")
         if self.accept("CONVERTING"):
             src = self.value()
             self.expect("TO")
@@ -1994,12 +2009,26 @@ class Emitter:
             self.count += 1
             if k == "code":
                 out.append(f"{pad}{d['py']}{tag}")
+            elif k == "guarded" and d.get("tri"):
+                out.append(f"{pad}_t = {d['call']}{tag}")
+                out.append(f"{pad}if _t is False:")
+                out += self.lines(d["on_err"], ind + 1) or [pad + "    pass"]
+                if d["not_err"]:
+                    out.append(f"{pad}elif _t:")
+                    out += self.lines(d["not_err"], ind + 1)
             elif k == "guarded":
                 out.append(f"{pad}if not {d['call']}:{tag}")
                 out += self.lines(d["on_err"], ind + 1) or [pad + "    pass"]
                 if d["not_err"]:
                     out.append(f"{pad}else:")
                     out += self.lines(d["not_err"], ind + 1)
+            elif k == "if" and d.get("tri"):
+                out.append(f"{pad}_t = {d['cond']}{tag}")
+                out.append(f"{pad}if _t:")
+                out += self.lines(d["then"], ind + 1) or [pad + "    pass"]
+                if d["else"]:
+                    out.append(f"{pad}elif _t is False:")
+                    out += self.lines(d["else"], ind + 1)
             elif k == "if":
                 out.append(f"{pad}if {d['cond']}:{tag}")
                 out += self.lines(d["then"], ind + 1) or [pad + "    pass"]

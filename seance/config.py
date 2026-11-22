@@ -20,7 +20,7 @@ VERIFY_TIMEOUT = _int("SEANCE_VERIFY_TIMEOUT", 600)  # seconds for one check
 COMPARE_TIMEOUT = _int("SEANCE_COMPARE_TIMEOUT", 120)
 RUN_TIMEOUT = _int("SEANCE_RUN_TIMEOUT", 20)  # seconds for one run of the COBOL on generated input
 MUTANTS = _int("SEANCE_MUTANTS", 12)  # planted bugs per test-strength run
-MAX_DATA_RECORDS = _int("SEANCE_MAX_DATA_RECORDS", 100000)  # records per uploaded test-data file
+MAX_DATA_RECORDS = _int("SEANCE_MAX_DATA_RECORDS", 0)  # records per uploaded test-data file; 0: no limit
 RANDOM_RECORDS = _int("SEANCE_RANDOM_RECORDS", 300)  # random records saved when a program is added
 
 # What Séance can read today. Served to the UI and kept in one place so the docs and the product agree.

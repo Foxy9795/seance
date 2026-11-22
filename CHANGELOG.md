@@ -3,6 +3,24 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.7] - 2026-11-22
+### Changed (the page)
+- The home page is a dashboard, not documentation: workspace health, a five step wizard (Import, Analyze, Translate, Verify, Export) that names the next action, a funnel (imported, readable, translated, verified), a "Needs attention" list with a status badge for each program, and counts of programs, jobs, copybooks and missing copybooks.
+- An empty workspace shows one large import box with the accepted file types, and the features as locked cards ("Requires a COBOL program") instead of the same message repeated.
+- Documentation, AI Agent (with the MCP settings, Copy and Write, and whether they are written) and an Activity Log are pages of their own in the side bar; no samples anywhere; one Add Program button.
+- Dropping or choosing files adds them at once, several programs in one drop included, with the stage shown (reading files, copybooks, CALL tree, compiling, running the original, translating). A missing copybook is reported with a Locate button that finishes the import. A program that could not be read is replaced when it is dropped again.
+- An info icon in the top bar explains the product on hover; small (i) tips explain the advanced panels; "Gap filling" is "Generate missing tests", "Test strength" is "Mutation testing"; the advanced Check panels start folded; toasts sit at the bottom right.
+- Upload limits are gone (records, size, request body); files stream to the server. Deleting fades the row out, then removes it.
+### Fixed
+- A COBOL file with Windows line ends added from the page was written with CR CR LF and refused by the compiler.
+- INSPECT runs all its phrases in one pass, as libcob does (REPLACING, TALLYING, CONVERTING with a repeated source character, several patterns after one LEADING); UNSTRING with no DELIMITED BY; SET index UP/DOWN BY on an index data item; several switches in one SET; EVALUATE with WHEN > n; REWRITE without OPEN gives status 49 and FILE STATUS applies.
+- A file status 3x or 4x error no longer runs AT END or INVALID KEY (nor the NOT branches).
+- Two different runtime stops (a bad subscript against a hang) are no longer a match.
+- The Python runtime reads the real clock; the checker pins it to the moment the COBOL ran at.
+- Decimal precision in the checker's worker thread; an index data item DISPLAYs as +000000007; `FUNCTION SUBSTITUTE` with an empty pattern.
+### Not done (from the 1.2.5 review)
+- SEARCH ALL still scans in order (F-SRH-01); OCCURS DEPENDING ON group length (F-ODO-01); GLOBAL items in nested programs (F-GLO-01); several record descriptions on one indexed file (F-MDL-01).
+- A downloaded UI test suite (`scripts/ui_check.py`) still expects the sample library (F-UI-06); `build/ui_real.py` style tests do not.
 ## [1.2.6] - 2026-11-22
 ### Fixed
 - **What it does** is never blank in the workspace list: with no header comment, it is worked out from the program (files read and written, paragraphs, decisions, calculations, loops).
