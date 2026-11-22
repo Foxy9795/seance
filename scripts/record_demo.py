@@ -190,7 +190,7 @@ try:
         try:
             click(page, "#strengthPanel")
             click(page, "text=Run Mutation Test")
-            say(page, "Each change should make a test fail. Survivors are gaps.", 10)
+            say(page, "Each change should make a test fail. Survivors are gaps.", 6)
             wait_for(page, "document.querySelector('#runGaps')", 40)
             click(page, "#runGaps")
             say(page, "Generate Missing Tests asks the COBOL what the correct answer is.", 12)
@@ -201,8 +201,8 @@ try:
         # 7. How it was built with Kiro
         card(page, "Built with Kiro", ["Spec: requirements, design, tasks", "Steering: product rules and COBOL migration rules",
                                        "Hook: re-verify on save", "MCP server: 14 tools, runs the real COBOL",
-                                       "Property-based tests: random records, same bytes"], 14)
-        card(page, "Séance", ["Open source (MIT).", "275 tests. 325 of 366 NIST COBOL programs match.", "Proof, not promises."], 7)
+                                       "Property-based tests: random records, same bytes"], 10)
+        card(page, "Séance", ["Open source (MIT).", "275 tests. 325 of 366 NIST COBOL programs match.", "Proof, not promises."], 5)
         page.close()
         ctx.close()
         b.close()
