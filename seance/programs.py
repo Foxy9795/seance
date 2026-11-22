@@ -181,6 +181,8 @@ def program_info(name: str, root: Path = ROOT) -> dict:
             "io": model.describe_io(),
             "unsupported": model.unsupported,
             "copybooks": sorted(f.name for f in (root / "legacy" / name).iterdir() if f.suffix.lower() in (".cpy", ".copy", ".cpb")),
+            "sql_blocks": len(re.findall(r"\bEXEC\s+SQL\b", model.path.read_text(encoding="utf-8", errors="replace"), re.I)),
+            "call_count": len(model.calls),
             "notes": model.notes,
             "kinds": kinds_of(model),
             "error": None,

@@ -73,11 +73,11 @@ try:
         check("no word 'sample' on the home page", "sample" not in body.lower(), [w for w in body.split("\n") if "sample" in w.lower()][:2])
         check("empty workspace shows the import box with accepted types", "Drop your COBOL files here" in body and ".cbl" in body and ".cpy" in body)
         check("empty workspace shows the 5-step wizard", all(w in body for w in ("Import", "Analyze", "Translate", "Verify", "Export")))
-        check("features are shown locked, not as repeated 'Add a program first'", "Requires a COBOL program" in body and "Add a program first" not in body)
+        check("no wall of locked features, and no tutorial button on the empty page", "Requires a COBOL program" not in body and "What you can do" not in body and "Open the tutorial" not in body)
         check("no documentation wall on the home page", "Supported COBOL" not in body and "What it runs" not in body and "mcpServers" not in body)
         page.hover("#infoBtn")
         time.sleep(0.4)
-        check("info icon shows its explanation on hover", page.locator("#infoTip").is_visible() and "What Séance does" in page.inner_text("#infoTip"))
+        check("the info button is there, labelled, and explains the product on hover", page.locator("#infoBtn").is_visible() and "What is Séance?" in page.inner_text("#infoBtn") and page.locator("#infoTip").is_visible() and "What Séance does" in page.inner_text("#infoTip"))
         page.mouse.move(600, 600)
 
         def drop(files):
@@ -109,7 +109,8 @@ try:
         check("every program says what it does", all(x.get("purpose") for x in api("/api/programs")["programs"]))
         check("workspace titles use the PROGRAM-ID (ALPHA1)", "ALPHA1" in body, body[:0])
 
-        check("dashboard shows health, funnel and wizard", all(w.lower() in body.lower() for w in ("Workspace health", "Translated", "Verified", "Copybooks found")))
+        check("dashboard shows health, funnel and wizard", all(w.lower() in body.lower() for w in ("Workspace health", "Translated", "Verified", "Copybooks")))
+        check("import statistics are shown at once", all(w in body.lower() for w in ("import complete", "copybooks", "jcl jobs", "sql blocks", "call relationships")))
         # a program that needs a copybook that is not there: it says so, and Locate finishes the job
         miss = b"       IDENTIFICATION DIVISION.\n       PROGRAM-ID. MISS1.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       COPY CUSTOMER.\n       PROCEDURE DIVISION.\n           DISPLAY \"X\".\n           STOP RUN.\n"
         drop([("MISS1.cbl", miss)])
@@ -168,6 +169,31 @@ try:
         page.goto("http://127.0.0.1:8100/#/assessment")
         time.sleep(1.5)
         check("assessment explains an empty dependency graph", "nothing to draw" in page.inner_text("body"))
+        # settings is a page of its own, with the tutorial under Help; the tutorial walks five steps and is remembered
+        page.goto("http://127.0.0.1:8100/#/")
+        time.sleep(0.8)
+        page.click("#setBtn")
+        page.wait_for_selector("#helpGroup", timeout=10000)
+        check("settings opens as a page with a Help section", page.url.endswith("#/settings") and not page.locator("#setDlg[open]").count() and "Start The Tutorial" in page.inner_text("#helpGroup"))
+        page.click("#setTour")
+        page.wait_for_selector("#tutDlg[open]", timeout=5000)
+        steps = 1
+        while page.locator("#tutNext").inner_text() != "Done" and steps < 10:
+            page.click("#tutNext")
+            steps += 1
+        page.click("#tutNext")
+        time.sleep(0.4)
+        check("the tutorial has five steps and closes on Done", steps == 5 and not page.locator("#tutDlg[open]").count() and page.evaluate("() => prefs.tutorialSeen === true"))
+        # search finds help and features while the workspace is full or empty
+        page.keyboard.press("Control+k")
+        page.wait_for_selector("#palDlg[open]", timeout=5000)
+        page.fill("#palInput", "tutorial")
+        time.sleep(0.4)
+        check("search finds the tutorial", "Tutorial" in page.inner_text("#palList"))
+        page.fill("#palInput", "business rules")
+        time.sleep(0.4)
+        check("search finds a feature by name", "Business rules" in page.inner_text("#palList"))
+        page.keyboard.press("Escape")
         errs = [e for e in errors if "favicon" not in e and "400 (Bad Request)" not in e]  # the 400s are the missing-copybook tests
         check("no errors in the browser console", not errs, errs[:3])
         b.close()

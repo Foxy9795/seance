@@ -597,7 +597,7 @@ select, input[type=text], input[type=search], input[type=number], textarea, .btn
 #strengthPanel > .head::after, #historyPanel > .head::after { content: "Show"; position: absolute; right: 16px; top: 16px; font-size: .78rem; color: var(--amber); border: 1px solid var(--amber); border-radius: 999px; padding: 1px 10px; }
 body[data-adv-strength] #strengthPanel > .head::after, body[data-adv-history] #historyPanel > .head::after { content: "Hide"; }
 body:not([data-adv-strength]) #strengthPanel > :not(.head), body:not([data-adv-history]) #historyPanel > :not(.head) { display: none; }
-#vWork .stats > div:nth-child(n+5) { display: none; }
+/* every statistic is shown */
 /* dashboard */
 .dash { display: grid; grid-template-columns: minmax(230px, 280px) 1fr; gap: 14px; align-items: stretch; margin-bottom: 14px; }
 .health { display: flex; gap: 14px; align-items: center; padding: 16px; background: var(--panel); border: 1px solid var(--line2); border-radius: 12px; }
@@ -621,6 +621,58 @@ body.dragging::after { content: "Drop your COBOL files to add them"; position: f
 .words { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; } .words dt { font-weight: 600; } .words dd { margin: 0; color: var(--muted); }
 .side-foot { display: grid; gap: 2px; }
 @media (max-width: 860px) { .dash { grid-template-columns: 1fr; } }
+/* ---- the look: hero, step cards, statistics, motion */
+@property --p { syntax: "<number>"; inherits: false; initial-value: 0; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes dash { to { stroke-dashoffset: -24; } }
+@keyframes pulse { 0%, 100% { opacity: .35; transform: scale(1); } 50% { opacity: .9; transform: scale(1.06); } }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes grow { from { width: 0; } }
+@keyframes ring { from { --p: 0; } }
+@keyframes pop { 0% { opacity: 0; transform: scale(.7); } 70% { transform: scale(1.06); } 100% { opacity: 1; transform: none; } }
+.reveal { animation: rise .55s cubic-bezier(.2, .7, .2, 1) both; }
+.stats > .reveal:nth-child(2), .stepcards > li:nth-child(2) { animation-delay: .06s; } .stats > .reveal:nth-child(3), .stepcards > li:nth-child(3) { animation-delay: .12s; }
+.stats > .reveal:nth-child(4), .stepcards > li:nth-child(4) { animation-delay: .18s; } .stats > .reveal:nth-child(5), .stepcards > li:nth-child(5) { animation-delay: .24s; }
+.hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 28px; align-items: center; padding: 30px 34px; margin-bottom: 18px; border: 1px solid var(--line2); border-radius: 18px; background: radial-gradient(120% 140% at 100% 0%, rgba(233,168,62,.13), transparent 55%), var(--panel); }
+.hero h1 { font-size: clamp(1.7rem, 3.2vw, 2.4rem); line-height: 1.15; margin: 6px 0 12px; } .hero .lede { max-width: 52ch; }
+.chips-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.pill-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border: 1px solid #6f6879; border-radius: 999px; font-size: .82rem; color: var(--text); background: rgba(255,255,255,.03); } .pill-chip svg { color: var(--good); }
+.hero-art { width: 100%; height: auto; overflow: visible; }
+.ha-card rect:first-child { fill: #1c1921; stroke: #6f6879; stroke-width: 1.5; } .ha-card { animation: bob 5s ease-in-out infinite; } .ha-r { animation-delay: -2.4s; }
+.ha-t { fill: var(--text); font: 600 15px Georgia, serif; } .ha-line { fill: #4a4453; } .ha-r .ha-line { fill: #3b5a46; }
+.ha-flow { fill: none; stroke: var(--amber); stroke-width: 2.5; stroke-dasharray: 6 6; animation: dash 1.2s linear infinite; }
+.ha-core circle:first-child { fill: #26210f; stroke: url(#gA); stroke-width: 2.5; } .ha-halo { fill: none; stroke: var(--amber); stroke-width: 1; transform-origin: 260px 131px; animation: pulse 3s ease-in-out infinite; }
+.ha-s { fill: var(--amber); font: 600 13px Georgia, serif; }
+.ha-badge rect { fill: rgba(95,201,141,.12); stroke: var(--good); stroke-width: 1.5; } .ha-badge { animation: pop .7s .5s both; transform-origin: 260px 256px; }
+.ha-tick { fill: none; stroke: var(--good); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; } .ha-b { fill: var(--good); font: 600 16px system-ui, sans-serif; }
+.importbox .ib-ic { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 50%; background: rgba(233,168,62,.12); color: var(--amber); transition: transform .25s ease; } .importbox:hover .ib-ic { transform: translateY(-4px) scale(1.06); }
+.ib-types { display: flex; gap: 8px; } .ib-types code { padding: 2px 10px; border: 1px solid #6f6879; border-radius: 6px; color: var(--text); }
+.stepcards { list-style: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding: 0; margin: 0 0 24px; counter-reset: none; }
+.stepcards li { position: relative; display: grid; gap: 4px; justify-items: start; padding: 16px; border: 1px solid var(--line2); border-radius: 14px; background: var(--panel); transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.stepcards li:hover { transform: translateY(-4px); border-color: var(--amber); box-shadow: 0 10px 26px rgba(0,0,0,.35); }
+.stepcards .sc-n { position: absolute; right: 12px; top: 10px; font: italic 600 1.4rem Georgia, serif; color: #5a5363; } .stepcards .sc-i { color: var(--amber); } .stepcards span:last-child { color: var(--muted); font-size: .84rem; }
+.stat { position: relative; display: grid; gap: 2px; padding: 14px 14px 12px; border: 1px solid var(--line2); border-radius: 12px; background: var(--panel); transition: transform .2s ease, border-color .2s ease; }
+.stat:hover { transform: translateY(-3px); border-color: #8a8294; } .stat .sic { color: var(--amber); } .stat b { font-size: 1.7rem; line-height: 1.1; } .stat > span:last-child { color: var(--muted); font-size: .8rem; }
+.dash .stats, .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.mini { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; font-family: inherit; }
+.hring { animation: ring 1.1s ease-out both; } .funnel i::after { animation: grow .9s ease-out both; }
+.summary { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 11px 14px; margin-bottom: 14px; border: 1px solid var(--good); border-radius: 12px; background: rgba(95,201,141,.08); }
+.badge-ok { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px 3px 8px; border-radius: 999px; background: var(--good); color: #0b1a12; font-weight: 600; font-size: .85rem; animation: pop .5s both; }
+.summary .icon-btn { margin-left: auto; }
+.h-feat.info { cursor: default; } .h-feat.info:hover { transform: none; }
+.infobtn { gap: 7px; } .info-wrap.open .infotip { opacity: 1; visibility: visible; transform: none; }
+dialog.tut { width: min(560px, 94vw); padding: 0; overflow: hidden; border: 1px solid #6f6879; border-radius: 18px; background: var(--panel); }
+.tut-art { position: relative; display: grid; place-items: center; height: 190px; background: radial-gradient(circle at 50% 120%, rgba(233,168,62,.25), transparent 60%), #17141b; }
+.tut-orb { position: relative; z-index: 1; display: grid; place-items: center; width: 92px; height: 92px; border-radius: 50%; background: #26210f; border: 2px solid var(--amber); color: var(--amber); animation: bob 3.4s ease-in-out infinite; }
+.tut-rings { position: absolute; width: 200px; height: 200px; fill: none; stroke: rgba(233,168,62,.35); stroke-dasharray: 4 7; animation: dash 3s linear infinite; }
+.tut-body { padding: 20px 28px 8px; } .tut-body h2 { margin: 2px 0 8px; } .tut-extra { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; min-height: 30px; }
+.tut-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 28px 20px; } .tut-dots { display: inline-flex; gap: 6px; } .tut-dots i { width: 8px; height: 8px; border-radius: 50%; background: #4a4453; transition: all .25s; } .tut-dots i.on { width: 22px; border-radius: 8px; background: var(--amber); }
+dialog.tut.flip .tut-body, dialog.tut.flip .tut-orb { animation: rise .35s ease both; }
+.view.enter { animation: rise .35s ease both; }
+.btn { transition: transform .15s ease, background-color .15s ease, border-color .15s ease; } .btn:hover:not(:disabled) { transform: translateY(-1px); }
+body[data-motion="reduce"] .reveal, body[data-motion="reduce"] .stepcards li, body[data-motion="reduce"] * { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { body[data-motion="system"] * { animation: none !important; transition: none !important; } }
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; padding: 22px; } .stepcards { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body data-density="comfortable" data-motion="system" data-side="on" data-samples="0">
@@ -629,7 +681,7 @@ body.dragging::after { content: "Drop your COBOL files to add them"; position: f
 <header class="top" role="banner">
   <button class="icon-btn" id="sideToggle" aria-label="Show or hide the program list" aria-controls="side" title="Program list (Ctrl+B)"><i data-ic="sidebar" data-size="18"></i></button>
   <a class="brand" href="#/" aria-label="Séance, workspace"><span id="logo"></span>Séance<small id="verTag"></small></a>
-  <button class="searchbtn" id="palOpen" aria-haspopup="dialog" title="Search programs, actions and code (Ctrl+K)"><i data-ic="search"></i><span>Search programs, actions and code</span><kbd>Ctrl K</kbd></button>
+  <button class="searchbtn" id="palOpen" aria-haspopup="dialog" title="Search programs, actions, features and help (Ctrl+K)"><i data-ic="search"></i><span>Search programs, actions, features and help</span><kbd>Ctrl K</kbd></button>
   <div class="grow"></div>
   <div class="menu-wrap">
     <button class="pill" id="runtimeBtn" data-menu="runtimeMenu" aria-haspopup="true" aria-expanded="false"><span class="dot" id="runtimeDot"></span><span id="runtimeText">Checking runtime</span></button>
@@ -638,7 +690,7 @@ body.dragging::after { content: "Drop your COBOL files to add them"; position: f
     </div>
   </div>
   <div class="info-wrap" id="infoWrap">
-    <button class="icon-btn" id="infoBtn" aria-label="What is Séance, and how do I use it?" aria-describedby="infoTip"><i data-ic="info" data-size="18"></i></button>
+    <button class="btn ghost infobtn" id="infoBtn" aria-label="What is Séance, and how do I use it?" aria-describedby="infoTip"><i data-ic="info" data-size="16"></i><span class="hide-sm">What is Séance?</span></button>
     <div class="infotip" id="infoTip" role="tooltip">
       <h3>What Séance does</h3>
       <p>It proves that the Python written for your COBOL gives the same answers as the COBOL. The original program is compiled and run by GnuCOBOL; its output is the answer key. Every byte the Python writes is compared with it.</p>
@@ -662,6 +714,7 @@ body.dragging::after { content: "Drop your COBOL files to add them"; position: f
   <div class="menu-wrap">
     <button class="icon-btn" id="helpBtn" data-menu="helpMenu" aria-haspopup="true" aria-expanded="false" aria-label="Help" title="Help"><i data-ic="help" data-size="18"></i></button>
     <div class="menu" id="helpMenu" role="menu" hidden>
+      <button role="menuitem" data-act="docs"><i data-ic="book"></i>Documentation</button>
       <button role="menuitem" data-act="keys"><i data-ic="keyboard"></i>Keyboard shortcuts</button>
       <button role="menuitem" data-act="about"><i data-ic="info"></i>About and supported COBOL</button>
     </div>
@@ -784,6 +837,8 @@ body.dragging::after { content: "Drop your COBOL files to add them"; position: f
 </dialog>
 
 <!-- Settings -->
+<dialog id="tutDlg" aria-labelledby="tutTitle" class="tut"><div class="tut-art" id="tutArt" aria-hidden="true"></div><div class="tut-body"><p class="eyebrow" id="tutStep"></p><h2 id="tutTitle"></h2><p id="tutText"></p><div class="tut-extra" id="tutExtra"></div></div>
+  <div class="tut-foot"><button class="btn ghost" id="tutSkip">Skip</button><span class="tut-dots" id="tutDots" aria-hidden="true"></span><span class="row"><button class="btn" id="tutBack">Back</button><button class="btn primary" id="tutNext">Next</button></span></div></dialog>
 <dialog id="setDlg" aria-labelledby="setTitle" class="narrow">
   <div class="dlg-head"><h2 id="setTitle">Settings</h2><button class="icon-btn" data-close aria-label="Close"><i data-ic="x"></i></button></div>
   <div class="dlg-body" id="setBody"></div>
@@ -814,8 +869,8 @@ body.dragging::after { content: "Drop your COBOL files to add them"; position: f
   <div class="dlg-head"><h2 id="recTitle">Records</h2><button class="icon-btn" data-close aria-label="Close"><i data-ic="x"></i></button></div>
   <div class="dlg-body" id="recBody"></div>
 </dialog>
-<dialog id="palDlg" aria-label="Search programs, actions and code">
-  <div class="pal-in"><i data-ic="search"></i><input type="text" id="palInput" placeholder="Search programs, actions and code" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list"><kbd class="pal-esc">Esc</kbd></div>
+<dialog id="palDlg" aria-label="Search programs, actions, features and help">
+  <div class="pal-in"><i data-ic="search"></i><input type="text" id="palInput" placeholder="Search programs, actions, features and help" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list"><kbd class="pal-esc">Esc</kbd></div>
   <div class="pal-list" id="palList" role="listbox"></div>
   <div class="pal-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span></div>
 </dialog>
@@ -1139,7 +1194,7 @@ window.addEventListener('resize', syncSide);
 const parseHash = () => {
   const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (a === 'assessment') return { view: 'port' };
-  if (['docs', 'agent', 'activity'].includes(a)) return { view: 'doc', kind: a };
+  if (['docs', 'agent', 'activity', 'settings'].includes(a)) return { view: 'doc', kind: a };
   return a === 'p' && b ? { view: 'prog', name: b, tab: TABS.includes(c) ? c : null } : { view: 'work' };
 };
 const goWork = () => { if (location.hash !== '#/') location.hash = '#/'; else route(); };
@@ -1156,7 +1211,7 @@ async function route() {
   if (r.view === 'doc') {
     const was = S.view; S.view = 'doc'; S.name = null; closeFloating?.();
     $('vProg').hidden = true; $('vWork').hidden = true; $('vPort').hidden = true; renderDoc(r.kind); renderSide();
-    document.title = { docs: 'Documentation', agent: 'AI Agent', activity: 'Activity Log' }[r.kind] + ' · Séance';
+    document.title = { docs: 'Documentation', agent: 'AI Agent', activity: 'Activity Log', settings: 'Settings' }[r.kind] + ' · Séance';
     if (was !== 'doc') { enter($('vDoc')); window.scrollTo(0, 0); }
     return;
   }
@@ -1203,9 +1258,12 @@ function paletteItems() {
   items.push({ g: 'Actions', t: 'Check all programs', icon: 'play', run: () => checkAll(), skip: !S.programs.length });
   items.push({ g: 'Actions', t: 'Go to workspace', k: 'G W', icon: 'layers', run: goWork });
   items.push({ g: 'Actions', t: 'Assessment of every program', icon: 'layers', run: goAssessment, skip: !S.programs.length });
-  items.push({ g: 'Actions', t: 'Guided tour', icon: 'compass', run: () => startGuide() });
-  items.push({ g: 'Actions', t: 'Sample library', icon: 'book', run: () => openSamples({ tour: false }) });
+  items.push({ g: 'Help', t: 'Tutorial', sub: 'Five steps: import, analyze, translate, verify, export', icon: 'compass', run: openTutorial });
+  items.push({ g: 'Help', t: 'Documentation', sub: 'What it does, what it runs, the words', icon: 'book', run: () => { location.hash = '#/docs'; } });
+  items.push({ g: 'Help', t: 'AI agent setup (MCP)', sub: 'Use Séance from Kiro or another agent', icon: 'plug', run: () => { location.hash = '#/agent'; } });
+  items.push({ g: 'Help', t: 'Activity log', sub: 'Imports, compiler messages, checks, errors', icon: 'list', run: () => { location.hash = '#/activity'; } });
   items.push({ g: 'Actions', t: 'Settings', icon: 'gear', run: openSettings });
+  FEATURES.forEach((g) => g.items.forEach((f) => items.push({ g: 'Features', t: f.title, sub: f.body, icon: f.icon, run: () => { location.hash = '#/docs'; } })));
   items.push({ g: 'Actions', t: 'Keyboard shortcuts', k: '?', icon: 'keyboard', run: openKeys });
   items.push({ g: 'Actions', t: 'About and supported COBOL', icon: 'info', run: openAbout });
   items.push({ g: 'Actions', t: 'Show or hide the program list', k: MOD + ' B', icon: 'sidebar', run: () => toggleSide() });
@@ -1421,10 +1479,10 @@ function stepsHtml() {
 }
 function featuresHtml() {
   const locked = !S.programs.length;
-  return `<section class="h-sect" id="homeFeatures" aria-labelledby="hWhat"><div class="h-sect-head"><h2 id="hWhat">What you can do</h2><p class="muted">${locked ? '🔒 These open once you have imported a COBOL program.' : 'Each one opens on your own program.'}</p></div>
+  return `<section class="h-sect" id="homeFeatures" aria-labelledby="hWhat"><div class="h-sect-head"><h2 id="hWhat">What you can do</h2><p class="muted">${locked ? 'What each part of Séance does. Once a program is imported, each one opens on it.' : 'Each one opens on your own program.'}</p></div>
     <div class="h-groups">${FEATURES.map((g) => `<div class="h-group"><h3 class="h-gtitle">${ic(g.icon, 17)}${g.group}</h3><p class="muted sm">${g.blurb}</p>
       <div class="h-feats">${g.items.map((f) => locked
-        ? `<div class="h-feat locked" aria-disabled="true"><span class="h-fic">${ic(f.icon, 18)}</span><span class="h-ftxt"><b>${f.title}</b><span>${f.body}</span><span class="h-go">🔒 Requires a COBOL program</span></span></div>`
+        ? `<div class="h-feat info"><span class="h-fic">${ic(f.icon, 18)}</span><span class="h-ftxt"><b>${f.title}</b><span>${f.body}</span></span></div>`
         : `<button class="h-feat" data-try="${f.id}"><span class="h-fic">${ic(f.icon, 18)}</span><span class="h-ftxt"><b>${f.title}</b><span>${f.body}</span><span class="h-go">${f.route === 'assessment' ? 'Open the assessment' : 'Open on ' + esc(S.programs[0].title)}${ic('right', 14)}</span></span></button>`).join('')}</div></div>`).join('')}</div></section>`;
 }
 function samplesHtml() {
@@ -1488,12 +1546,32 @@ function issuesHtml() {
   return S.issues.map((it, i) => `<div class="issue" role="alert"><div><b>Missing copybook ${esc(it.name)}</b> <span class="muted sm">needed by ${esc(it.program)}. The program was not added yet.</span></div>
     <div class="row"><label class="btn sm primary" for="loc${i}" tabindex="0">Locate ${esc(it.name)}.cpy</label><input type="file" id="loc${i}" data-issue="${i}" hidden accept=".cpy,.copy,.cpb,.cbl,.txt"><button class="btn ghost sm" data-ignore="${i}">Ignore</button></div></div>`).join('');
 }
+S.counted = {};
+function countUp(root) {
+  const calm = document.body.dataset.motion === 'reduce' || (document.body.dataset.motion !== 'full' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  root.querySelectorAll('[data-count]').forEach((el) => {
+    const v = Number(el.dataset.count), key = el.dataset.key, from = S.counted[key] ?? 0; S.counted[key] = v;
+    if (calm || from === v) { el.textContent = v; return; }
+    const t0 = performance.now(), dur = 700;
+    const tick = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = Math.round(from + (v - from) * e); if (k < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+}
+new MutationObserver(() => countUp($('vWork'))).observe($('vWork'), { childList: true });
+function statCard(icon, value, label, cls = '', key = '') {
+  const n = typeof value === 'number';
+  return `<div class="stat reveal"><span class="sic">${ic(icon, 18)}</span><b class="${cls}" ${n ? `data-count="${value}" data-key="${key || label}"` : ''}>${value}</b><span>${label}</span></div>`;
+}
+const sumOf = (ps, f) => ps.reduce((a, p) => a + (f(p) || 0), 0);
+function importStats(ps) {
+  return [['file', sumOf(ps, (p) => !isJob(p)), 'Programs'], ['box', sumOf(ps, (p) => p.copybooks?.length), 'Copybooks'], ['layers', sumOf(ps, (p) => isJob(p) ? 1 : 0), 'JCL jobs'],
+    ['db', sumOf(ps, (p) => p.sql_blocks), 'SQL blocks'], ['link', sumOf(ps, (p) => p.call_count), 'CALL relationships']];
+}
 function dashboardHtml(ps) {
   const n = ps.length; const verified = ps.filter((p) => statusOf(p).key === 'matched').length; const translated = ps.filter(translatedOk).length;
-  const readable = ps.filter((p) => !p.error).length; const cbs = ps.reduce((a, p) => a + (p.copybooks?.length || 0), 0);
+  const readable = ps.filter((p) => !p.error).length;
   const health = n ? Math.round(100 * (translated + verified) / (2 * n)) : 0;
   const cov = ps.map((p) => lastOf(p).coverage).filter((c) => c != null); const avg = cov.length ? Math.round(cov.reduce((a, c) => a + c, 0) / cov.length) + '%' : '–';
-  const card = (v, l, cls = '') => `<div><b class="${cls}">${v}</b><span>${l}</span></div>`;
   const fun = [['Imported', n], ['Readable', readable], ['Translated', translated], ['Verified', verified]];
   const attn = [];
   for (const p of ps) {
@@ -1506,15 +1584,22 @@ function dashboardHtml(ps) {
       if (st === 'stale') attn.push([p, 'Changed since the last check', 'Run the check again.']);
     }
   }
-  return `<div class="dash"><div class="health"><div class="hring" style="--p:${health}"><b>${health}%</b></div><div><b>Workspace health</b><p class="muted sm">${health >= 90 ? 'Ready to export.' : health >= 50 ? 'Getting there.' : 'Just started.'} Half comes from programs translated without gaps, half from programs verified.</p></div></div>
-    <div class="stats">${card(n, per(n, 'Program', 'Programs') + ' loaded')}${card(ps.filter(isJob).length, 'JCL jobs')}${card(cbs, 'Copybooks found')}${card(S.issues.length, 'Missing copybooks', S.issues.length ? 'bad' : '')}${card(`${translated}/${n}`, 'Translated')}${card(`${verified}/${n}`, 'Verified', verified === n && n ? 'good' : '')}${card(avg, 'Test coverage')}</div></div>
+  const sm = S.importSummary && S.importSummary.names.map(prog).filter(Boolean);
+  const summary = sm && sm.length ? `<div class="summary reveal" role="status"><span class="badge-ok">${ic('check', 16)}Import complete</span><span>${importStats(sm).map(([, v, l]) => `<b>${v}</b> ${l.toLowerCase()}`).join(' · ')}</span><button class="icon-btn sm" data-dismiss-summary aria-label="Dismiss">${ic('x', 14)}</button></div>` : '';
+  return `${summary}<div class="dash"><div class="health reveal"><div class="hring" style="--p:${health}"><b data-count="${health}" data-key="health">${health}</b></div><div><b>Workspace health</b><p class="muted sm">${health >= 90 ? 'Ready to export.' : health >= 50 ? 'Getting there.' : 'Just started.'} Half comes from programs translated without gaps, half from programs verified.</p></div></div>
+    <div><h2 class="mini">What was imported</h2><div class="stats">${importStats(ps).map(([i, v, l]) => statCard(i, v, l)).join('')}</div></div></div>
+    <h2 class="mini">Where it stands</h2><div class="stats" style="margin-bottom:14px">${statCard('pen', `${translated}/${n}`, 'Translated')}${statCard('shield', `${verified}/${n}`, 'Verified', verified === n && n ? 'good' : '')}${statCard('chart', avg, 'Test coverage')}${statCard('alert', S.issues.length, 'Missing copybooks', S.issues.length ? 'bad' : '', 'missing')}</div>
     ${wizardHtml(ps)}
     <div class="funnel" role="img" aria-label="${fun.map(([l, v]) => `${l} ${v} of ${n}`).join(', ')}">${fun.map(([l, v]) => `<div><span>${l}</span><i style="--w:${n ? Math.round(100 * v / n) : 0}%"></i><b>${v}</b></div>`).join('')}</div>
     ${issuesHtml()}
     ${attn.length ? `<div class="panel"><div class="head"><div><h2>Needs attention ${tip('What is stopping a program from being verified: it cannot be read, the translator left statements, or the Python differs from the COBOL.')}</h2></div></div><div class="body flush"><table><tbody>${attn.slice(0, 10).map(([p, t, d]) => `<tr class="link" data-go="${esc(p.name)}" data-tab="${p.error || p.unsupported?.length || p.draft?.gaps ? 'code' : 'check'}" tabindex="0"><td><b>${esc(p.title)}</b></td><td>${badgeOf(p)}</td><td><b>${esc(t)}</b><br><span class="muted sm">${esc(d || '')}</span></td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 }
 function renderDoc(kind) {
-  const el = $('vDoc'); const a = S.about || {};
+  const el = $('vDoc');
+  if (kind === 'settings') {
+    el.innerHTML = '<div class="page-head"><div><h1 id="docTitle">Settings</h1><p class="lede">How the page looks and behaves, and where to find help.</p></div></div><div class="panel"><div class="body" id="setHost"></div></div>';
+    $('setHost').append($('setBody'), $('setReset')); fillSettings(); return;
+  } const a = S.about || {};
   const foot = `<footer class="h-foot">Séance ${esc(a.version || '')} · runs offline on this machine · nothing you add leaves it</footer>`;
   if (kind === 'agent') {
     ensureHomeData();
@@ -1532,14 +1617,30 @@ function renderDoc(kind) {
 }
 $('vDoc').addEventListener('change', (e) => { if (e.target.id === 'logErr') { S.logErrors = e.target.checked; renderDoc('activity'); } });
 $('vDoc').addEventListener('click', (e) => { if (e.target.id === 'logClear') { LOG.length = 0; renderDoc('activity'); } });
+function heroArt() {
+  return `<svg class="hero-art" viewBox="0 0 520 300" role="img" aria-label="COBOL goes in, Séance runs both and compares, Python comes out with a Spirit matched badge">
+    <defs><linearGradient id="gA" x1="0" x2="1"><stop offset="0" stop-color="#e9a83e"/><stop offset="1" stop-color="#f2cf8a"/></linearGradient></defs>
+    <g class="ha-card ha-l"><rect x="14" y="56" width="150" height="150" rx="14"/><text x="30" y="86" class="ha-t">COBOL</text>
+      ${[104, 120, 136, 152, 168, 184].map((y, i) => `<rect x="30" y="${y - 7}" width="${[104, 80, 96, 64, 92, 56][i]}" height="7" rx="3.5" class="ha-line"/>`).join('')}</g>
+    <g class="ha-card ha-r"><rect x="356" y="56" width="150" height="150" rx="14"/><text x="372" y="86" class="ha-t">Python</text>
+      ${[104, 120, 136, 152, 168, 184].map((y, i) => `<rect x="372" y="${y - 7}" width="${[104, 80, 96, 64, 92, 56][i]}" height="7" rx="3.5" class="ha-line"/>`).join('')}</g>
+    <path class="ha-flow" d="M168 131 C 200 131, 200 131, 232 131"/><path class="ha-flow" d="M288 131 C 320 131, 320 131, 352 131"/>
+    <g class="ha-core"><circle cx="260" cy="131" r="34"/><circle cx="260" cy="131" r="46" class="ha-halo"/><text x="260" y="136" text-anchor="middle" class="ha-s">Séance</text></g>
+    <g class="ha-badge"><rect x="150" y="236" width="220" height="40" rx="20"/><path d="m176 256 7 7 13-14" class="ha-tick"/><text x="206" y="262" class="ha-b">Spirit matched</text></g>
+    <path class="ha-flow ha-down" d="M260 180 L260 232"/></svg>`;
+}
 function emptyWorkspaceHtml() {
-  return `<div class="home"><div class="page-head"><div><h1 id="workTitle">Welcome to Séance</h1><p class="lede">Move COBOL to Python, and prove the Python gives the same answers. Start by importing your COBOL.</p></div></div>
-    ${wizardHtml([])}${issuesHtml()}
-    <label class="importbox" for="pickHome" tabindex="0" id="importBox">${ic('upload', 34)}<b>Drop your COBOL files here</b><span>or <u>Browse files</u></span>
-      <small>Accepted: <code>${IMPORT_TYPES}</code></small><small>Drop a program together with its copybooks and the programs it CALLs. Each JCL job goes in as its own job. Data files are added later, in a program's Test Data tab.</small></label>
+  const steps = [['upload', 'Import', 'Drop your COBOL'], ['target', 'Analyze', 'Read every paragraph'], ['pen', 'Translate', 'Python, byte for byte'], ['shield', 'Verify', 'Run both, compare'], ['download', 'Export', 'Python, tests, report']];
+  return `<div class="home"><section class="hero reveal"><div class="hero-copy"><p class="eyebrow">COBOL to Python, with proof</p><h1 id="workTitle">Prove your COBOL migration is correct</h1>
+      <p class="lede">Séance runs your original COBOL, writes the Python, runs both on the same inputs and compares every byte. Start by importing.</p>
+      <div class="chips-row"><span class="pill-chip">${ic('check', 13)}Runs offline</span><span class="pill-chip">${ic('check', 13)}Real GnuCOBOL as the judge</span><span class="pill-chip">${ic('check', 13)}Any file size</span></div></div>
+      <div class="hero-art-wrap">${heroArt()}</div></section>
+    ${issuesHtml()}
+    <label class="importbox reveal" for="pickHome" tabindex="0" id="importBox"><span class="ib-ic">${ic('upload', 30)}</span><b>Drop your COBOL files here</b><span>or <u>Browse files</u></span>
+      <span class="ib-types">${['.cbl', '.cob', '.cpy', '.jcl'].map((x) => `<code>${x}</code>`).join('')}</span>
+      <small>Drop a program together with its copybooks and the programs it CALLs. Each JCL job goes in as its own job. Data files are added later, in a program's Test Data tab.</small></label>
     <input type="file" id="pickHome" multiple hidden accept=".cbl,.cob,.cobol,.cpy,.copy,.cpb,.jcl,.pco">
-    <div class="row" style="justify-content:center;margin:6px 0 22px"><button class="btn" data-act="docs">${ic('book', 15)}Open the tutorial</button></div>
-    <div data-home-part="features">${featuresHtml()}</div></div>`;
+    <ol class="stepcards" aria-label="How a migration goes">${steps.map(([i, t, d], k) => `<li class="reveal"><span class="sc-n">${k + 1}</span><span class="sc-i">${ic(i, 24)}</span><b>${t}</b><span>${d}</span></li>`).join('')}</ol></div>`;
 }
 function exploreHtml() {
   ensureHomeData();
@@ -2511,6 +2612,7 @@ async function autoAdd(files) {
   } finally { adding = false; importBar(null); }
   if (done.length) await loadPrograms();
   done.forEach((r) => forget(r.name));
+  if (done.length) S.importSummary = { names: done.map((r) => r.name) };
   if (done.length === 1) { S.impl[done[0].name] = null; goTo(done[0].name, 'overview'); say(`Added ${done[0].name}. Run the check next.`, 'ok', { action: { label: 'Run Check', run: () => startCheck(done[0].name) } }); }
   else if (done.length) { goWork(); say(`Added ${plural(done.length, 'program')}.`, 'ok'); }
   else if (S.issues.length) { goWork(); renderWork(); }
@@ -2527,7 +2629,7 @@ document.addEventListener('change', (e) => {
   if (e.target.id === 'pickHome') { const fs = [...e.target.files]; e.target.value = ''; autoAdd(fs); }
   else if (e.target.dataset?.issue != null) { const f = e.target.files[0]; const i = Number(e.target.dataset.issue); e.target.value = ''; if (f) retryIssue(i, f); }
 });
-document.addEventListener('click', (e) => { const g = e.target.closest('[data-ignore]'); if (g) { S.issues.splice(Number(g.dataset.ignore), 1); if (S.view === 'work') renderWork(); } });
+document.addEventListener('click', (e) => { if (e.target.closest('[data-dismiss-summary]')) { S.importSummary = null; if (S.view === 'work') renderWork(); return; } const g = e.target.closest('[data-ignore]'); if (g) { S.issues.splice(Number(g.dataset.ignore), 1); if (S.view === 'work') renderWork(); } });
 document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('label.importbox, label[for^="loc"]')) { e.preventDefault(); $(e.target.htmlFor)?.click(); } });
 ['dragenter', 'dragover'].forEach((ev) => window.addEventListener(ev, (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) document.body.classList.add('dragging'); }));
 ['dragleave', 'drop'].forEach((ev) => window.addEventListener(ev, (e) => { if (ev === 'drop' || !e.relatedTarget) document.body.classList.remove('dragging'); }));
@@ -2577,7 +2679,32 @@ window.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [
 window.addEventListener('drop', (e) => { if (!e.dataTransfer?.files?.length || e.target.closest?.('#drop, #dataDrop')) return; e.preventDefault(); autoAdd([...e.dataTransfer.files]); });
 
 /* ================================================================ settings, shortcuts, about */
-function openSettings() {
+/* ================================================================ tutorial: shown the first time, afterwards in Settings > Help */
+const TUTORIAL = [
+  ['upload', 'Import your COBOL', 'Drop your programs, copybooks and JCL anywhere on the page, together. Séance reads them, follows the COPY and CALL statements, and tells you what is missing before anything is run.', ['.cbl', '.cob', '.cpy', '.jcl']],
+  ['target', 'It reads the program', 'Every paragraph in plain words, the flow of the code, the business rules, the data dictionary. The numbers that silently round or truncate are named.', ['Flow graph', 'Business rules', 'Data lineage']],
+  ['pen', 'It writes the Python', 'A rule-based translator, not a guess: the data keeps COBOL\'s bytes, packed decimals and all. A statement it cannot translate is named, never skipped.', ['COBOL line → Python line', 'Decimal, never float']],
+  ['shield', 'It proves they match', 'The real COBOL is compiled with GnuCOBOL and run on edge values, random records and your own data. The Python must write exactly the same bytes. A difference shrinks to the smallest input that shows it.', ['Spirit matched', 'Spirit restless']],
+  ['download', 'Take the result with you', 'Export the Python, a standalone package with its own tests, or an HTML report with hashes. Your data never leaves this machine. This tutorial stays in Settings, under Help.', ['Python file', 'Package + tests', 'Report']],
+];
+const tut = { i: 0 };
+function renderTutorial() {
+  const [icon, title, text, chips] = TUTORIAL[tut.i]; const last = tut.i === TUTORIAL.length - 1;
+  $('tutArt').innerHTML = `<div class="tut-orb">${ic(icon, 46)}</div><svg class="tut-rings" viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="60"/><circle cx="100" cy="100" r="84"/></svg>`;
+  $('tutStep').textContent = `Step ${tut.i + 1} of ${TUTORIAL.length}`; $('tutTitle').textContent = title; $('tutText').textContent = text;
+  $('tutExtra').innerHTML = chips.map((c) => `<span class="pill-chip">${esc(c)}</span>`).join('');
+  $('tutDots').innerHTML = TUTORIAL.map((_, k) => `<i class="${k === tut.i ? 'on' : ''}"></i>`).join('');
+  $('tutBack').hidden = tut.i === 0; $('tutNext').textContent = last ? 'Done' : 'Next'; $('tutSkip').hidden = last;
+  const d = $('tutDlg'); d.classList.remove('flip'); void d.offsetWidth; d.classList.add('flip');
+}
+function openTutorial() { tut.i = 0; renderTutorial(); if (!$('tutDlg').open) $('tutDlg').showModal(); }
+$('tutNext').addEventListener('click', () => { if (tut.i >= TUTORIAL.length - 1) $('tutDlg').close(); else { tut.i++; renderTutorial(); } });
+$('tutBack').addEventListener('click', () => { if (tut.i > 0) { tut.i--; renderTutorial(); } });
+$('tutSkip').addEventListener('click', () => $('tutDlg').close());
+$('tutDlg').addEventListener('close', () => setPref('tutorialSeen', true));
+document.addEventListener('click', (e) => { const w = $('infoWrap'); if (e.target.closest('#infoBtn')) w.classList.toggle('open'); else if (!e.target.closest('#infoTip')) w.classList.remove('open'); });
+function openSettings() { if (location.hash !== '#/settings') location.hash = '#/settings'; else route(); }
+function fillSettings() {
   const max = S.about.defaults.max_rounds;
   const sel = (k, opts) => `<select data-pref="${k}">${opts.map(([v, l]) => `<option value="${v}" ${String(prefs[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
   const chk = (k) => `<input type="checkbox" data-pref="${k}" ${prefs[k] ? 'checked' : ''}>`;
@@ -2598,10 +2725,12 @@ function openSettings() {
     <div class="setting-group"><h3>Workspace</h3>
       ${row('Default view', '', sel('view', [['list', 'List'], ['cards', 'Cards']]))}
       ${row('Default order', '', sel('sort', [['name', 'Name'], ['status', 'Needs attention first'], ['recent', 'Last checked'], ['lines', 'Lines compared']]))}</div>
-    <div class="setting-group"><h3>Guide</h3>
-      ${row('Guided tour', 'Walk through a real check with a sample program.', '<button class="btn" id="setTour">Start Tour</button>')}
-      ${samples ? row('Sample programs', `${plural(samples, 'sample program')} loaded.`, '<button class="btn danger" id="setRemove">Remove</button>') : ''}</div>`;
-  $('setDlg').showModal();
+    <div class="setting-group" id="helpGroup"><h3>Help</h3>
+      ${row('Tutorial', 'The five-step walk through: import, analyze, translate, verify, export.', '<button class="btn" id="setTour">Start The Tutorial</button>')}
+      ${row('Documentation', 'What Séance does, what it can run, and the words it uses.', '<a class="btn" href="#/docs">Open Documentation</a>')}
+      ${row('AI agent setup', 'Use Séance from Kiro or any MCP agent.', '<a class="btn" href="#/agent">Open AI Agent</a>')}
+      ${row('Keyboard shortcuts', '', '<button class="btn" id="setKeys">Show Shortcuts</button>')}
+      ${row('About and supported COBOL', '', '<button class="btn" id="setAbout">Show</button>')}</div>`;
 }
 $('setBody').addEventListener('change', (e) => {
   const k = e.target.dataset.pref; if (!k) return;
@@ -2611,8 +2740,9 @@ $('setBody').addEventListener('change', (e) => {
   setPref(k, v); if (['view', 'sort'].includes(k) && S.view === 'work') renderWork();
 });
 $('setBody').addEventListener('click', async (e) => {
-  if (e.target.id === 'setTour') { $('setDlg').close(); startGuide(); }
-  if (e.target.id === 'setRemove') { $('setDlg').close(); await removeSamples(); }
+  if (e.target.id === 'setTour') openTutorial();
+  if (e.target.id === 'setKeys') openKeys();
+  if (e.target.id === 'setAbout') openAbout();
 });
 $('setReset').addEventListener('click', () => { prefs = { ...DEFAULTS, guideSeen: true }; try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* ignore */ } applyPrefs(); syncSide(); openSettings(); if (S.view === 'work') renderWork(); });
 function openKeys() {
@@ -2813,7 +2943,7 @@ async function init() {
     await loadPrograms();
   } catch (e) { $('vWork').hidden = false; $('vWork').innerHTML = `<div class="note bad"><b>Séance could not start.</b><br>${esc(e.message)}</div>`; return; }
   S.loaded = true; renderRuntime(); await route();
-  /* no welcome dialog: the info icon in the top bar explains the product */
+  if (!prefs.tutorialSeen && !navigator.webdriver) setTimeout(openTutorial, 700); /* once; afterwards it is in Settings, under Help */
 }
 init();
 let staleShown = false;

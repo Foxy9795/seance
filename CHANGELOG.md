@@ -3,6 +3,14 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.9] - 2026-11-22
+### Changed (the page)
+- The empty dashboard is a hero with an animated diagram (COBOL, Séance, Python, "Spirit matched"), one large import box with the accepted types, and five step cards. The wall of feature cards (and its locks) is gone from the dashboard; the features are documentation, on the Documentation page.
+- After an import the dashboard shows an "Import complete" summary and the import statistics: programs, copybooks, JCL jobs, SQL blocks and CALL relationships, then translated, verified, coverage and missing copybooks. Numbers count up; cards, bars and the health ring animate in (off with Settings > Animation: Reduce, or the system setting).
+- Settings is a page of its own (`#/settings`) with a Help section: the tutorial, documentation, AI agent setup, shortcuts, about. The tutorial (five illustrated steps) opens by itself the first time only and afterwards only from there.
+- "What is Séance?" is a labelled button in the top bar (hover, focus or click).
+- Search (Ctrl+K) also finds the tutorial, documentation, AI agent setup, the activity log and every feature, with or without programs.
+- `seance/programs.py` reports `sql_blocks` and `call_count` for each program.
 ## [1.2.8] - 2026-11-22
 Fixes from the review of 1.2.6, then a pass over the whole product.
 ### Fixed
