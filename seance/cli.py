@@ -237,7 +237,7 @@ def _check_all(argv: list[str]) -> int:
     jobs = job_names()
     names = [n for n in program_names() + jobs if not a.only or n in {x.strip() for x in a.only.split(",")}]
     if not names:
-        print("There is nothing to check: the workspace has no programs.", file=sys.stderr)
+        print("No program or job matches --only." if a.only else "There is nothing to check: the workspace has no programs.", file=sys.stderr)
         return 2
     results, began = [], time.time()
     for n in names:
@@ -261,6 +261,7 @@ def _check_all(argv: list[str]) -> int:
         r = results[-1]
         print(f"{'Spirit matched ' if r['matched'] else 'Spirit restless'}  {n:<24} {r['lines']:>6} lines  {r['seconds']:.1f}s" + ("" if r["matched"] else f"  {r.get('error') or r['summary']}"), flush=True)
     if a.junit:
+        Path(a.junit).parent.mkdir(parents=True, exist_ok=True)
         Path(a.junit).write_text(junit_xml(results, time.time() - began), encoding="utf-8")
         print(f"JUnit report: {a.junit}")
     bad = [r for r in results if not r["matched"]]

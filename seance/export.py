@@ -34,7 +34,7 @@ from seance.rt import run_cli  # noqa: E402
 FILES = {files!r}
 
 if __name__ == "__main__":
-    sys.exit(run_cli(program.main, FILES))
+    sys.exit(run_cli(program.main, FILES, console={console!r}))
 '''
 
 
@@ -178,7 +178,7 @@ Python 3.10 or newer, no other packages.
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(f"{folder}/{module}.py", impl_src)
-        z.writestr(f"{folder}/run.py", RUNNER.format(pid=model.program_id, module=module, files=files, inputs=inputs, outputs=outputs))
+        z.writestr(f"{folder}/run.py", RUNNER.format(pid=model.program_id, module=module, files=files, inputs=inputs, outputs=outputs, console=bool(model.all_accepts)))
         z.writestr(f"{folder}/README.md", readme)
         z.writestr(f"{folder}/seance/__init__.py", '"""COBOL runtime rules used by the migrated program."""\n')
         for name in RUNTIME_FILES:

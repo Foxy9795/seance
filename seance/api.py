@@ -102,7 +102,7 @@ async def require_token(request: Request, call_next):
         if not hmac.compare_digest(sent, app.state.token):
             return JSONResponse({"detail": "Missing or wrong session token. Reload the page."}, status_code=403)
         raw = request.url.path.startswith("/api/data-raw/")  # a file body: streamed, not JSON
-        if request.method in ("POST", "PUT") and not raw and "application/json" not in request.headers.get("content-type", ""):
+        if request.method in ("POST", "PUT") and not raw and request.headers.get("content-length", "0") != "0" and "application/json" not in request.headers.get("content-type", ""):
             return JSONResponse({"detail": "Content-Type must be application/json."}, status_code=415)
     return await call_next(request)
 

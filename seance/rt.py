@@ -479,9 +479,10 @@ class Program:
                 bits = 8 * spec[2]
                 lo, hi = (-(2 ** (bits - 1)), 2 ** (bits - 1) - 1) if spec[7] else (0, 2 ** bits - 1)
                 scaled = value.scaleb(spec[6]).to_integral_value(rounding="ROUND_HALF_UP" if rounded else "ROUND_DOWN")
-                over = not (lo <= scaled <= hi)
+                over = not (lo <= scaled <= hi) if spec[7] else abs(scaled) > hi  # an unsigned item keeps the magnitude of a negative value
             elif spec[3] == "num" and spec[4] in ("float", "double"):
-                over = False  # a COMP-1 / COMP-2 has no digits to run out of
+                # no digits to run out of, but the range of the format
+                over = abs(value) > (Decimal("3.4028234663852886e38") if spec[4] == "float" else Decimal("1.7976931348623157e308"))
             elif spec[3] == "num":
                 over = size_error(value, spec[5], spec[6], spec[7], rounded)
             elif spec[3] == "edited":
@@ -1599,6 +1600,7 @@ class Program:
             sub.reset()
             sub._active = True
         sub.io = self.io
+        shared = []
         for (mode, arg), lname in zip(args, sub.linkage):
             size = sub.records[lname]
             if mode == "reference" and isinstance(arg, (Ref, str)):
@@ -1609,13 +1611,19 @@ class Program:
                 else:  # the linkage record is longer than what was passed: give it the rest, padded
                     sub.mem[lname] = memoryview(buf)[off:]
                     if len(sub.mem[lname]) < size:
+                        passed = len(buf) - off
                         sub.mem[lname] = bytearray(bytes(buf[off:]).ljust(size, b"\x00"))
+                        shared.append((buf, off, passed, lname))  # what the callee writes in the part that was passed goes back to the caller
             else:
                 data = self._bytes(arg) if isinstance(arg, (Ref, str)) else self._text(arg).encode(ENC)
                 sub.mem[lname] = bytearray(data[:size].ljust(size, b" "))
         if "RETURN-CODE" in sub.items:
-            sub.move(Decimal(0), "RETURN-CODE")
-        sub._enter(paras, secs)
+            sub.move(self.n("RETURN-CODE") if "RETURN-CODE" in self.items else Decimal(0), "RETURN-CODE")
+        try:
+            sub._enter(paras, secs)
+        finally:
+            for buf, off, passed, lname in shared:
+                buf[off:off + passed] = bytes(sub.mem[lname][:passed])
         rc = Decimal(0) if sub.initial or "RETURN-CODE" not in sub.items else sub.n("RETURN-CODE")
         if returning is not None:  # CALL ... RETURNING x: x gets the RETURN-CODE; the caller's own stays as it was (measured)
             self.move(rc, returning)
@@ -1853,7 +1861,7 @@ class Program:
             lo, hi = self._region(ref, before, after)
             mk = marks[kind]
             if kind == "r":
-                new = self._text(new)
+                new = (self._text(new)[:1] * len(self._text(pattern))) if isinstance(new, Figurative) and pattern is not None else self._text(new)
             if mode == "characters":
                 for i in range(lo, hi):
                     if mk[i] is None:
@@ -1936,6 +1944,8 @@ class Program:
         text = self._target_text(ref)
         lo, hi = self._region(ref, before, after)
         a, b = self._text(src), self._text(dst)
+        if isinstance(dst, Figurative):
+            b = b[:1] * len(a)  # TO ZEROES: every character converts to a zero
         table: dict = {}
         for i, ch in enumerate(a):
             table.setdefault(ch, b[i] if i < len(b) else ch)  # a character listed twice converts by its first place (libcob)
@@ -2007,6 +2017,7 @@ class Program:
         """Run from paragraph a until control falls out of the end of paragraph b, however it got there: through the
         paragraphs in order or by GO TO, even when b comes before a. A range whose end is never reached runs on."""
         i = a
+        escaped = False
         while i < len(self._paras):
             self.tick()
             nxt = self._paras[i][1]()
@@ -2022,6 +2033,10 @@ class Program:
                 i = end + 1
             else:
                 i = self._range(nxt)[0]  # GO TO
+                if not min(a, b) <= i <= max(a, b):
+                    escaped = True
+        if escaped:  # a GO TO left the range and the run reached the end of the program: the run ends, it does not return to the PERFORM
+            raise GoBack()
 
 
 # ------------------------------------------------------------------- helpers
@@ -2268,7 +2283,7 @@ class F:
         return chr(int(n) - 1)
 
 
-def run_cli(main, files) -> int:
+def run_cli(main, files, console: bool = True) -> int:
     """Run a translated program on real files, the way the batch job ran.
 
     Input files are read and output files written in the current folder, under the name the COBOL used
@@ -2287,7 +2302,7 @@ def run_cli(main, files) -> int:
         if os.path.exists(p):
             with open(p, "rb") as fh:
                 inputs[assign] = fh.read()
-    stdin = [] if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read().splitlines()
+    stdin = [] if (not console or sys.stdin is None or sys.stdin.isatty()) else sys.stdin.read().splitlines()
     io = main(IO(inputs, stdin))
     for assign, data in io.outputs.items():
         with open(path(assign), "wb") as fh:

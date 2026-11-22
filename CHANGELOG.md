@@ -3,6 +3,20 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.10] - 2026-11-22
+### Changed (the page)
+- Lighter dashboard: smaller cards, one line of progress (translated, verified, coverage, missing copybooks) instead of a second row of cards and a funnel, less motion. The health ring no longer has a seam at the top.
+- A step that failed shows a red cross (unreadable program, statements the translator left, a Python that differs), not a green check.
+- Each program in the list has a three-dot menu: Open, Run check, Show the Code, Show the Analysis, Add test data, Export Python file, Delete.
+### Fixed (second audit of 1.2.6)
+- COMP-3 with an even number of digits no longer reads its padding nibble as a digit (42 was read as 142). An unsigned COMP-5 takes the magnitude of a negative result. A COMP-1 or COMP-2 that overflows is a size error and no longer crashes; INF moved to a fixed-point field gives zero. A negative literal with an exponent (`-1.5E+05`) translates.
+- CALL: the called program starts with the caller's RETURN-CODE and the caller's is left alone when it does not set it; a linkage item longer than the argument writes back into the caller's bytes. After a GO TO that leaves a PERFORM, running off the end of the program ends the run instead of returning to the PERFORM. The AFTER variables of PERFORM VARYING go back to their FROM value each time the outer one steps.
+- EVALUATE `WHEN > 10 AND < 20`; SEARCH ... VARYING follows the index; INSPECT CONVERTING / REPLACING with ZEROES; `FUNCTION SUBSTITUTE` with an empty pattern.
+- `run.py` of an exported package reads standard input only when the program ACCEPTs (it hung in a pipe); `check-all --only` says when nothing matched; `--junit` creates its folder; a POST with no body is not refused for its content type.
+- Every one of these is a program in `tests/probes/` run on GnuCOBOL and on the Python.
+### Not done
+- `BLANK WHEN ZERO` on a field with V (F-MATH-07); OCCURS DEPENDING ON group length (F-ODO-01/02/03); GLOBAL items in nested programs (F-FLW-06/07); FILE STATUS 48, 44 and 35 corner cases and the short-record buffer tail (F-FIL-07..11); `bigcheck` on files that do not fit in memory (F-BGC-03/04); `check-all` ignoring the working directory (F-CLI-02).
+- Not reproduced: F-EXP-02 (called programs are in the exported module).
 ## [1.2.9] - 2026-11-22
 ### Changed (the page)
 - The empty dashboard is a hero with an animated diagram (COBOL, Séance, Python, "Spirit matched"), one large import box with the accepted types, and five step cards. The wall of feature cards (and its locks) is gone from the dashboard; the features are documentation, on the Documentation page.

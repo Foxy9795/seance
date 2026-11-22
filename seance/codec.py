@@ -127,6 +127,8 @@ def decode(spec, data: bytes):
     if usage == "packed":
         h = data.hex()
         body, sgn = h[:-1], h[-1:]
+        if digits and len(body) > digits:
+            body = body[-digits:]  # PIC S9(2) COMP-3 is 2 bytes: the first nibble is padding
         n = int("".join(c if c.isdigit() else "0" for c in body) or "0")
         v = Decimal(n).scaleb(-scale)
         return v.copy_negate() if sgn in ("d", "b") and signed else v
@@ -181,6 +183,8 @@ def display_text(spec, data: bytes) -> str:
 
 
 def store_into(spec, value: Decimal, rounded: bool = False, move: bool = False) -> Decimal:
+    if not value.is_finite():
+        value = Decimal(0)  # libcob puts zero where an infinite or not-a-number float is moved
     """Apply the PIC's truncation and sign rules to a number before it is encoded.
 
     COMP-5 and INDEX items keep whatever fits in their bytes (they wrap at the storage size, not the PIC's digits).

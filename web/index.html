@@ -673,6 +673,21 @@ dialog.tut.flip .tut-body, dialog.tut.flip .tut-orb { animation: rise .35s ease 
 body[data-motion="reduce"] .reveal, body[data-motion="reduce"] .stepcards li, body[data-motion="reduce"] * { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { body[data-motion="system"] * { animation: none !important; transition: none !important; } }
 @media (max-width: 900px) { .hero { grid-template-columns: 1fr; padding: 22px; } .stepcards { grid-template-columns: 1fr 1fr; } }
+/* ---- lighter */
+.hring { background: conic-gradient(var(--good) calc(var(--p) * 1%), #2a2630 calc(var(--p) * 1%)); }
+.hring[style*="--p:100"] { background: var(--good); } .hring[style*="--p:0"] { background: #2a2630; }
+.hero { padding: 20px 26px; gap: 20px; } .hero h1 { font-size: clamp(1.5rem, 2.6vw, 2rem); } .ha-card { animation: none; }
+.stat { padding: 9px 12px; border-radius: 10px; } .stat b { font-size: 1.3rem; } .stat .sic { position: absolute; right: 10px; top: 9px; opacity: .8; } .stat:hover { transform: none; }
+.dash .stats, .stats { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.health { padding: 12px 14px; border-radius: 10px; } .hring { width: 60px; height: 60px; } .hring::before { inset: 7px; }
+.strip { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 10px 2px 12px; color: var(--muted); } .strip b { color: var(--text); font-size: 1.05rem; margin-right: 3px; } .strip b.good { color: var(--good); } .strip b.bad { color: var(--bad); }
+.wiz li { padding: 5px 12px 5px 6px; } .wiz li.fail { color: var(--text); border-color: var(--bad); } .wiz li.fail .wn { background: var(--bad); border-color: var(--bad); color: #1a0c0c; font-weight: 700; }
+.stepcards li { padding: 12px 14px; } .stepcards li:hover { transform: none; box-shadow: none; }
+.reveal { animation-duration: .35s; }
+.side-row { position: relative; } .side-row .side-item { padding-right: 34px; }
+.side-row .side-more { position: absolute; z-index: 3; right: 4px; top: 50%; transform: translateY(-50%); opacity: 0; transition: opacity .12s; }
+.side-row:hover .side-more, .side-row:focus-within .side-more, .side-more[aria-expanded="true"] { opacity: 1; }
+@media (hover: none) { .side-more { opacity: 1; } }
 </style>
 </head>
 <body data-density="comfortable" data-motion="system" data-side="on" data-samples="0">
@@ -1180,12 +1195,12 @@ function renderSide() {
   $('sideCount').textContent = S.programs.length ? String(S.programs.length) : '';
   $('sideList').innerHTML = list.map((p) => {
     const st = statusOf(p); const k = isJob(p) ? 'JCL' : (p.kinds || []).includes('sql') ? 'SQL' : (p.kinds || []).includes('cics') ? 'CICS' : '';
-    return `<a class="side-item${S.name === p.name ? ' on' : ''}" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" ${S.name === p.name ? 'aria-current="page"' : ''}>${dot(st)}<span class="nm">${esc(p.title)}</span>${k ? `<span class="tag">${k}</span>` : ''}</a>`;
+    return `<div class="side-row"><a class="side-item${S.name === p.name ? ' on' : ''}" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" ${S.name === p.name ? 'aria-current="page"' : ''}>${dot(st)}<span class="nm">${esc(p.title)}</span>${k ? `<span class="tag">${k}</span>` : ''}</a><button class="icon-btn sm side-more" data-rowmenu="${esc(p.name)}" aria-label="More for ${esc(p.title)}" aria-haspopup="menu">${ic('more', 16)}</button></div>`;
   }).join('') || `<div class="side-empty">${S.programs.length ? 'No program matches.' : 'No programs yet. Add one to begin.'}</div>`;
 }
 $('sideFilter').addEventListener('input', (e) => { S.sideQ = e.target.value; renderSide(); });
 $('sideFilter').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('sideList').querySelector('.side-item')?.click(); if (e.key === 'Escape') { e.target.value = ''; S.sideQ = ''; renderSide(); } });
-$('sideList').addEventListener('click', () => { if (isNarrow()) toggleSide(false); });
+$('sideList').addEventListener('click', (e) => { const m = e.target.closest('[data-rowmenu]'); if (m) { e.preventDefault(); e.stopImmediatePropagation(); openRowMenu(m); return; } if (isNarrow()) toggleSide(false); }, true);
 $('scrim').addEventListener('click', () => toggleSide(false));
 $('sideToggle').addEventListener('click', () => toggleSide());
 window.addEventListener('resize', syncSide);
@@ -1360,7 +1375,7 @@ document.addEventListener('click', (e) => {
   const a = el.dataset.act, arg = el.dataset.arg;
   const map = {
     add: openAdd, tour: () => startGuide(), guide: () => openGuide(), samples: () => openSamples({ tour: false }), keys: openKeys, about: openAbout, settings: openSettings,
-    palette: openPalette, checkAll: () => checkAll(), export: () => doExport(arg), assess: goAssessment, docs: () => { location.hash = '#/docs'; }, agent: () => { location.hash = '#/agent'; }, activity: () => { location.hash = '#/activity'; }, rules: exportRules, redraft: () => redraft(S.name), record: () => recordAgain(S.name), remove: () => deleteProgram(S.name),
+    palette: openPalette, checkAll: () => checkAll(), export: () => doExport(arg), assess: goAssessment, rowGo: () => { const [n, t] = String(arg).split('|'); goTo(n, t); }, docs: () => { location.hash = '#/docs'; }, agent: () => { location.hash = '#/agent'; }, activity: () => { location.hash = '#/activity'; }, rules: exportRules, redraft: () => redraft(S.name), record: () => recordAgain(S.name), remove: () => deleteProgram(S.name),
     copyPath: () => copyText(`legacy/${S.name}/`, 'Folder path copied.'), removeSamples: removeSamples,
     rowOpen: () => goTo(arg), rowCheck: () => startCheck(arg), rowExport: () => doExport('python', arg), rowDelete: () => deleteProgram(arg),
     selCheck: () => checkAll([...S.sel]), selDelete: deleteSelected, selClear: () => { S.sel.clear(); renderWork(); },
@@ -1524,6 +1539,7 @@ const translatedOk = (p) => !p.error && (isJob(p) || (p.draft?.translated && !p.
 function wizardHtml(ps) {
   const n = ps.length; const every = (f) => n > 0 && ps.every(f);
   const done = [n > 0, every((p) => !p.error), every(translatedOk), every((p) => statusOf(p).key === 'matched'), false];
+  const fail = [false, ps.some((p) => p.error), ps.some((p) => !p.error && !translatedOk(p)), ps.some((p) => ['restless', 'broken'].includes(statusOf(p).key)), false];
   const cur = done.findIndex((d) => !d); const labels = ['Import', 'Analyze', 'Translate', 'Verify', 'Export'];
   const first = (f) => ps.find(f);
   let next = '';
@@ -1532,7 +1548,7 @@ function wizardHtml(ps) {
   else if (cur === 2) { const p = first((q) => !q.error && !translatedOk(q)); next = `<b>Next:</b> <button class="btn primary sm" data-go="${esc(p.name)}" data-tab="code">${ic('pen', 14)}Open ${esc(p.title)}</button> some statements need a person.`; }
   else if (cur === 3) next = `<b>Next:</b> <button class="btn primary sm" data-act="checkAll">${ic('play', 14)}Check All</button> to prove the Python gives the same answers.`;
   else { const p = ps[0]; next = `<b>Done.</b> Everything matches. <button class="btn primary sm" data-go="${esc(p.name)}" data-tab="overview">${ic('download', 14)}Open a program to export it</button>`; }
-  return `<ol class="wiz" aria-label="Migration steps">${labels.map((l, i) => `<li class="${done[i] ? 'done' : i === cur ? 'cur' : ''}" ${i === cur ? 'aria-current="step"' : ''}><span class="wn">${done[i] ? '✓' : i + 1}</span>${l}</li>`).join('')}</ol><p class="next">${next}</p>`;
+  return `<ol class="wiz" aria-label="Migration steps">${labels.map((l, i) => `<li class="${fail[i] ? 'fail' : done[i] ? 'done' : i === cur ? 'cur' : ''}" ${i === cur ? 'aria-current="step"' : ''}><span class="wn">${fail[i] ? '✕' : done[i] ? '✓' : i + 1}</span>${l}${fail[i] ? '<span class="sr"> (needs attention)</span>' : ''}</li>`).join('')}</ol><p class="next">${next}</p>`;
 }
 function badgeOf(p) {
   const k = statusOf(p).key;
@@ -1588,9 +1604,8 @@ function dashboardHtml(ps) {
   const summary = sm && sm.length ? `<div class="summary reveal" role="status"><span class="badge-ok">${ic('check', 16)}Import complete</span><span>${importStats(sm).map(([, v, l]) => `<b>${v}</b> ${l.toLowerCase()}`).join(' · ')}</span><button class="icon-btn sm" data-dismiss-summary aria-label="Dismiss">${ic('x', 14)}</button></div>` : '';
   return `${summary}<div class="dash"><div class="health reveal"><div class="hring" style="--p:${health}"><b data-count="${health}" data-key="health">${health}</b></div><div><b>Workspace health</b><p class="muted sm">${health >= 90 ? 'Ready to export.' : health >= 50 ? 'Getting there.' : 'Just started.'} Half comes from programs translated without gaps, half from programs verified.</p></div></div>
     <div><h2 class="mini">What was imported</h2><div class="stats">${importStats(ps).map(([i, v, l]) => statCard(i, v, l)).join('')}</div></div></div>
-    <h2 class="mini">Where it stands</h2><div class="stats" style="margin-bottom:14px">${statCard('pen', `${translated}/${n}`, 'Translated')}${statCard('shield', `${verified}/${n}`, 'Verified', verified === n && n ? 'good' : '')}${statCard('chart', avg, 'Test coverage')}${statCard('alert', S.issues.length, 'Missing copybooks', S.issues.length ? 'bad' : '', 'missing')}</div>
+    <p class="strip"><span><b>${translated}/${n}</b> translated</span><span><b class="${verified === n && n ? 'good' : ''}">${verified}/${n}</b> verified</span><span><b>${avg}</b> test coverage</span><span><b class="${S.issues.length ? 'bad' : ''}">${S.issues.length}</b> missing copybooks</span></p>
     ${wizardHtml(ps)}
-    <div class="funnel" role="img" aria-label="${fun.map(([l, v]) => `${l} ${v} of ${n}`).join(', ')}">${fun.map(([l, v]) => `<div><span>${l}</span><i style="--w:${n ? Math.round(100 * v / n) : 0}%"></i><b>${v}</b></div>`).join('')}</div>
     ${issuesHtml()}
     ${attn.length ? `<div class="panel"><div class="head"><div><h2>Needs attention ${tip('What is stopping a program from being verified: it cannot be read, the translator left statements, or the Python differs from the COBOL.')}</h2></div></div><div class="body flush"><table><tbody>${attn.slice(0, 10).map(([p, t, d]) => `<tr class="link" data-go="${esc(p.name)}" data-tab="${p.error || p.unsupported?.length || p.draft?.gaps ? 'code' : 'check'}" tabindex="0"><td><b>${esc(p.title)}</b></td><td>${badgeOf(p)}</td><td><b>${esc(t)}</b><br><span class="muted sm">${esc(d || '')}</span></td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 }
@@ -1751,6 +1766,9 @@ function openRowMenu(btn) {
   showFloating(btn, menuHtml([
     { act: 'rowOpen', arg: name, icon: 'right', label: 'Open' },
     { act: 'rowCheck', arg: name, icon: 'play', label: 'Run check' },
+    { act: 'rowGo', arg: name + '|code', icon: 'pen', label: 'Show the Code' },
+    ...(isJob(p) ? [] : [{ act: 'rowGo', arg: name + '|analysis', icon: 'target', label: 'Show the Analysis' }]),
+    { act: 'rowGo', arg: name + '|data', icon: 'upload', label: 'Add test data' },
     ...(isJob(p) ? [] : [{ act: 'rowExport', arg: name, icon: 'download', label: 'Export Python file' }]),
     '-',
     { act: 'rowDelete', arg: name, icon: 'trash', label: p.sample ? 'Delete this sample' : 'Delete', danger: true },

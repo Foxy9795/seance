@@ -71,7 +71,7 @@ _TOKEN = re.compile(
 )
 
 
-_NUMBER = re.compile(r"(?:\d+\.\d+|\.\d+|\d+)(?![A-Za-z0-9_-])")
+_NUMBER = re.compile(r"(?:(?:\d+\.\d+|\.\d+|\d+)[Ee][+-]?\d+|\d+\.\d+|\.\d+|\d+)(?![A-Za-z0-9_-])")
 
 
 def tokenize_lines(lines) -> list[Tok]:
@@ -1201,9 +1201,14 @@ class Parser:
                 return f"not ({subject[1]})"
             self._last = None
             return f"bool({subject[1]}) == bool({self.cond_or()})"
-        op = self.relop()  # WHEN > 10, WHEN NOT < 5, WHEN GREATER THAN OR EQUAL TO 3
+        op = self.relop()  # WHEN > 10, WHEN NOT < 5, WHEN GREATER THAN OR EQUAL TO 3, WHEN > 10 AND < 20
         if op is not None:
-            return f'S.cmp({subject}, "{op}", {self.comparand()})'
+            test = f'S.cmp({subject}, "{op}", {self.comparand()})'
+            while self.word() in ("AND", "OR"):
+                conj = self.take().value.lower()
+                op2 = self.relop() or op
+                test = f'({test} {conj} S.cmp({subject}, "{op2}", {self.comparand()}))'
+            return test
         negate = self.accept("NOT")
         lo = self.comparand()
         if self.accept("THRU", "THROUGH"):
@@ -2125,7 +2130,7 @@ class Emitter:
                 out.append(f'{pad}    S.set_index("{ix}", S.idx_value("{ix}") + 1)')
                 if d.get("varying"):
                     name, current = d["varying"]
-                    out.append(f'{pad}    S.set_index("{name}", {current} + 1)')
+                    out.append(f'{pad}    S.set_index("{name}", S.idx_value("{ix}"))  # follows the index (libcob sets it to the new index value)')
             elif k == "search_all":
                 ix, h, t = d["index"], f"_h{self.count}", f"_t{self.count}"
                 out.append(f'{pad}{h}, {t} = 0, {d["count"]} + 1  # SEARCH ALL: libcob halves the table, it does not walk it{tag}')
@@ -2225,6 +2230,8 @@ class Emitter:
                 if after:
                     lines += [f"{p}    if {cond}:", f"{p}        break"]
                 lines.append(f"{p}    {setv(var, getv(var) + ' + ' + step)}")
+                for inner in range(level + 1, len(levels)):  # the AFTER variables are set to their FROM value each time this one steps
+                    lines.append(f"{p}    {setv(levels[inner][0], levels[inner][1])}")
                 return lines
 
             out.append(f"{pad}pass{tag}  # PERFORM VARYING")

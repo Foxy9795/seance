@@ -712,8 +712,8 @@ def _substitute(original: bytes, pairs: list[tuple[bytes, bytes]], fold: bool) -
     while i < len(original):
         for match, rep in pairs:
             m = match.lower() if fold else match
-            if i + len(m) > len(original):
-                continue
+            if not m or i + len(m) > len(original):
+                continue  # a pattern with no characters matches nothing (and would never move on)
             if src[i:i + len(m)] == m:
                 out += rep
                 i += len(m)
