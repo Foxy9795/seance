@@ -2008,9 +2008,10 @@ async function renderData() {
   bindMainframe(lay);
 }
 async function uploadData(file) {
-  const name = S.name; const target = $('uploadTarget').value; const buf = new Uint8Array(await file.arrayBuffer());
-  let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-  const body = { filename: file.name, base64: btoa(bin), console: target === 'console', file: target.startsWith('file:') ? target.slice(5) : null, code_page: $('uploadCode').value || null };
+  const name = S.name; const target = $('uploadTarget').value;
+  if (file.size > DATA_MAX) { say(`${file.name} is ${mb(file.size)}. The page keeps an uploaded file in memory, so it takes up to ${mb(DATA_MAX)} here. For a bigger file run: python -m seance bigcheck ${name} "path\\to\\file". It runs the COBOL and the Python on the whole file and compares every byte.`, 'error'); return; }
+  const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(new Error('The file could not be read.')); r.readAsDataURL(file); });
+  const body = { filename: file.name, base64: b64, console: target === 'console', file: target.startsWith('file:') ? target.slice(5) : null, code_page: $('uploadCode').value || null };
   say('Running the COBOL on your data…');
   try { const r = await send(`/api/data/${enc(name)}`, body, 'POST', 300000); say(`Added ${r.label} (${plural(r.records, 'record')}). The next check uses it.`, 'ok'); forget(name, ['sets']); if (here(name, 'data')) renderData(); await refreshProgram(name); }
   catch (err) { say(err.message, 'error'); }
@@ -2272,17 +2273,35 @@ function setAddMode(mode) {
   $('addGo').textContent = mode === 'job' ? 'Add Job And Record' : 'Add And Translate'; $('addStatus').innerHTML = '';
   const src = mode === 'job' ? $('addJcl').value : $('addCobol').value; if (!$('addName').dataset.touched) $('addName').value = src ? (mode === 'job' ? suggestJob(src) : suggestName(src)) : '';
 }
-function openAdd(files) { $('addStatus').innerHTML = ''; if (!$('addDlg').open) $('addDlg').showModal(); if (files?.length) takeFiles(files); }
+function openAdd(files) {
+  $('addStatus').innerHTML = ''; const fresh = !$('addDlg').open; if (fresh) $('addDlg').showModal();
+  if (files?.length) takeFiles(files).then((n) => { if (!n && fresh && !add.main && !$('addCobol').value && !$('addJcl').value) $('addDlg').close(); }); /* nothing usable was dropped: no empty dialog */
+}
 $$('#addMode button').forEach((b) => b.addEventListener('click', () => setAddMode(b.dataset.mode)));
 function renderAdded() {
   const chip = (kind, k, rm) => `<span class="chip">${kind} <span class="mono">${esc(k)}</span>${rm ? `<button type="button" class="icon-btn" data-kind="${kind}" data-k="${esc(k)}" aria-label="Remove ${esc(k)}">${ic('x', 13)}</button>` : ''}</span>`;
   $('addFiles').innerHTML = [add.main ? chip('Main', add.main) : '', ...Object.keys(add.programs).map((k) => chip('Called', k, 1)), ...Object.keys(add.copybooks).map((k) => chip('Copybook', k, 1))].join('');
   $$('#addFiles [data-k]').forEach((b) => b.addEventListener('click', () => { delete (b.dataset.kind === 'Called' ? add.programs : add.copybooks)[b.dataset.k]; renderAdded(); }));
 }
+/* Source files are small text. Anything else is a data file: say so, and say where it goes, instead of adding it as a copybook. */
+const SOURCE_MAX = 8 * 1048576, DATA_MAX = 64 * 1048576;
+const mb = (n) => (n / 1048576 >= 10 ? Math.round(n / 1048576) : Math.round(n / 104857.6) / 10) + ' MB';
+const DATA_HINT = 'Add the program first, then open its Test Data tab and choose the file there.';
+async function notSource(f) {
+  if (f.size > SOURCE_MAX) return `${f.name} is ${mb(f.size)}: too big to be COBOL source, so it looks like a data file. ${DATA_HINT}${f.size > DATA_MAX ? ' Files above ' + mb(DATA_MAX) + ' go through the command line: python -m seance bigcheck PROGRAM FILE' : ''}`;
+  const head = new Uint8Array(await f.slice(0, 8192).arrayBuffer()); if (!head.length) return `${f.name} is empty.`;
+  let odd = 0; for (const b of head) if (b === 0 || (b < 32 && b !== 9 && b !== 10 && b !== 13 && b !== 12) || b > 126) odd++;
+  if (odd / head.length > 0.02) return `${f.name} is binary, not COBOL source or JCL. ${DATA_HINT}`;
+  const text = new TextDecoder('latin1').decode(head);
+  if (!/\.(cbl|cob|cobol|cpy|copy|cpb|jcl|pco|prc|proc|txt)$/i.test(f.name) && !/\b(PIC|PICTURE|DIVISION|PROGRAM-ID|COPY|REPLACE|EXEC)\b|^\/\/\S*\s+(JOB|EXEC)\b/im.test(text))
+    return `${f.name} does not look like COBOL or JCL. If it is a data file: ${DATA_HINT[0].toLowerCase()}${DATA_HINT.slice(1)}`;
+  return null;
+}
 async function takeFiles(list) {
-  const progs = []; let jcl = null;
+  const progs = []; let jcl = null, taken = 0;
   for (const f of list) {
-    const text = await f.text(); const stem = f.name.replace(/\.[^.]+$/, '');
+    const why = await notSource(f); if (why) { say(why, 'error'); continue; }
+    taken++; const text = await f.text(); const stem = f.name.replace(/\.[^.]+$/, '');
     if (looksLikeJcl(text, f.name)) { jcl = { name: f.name, text }; continue; }
     if (/\.(cpy|copy)$/i.test(f.name) || !/PROCEDURE\s+DIVISION/i.test(text)) add.copybooks[stem.toUpperCase()] = text;
     else progs.push({ stem, name: f.name, text, called: /PROCEDURE\s+DIVISION\s+USING/i.test(text) });
@@ -2293,7 +2312,7 @@ async function takeFiles(list) {
     if (p === main) { $('addCobol').value = p.text; add.main = p.name; if (!$('addName').dataset.touched) $('addName').value = suggestName(p.text); setAddMode('cobol'); }
     else add.programs[p.stem.toLowerCase()] = p.text;
   }
-  renderAdded();
+  renderAdded(); return taken;
 }
 $('pickLabel').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pickFiles').click(); } });
 $('pickFiles').addEventListener('change', (e) => { takeFiles([...e.target.files]); e.target.value = ''; });

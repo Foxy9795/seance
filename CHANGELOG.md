@@ -3,6 +3,14 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.6] - 2026-11-22
+### Fixed
+- **What it does** is never blank in the workspace list: with no header comment, it is worked out from the program (files read and written, paragraphs, decisions, calculations, loops).
+- Dropping a data file where COBOL is expected (the page, or the Add dialog) says so and where it goes, instead of adding it as a copybook; a binary file, a file over 8 MB and a text file with no COBOL in it are refused, and an empty dialog is not left open.
+- Test Data: a file over 64 MB gets a message, not an out-of-memory page; the file is read with `FileReader` (no second copy as text); the record limit for uploaded files is 100,000 (`SEANCE_MAX_DATA_RECORDS`).
+### Added
+- `seance bigcheck PROGRAM FILE`: runs the real COBOL and the Python on one input file of any size, compares every output byte and says where the first difference is (`--input`, `--code-page`, `--keep`).
+
 ## [1.2.5] - 2026-11-22
 ### Fixed
 - A program that calls a FUNCTION (`FUNCTION CURRENT-DATE` and the like) failed on its second run in the same process with `KeyError: '_FN1'`: the temporary item for a function result stayed in the program's item table. Each run now starts clean.

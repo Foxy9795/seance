@@ -124,6 +124,88 @@ def _serve(argv: list[str]) -> int:
     return 0
 
 
+def _bigcheck(argv: list[str]) -> int:
+    """Run the real COBOL and the Python on one file of any size and compare every output byte. Nothing is saved: for a file too big
+    to be a test set in the app (it keeps uploaded files in memory and in the saved set)."""
+    import hashlib
+    import importlib
+    import time
+
+    from .cases import Case, run_cobol, run_python
+    from .recorder import LegacyRuntimeError, compile_legacy, get_model
+
+    p = argparse.ArgumentParser(prog="seance bigcheck", description="Run the COBOL and the Python on one big input file and compare the outputs byte for byte.")
+    p.add_argument("program")
+    p.add_argument("file", help="the input file")
+    p.add_argument("--input", metavar="ASSIGN", help="which input file of the program this is (when it has several)")
+    p.add_argument("--code-page", metavar="CP", help="the file is EBCDIC from a mainframe, for example cp037")
+    p.add_argument("--impl", metavar="MODULE", help="python module to check (default migrated.<program>)")
+    p.add_argument("--keep", metavar="DIR", help="also write the COBOL's outputs to this folder")
+    a = p.parse_args(argv)
+    path = Path(a.file)
+    if not path.is_file():
+        print(f"{path} is not a file.", file=sys.stderr)
+        return 2
+    try:
+        model = get_model(a.program)
+    except Exception as exc:  # noqa: BLE001
+        print(f"{a.program}: {exc}", file=sys.stderr)
+        return 2
+    inputs = model.inputs
+    if not inputs:
+        print(f"{a.program} reads no input file, so there is nothing to feed it.", file=sys.stderr)
+        return 2
+    f = next((x for x in inputs if a.input in (x.assign, x.name)), None) if a.input else (inputs[0] if len(inputs) == 1 else None)
+    if f is None:
+        print(("No input file is called " + a.input + ". " if a.input else "The program reads several files; say which one this is with --input. ")
+              + "Its input files: " + ", ".join(x.assign for x in inputs), file=sys.stderr)
+        return 2
+    data = path.read_bytes()
+    if a.code_page:
+        from .ebcdic import file_to_ascii
+
+        data = file_to_ascii(f.record, f.size, data, a.code_page) if f.organization != "line" else data.decode(a.code_page).encode("latin-1", errors="replace")
+    if f.organization in ("sequential", "indexed", "relative") and len(data) % max(f.size, 1):
+        print(f"The file is {len(data)} bytes, which is not a whole number of {f.size}-byte records for {f.assign}.", file=sys.stderr)
+        return 2
+    case = Case(files={f.assign: data}, stdin=[])
+    print(f"{a.program}: {len(data):,} bytes into {f.assign}")
+    try:
+        exe = compile_legacy(a.program)
+        t = time.time()
+        cobol = run_cobol(exe, model, case, timeout=24 * 3600)
+        t_cobol = time.time() - t
+    except LegacyRuntimeError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    print(f"  COBOL   {t_cobol:8.1f} s   return code {cobol.return_code}   {cobol.error or ''}")
+    t = time.time()
+    py = run_python(importlib.import_module(a.impl or f"migrated.{a.program}"), case, limit=24 * 3600)
+    print(f"  Python  {time.time() - t:8.1f} s   return code {py.return_code}   {py.error or ''}")
+    if a.keep:
+        Path(a.keep).mkdir(parents=True, exist_ok=True)
+        for k, v in cobol.outputs.items():
+            (Path(a.keep) / k).write_bytes(v)
+    same = True
+    for k in sorted(set(cobol.outputs) | set(py.outputs)):
+        x, y = cobol.outputs.get(k, b""), py.outputs.get(k, b"")
+        ok = x == y
+        same &= ok
+        print(f"  {k}: {len(x):,} bytes (COBOL) {len(y):,} bytes (Python) sha256 {hashlib.sha256(x).hexdigest()[:16]} / {hashlib.sha256(y).hexdigest()[:16]}  {'same' if ok else 'DIFFERENT'}")
+        if not ok:
+            at = next((i for i in range(min(len(x), len(y))) if x[i] != y[i]), min(len(x), len(y)))
+            size = next((o.size for o in model.all_files if o.assign == k and o.size), 0)
+            where = f" (record {at // size + 1}, byte {at % size + 1})" if size and next((o.organization for o in model.all_files if o.assign == k), "") != "line" else ""
+            print(f"    first difference at byte {at:,}{where}")
+            print(f"    COBOL : {x[max(0, at - 20):at + 40]!r}")
+            print(f"    Python: {y[max(0, at - 20):at + 40]!r}")
+    if cobol.stdout != py.stdout or cobol.return_code != py.return_code or bool(cobol.error) != bool(py.error):
+        same = False
+        print("  the console output or the return code differs")
+    print("Spirit matched: every output byte is the same." if same else "Spirit restless: the Python gives a different answer.")
+    return 0 if same else 1
+
+
 def _check_all(argv: list[str]) -> int:
     """Check every program and job in the workspace: the command for a build pipeline. Exit code 1 when anything is restless."""
     import time
@@ -246,6 +328,7 @@ MCP (Kiro, VS Code, Cursor, Claude, Windsurf, Gemini, Antigravity, Codex)
 Workspace
   seance samples list|load|remove  the sample library (load NAME, or load --all)
   seance check-all [--junit FILE]  check every program and job; exit code 1 if any is restless
+seance bigcheck PROGRAM FILE     run the COBOL and the Python on one big input file (any size) and compare every byte
 
 One program
   seance COMMAND PROGRAM [--impl MODULE] [--rounds N] [--json]
@@ -291,6 +374,8 @@ def main(argv=None) -> int:
         return _samples(argv[1:])
     if argv and argv[0] == "check-all":
         return _check_all(argv[1:])
+    if argv and argv[0] == "bigcheck":
+        return _bigcheck(argv[1:])
     if argv and argv[0] == "mcp-config":
         from .mcp_clients import main as mcp_config_main
 
