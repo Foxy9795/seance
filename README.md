@@ -316,6 +316,8 @@ The tests load the sample library into the workspace for the run and remove it a
 | File | What is in it |
 | --- | --- |
 | `CHANGELOG.md` | What each release contains |
+| `THIRD_PARTY.md` | What is not ours, and the licences |
+| `docs/hackathon/SUBMISSION_CHECKLIST.md` | Kiroween 2026: the rules, what is done, what only you can do |
 | `CONTRIBUTING.md` | Setting up for development, the checks to run, the rules the code follows |
 | `SECURITY.md` | What Séance does that matters for security, and how to report a problem |
 | `docs/COMPARISON.md` | Ten products that do part of this job, and where Séance differs |

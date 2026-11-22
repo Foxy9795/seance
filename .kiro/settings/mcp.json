@@ -1,24 +1,20 @@
 {
-    "mcpServers":  {
-                       "seance":  {
-                                      "command":  "C:\\Users\\siddh\\Desktop\\Sid Project\\Python\\Kiro\\.venv\\Scripts\\python.exe",
-                                      "args":  [
-                                                   "-m",
-                                                   "seance.mcp_server"
-                                               ],
-                                      "env":  {
-                                                  "PYTHONPATH":  "C:\\Users\\siddh\\Desktop\\Sid Project\\Python\\Kiro"
-                                              },
-                                      "disabled":  false,
-                                      "autoApprove":  [
-                                                          "list_programs",
-                                                          "list_samples",
-                                                          "extract_business_rules",
-                                                          "assess_workspace",
-                                                          "describe_program",
-                                                          "describe_layout",
-                                                          "run_legacy_program"
-                                                      ]
-                                  }
-                   }
+  "mcpServers": {
+    "seance": {
+      "command": "python",
+      "args": [
+        "scripts/seance_mcp.py"
+      ],
+      "disabled": false,
+      "autoApprove": [
+        "list_programs",
+        "list_samples",
+        "extract_business_rules",
+        "assess_workspace",
+        "describe_program",
+        "describe_layout",
+        "run_legacy_program"
+      ]
+    }
+  }
 }
