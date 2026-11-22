@@ -45,6 +45,7 @@ class Item:
     size: int = 0  # bytes of one occurrence
     occurs: int = 0  # 0 when not a table
     depending: str | None = None
+    keys: list = field(default_factory=list)  # OCCURS ... ASCENDING / DESCENDING KEY IS a b: [(direction, name), ...] in the order written
     usage: str = "display"  # display, packed, binary, native, index
     kind: str = "group"  # group, alpha, num, edited
     digits: int = 0
@@ -227,6 +228,13 @@ def parse_entries(entries: list[tuple[int, str]]) -> list[Item]:
             it.occurs = int(om.group(2) or om.group(1))
             dm = re.search(r"\bDEPENDING\s+ON\s+([A-Z0-9-]+)", upper)
             it.depending = dm.group(1) if dm else None
+            stops = {"ASCENDING", "DESCENDING", "INDEXED", "VALUE", "PIC", "PICTURE", "USAGE", "COMP", "COMP-3", "COMP-5", "BINARY", "SYNC",
+                     "SYNCHRONIZED", "JUST", "JUSTIFIED", "DEPENDING", "TIMES", "BY"}
+            for km in re.finditer(r"\b(ASCENDING|DESCENDING)\s+(?:KEY\s+)?(?:IS\s+)?([A-Z0-9-]+(?:[\s,]+[A-Z0-9-]+)*)", upper):
+                for w in re.split(r"[\s,]+", km.group(2)):
+                    if w in stops:
+                        break
+                    it.keys.append((km.group(1), w))
             im = re.search(r"\bINDEXED\s+(?:BY\s+)?([A-Z0-9-]+(?:\s*,?\s*[A-Z0-9-]+)*)", upper)
             if im:
                 stop = {"ASCENDING", "DESCENDING", "KEY", "VALUE", "PIC", "PICTURE", "USAGE", "COMP", "COMP-3"}

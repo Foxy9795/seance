@@ -3,6 +3,20 @@
 All notable changes to Séance. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.8] - 2026-11-22
+Fixes from the review of 1.2.6, then a pass over the whole product.
+### Fixed
+- SEARCH ALL is a binary search as libcob does it (`head`, `tail`, `(head + tail) / 2`), over the keys in the order the table declares them, ASCENDING or DESCENDING, and over the current OCCURS DEPENDING ON count. A table with repeated keys now gives the same entry as GnuCOBOL. The plain SEARCH also follows the DEPENDING ON count. An index name used as a value prints as libcob prints it (`+000000003`).
+- `EVALUATE TRUE WHEN TRUE` (and FALSE) translates; `IF` on the bare mnemonic of a switch is true, as measured on cobc 3.1.2.
+- Two runtime stops are compared as stops: one side stopping in a way the other cannot name is a difference. `bigcheck` compares a run that stopped as a stop (not as the bytes it wrote first) and ignores CR LF against LF in line sequential output.
+- A `.txt` data file is no longer taken for a copybook; `Needs attention`, the program purpose and the drop messages follow.
+- The purpose of a program counts a `PERFORM ... UNTIL` written over two lines.
+- Every behaviour added since 1.2.4 is now a test: eight programs measured on GnuCOBOL in `tests/probes/`, run on both sides.
+### Changed
+- `scripts/ui_check.py` is now the browser test of the page (25 checks, on a throwaway copy of the project, no sample library, nothing of yours touched). The old sample-based `audit_ui.py` is gone.
+### Not done
+- The length of a group with OCCURS DEPENDING ON is still its maximum (F-ODO-01). GLOBAL files and items in nested programs (F-GLO-01) and several record descriptions on one indexed file (F-MDL-01) are not supported.
+- When both sides stop and neither stop can be named (not a subscript, a hang, a file status or a missing module), the two are still taken as the same stop.
 ## [1.2.7] - 2026-11-22
 ### Changed (the page)
 - The home page is a dashboard, not documentation: workspace health, a five step wizard (Import, Analyze, Translate, Verify, Export) that names the next action, a funnel (imported, readable, translated, verified), a "Needs attention" list with a status badge for each program, and counts of programs, jobs, copybooks and missing copybooks.

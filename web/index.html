@@ -2453,7 +2453,7 @@ async function notSource(f) {
   let odd = 0; for (const b of head) if (b === 0 || (b < 32 && b !== 9 && b !== 10 && b !== 13 && b !== 12) || b > 126) odd++;
   if (odd / head.length > 0.02) return `${f.name} is binary, not COBOL source or JCL. ${DATA_HINT}`;
   const text = new TextDecoder('latin1').decode(head);
-  if (!/\.(cbl|cob|cobol|cpy|copy|cpb|jcl|pco|prc|proc|txt)$/i.test(f.name) && !/\b(PIC|PICTURE|DIVISION|PROGRAM-ID|COPY|REPLACE|EXEC)\b|^\/\/\S*\s+(JOB|EXEC)\b/im.test(text))
+  if (!/\.(cbl|cob|cobol|cpy|copy|cpb|jcl|pco|prc|proc)$/i.test(f.name) && !/\b(PIC|PICTURE|DIVISION|PROGRAM-ID|COPY|REPLACE|EXEC)\b|^\/\/\S*\s+(JOB|EXEC)\b/im.test(text))
     return `${f.name} does not look like COBOL or JCL. If it is a data file: ${DATA_HINT[0].toLowerCase()}${DATA_HINT.slice(1)}`;
   return null;
 }

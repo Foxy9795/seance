@@ -1,0 +1,50 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. FX2.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+           SWITCH-1 IS SW-1 ON STATUS IS S1-ON
+           SWITCH-2 IS SW-2 ON STATUS IS S2-ON.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT F1 ASSIGN TO "FX2.DAT" ORGANIZATION SEQUENTIAL
+               FILE STATUS IS FS1.
+       DATA DIVISION.
+       FILE SECTION.
+       FD F1.
+       01 R1 PIC X(4).
+       WORKING-STORAGE SECTION.
+       01 FS1 PIC XX.
+       01 SRC PIC X(8) VALUE "ABCDEFGH".
+       01 T1 PIC XX.
+       01 T2 PIC XX.
+       01 OVF PIC X(3) VALUE "NO ".
+       01 IDX USAGE INDEX.
+       01 N PIC 99 VALUE 5.
+       01 D8 PIC 9(8).
+       01 TM PIC 9(8).
+       PROCEDURE DIVISION.
+           UNSTRING SRC INTO T1 T2
+               ON OVERFLOW MOVE "YES" TO OVF
+           END-UNSTRING.
+           DISPLAY "T1=" T1 " T2=" T2 " OVF=" OVF.
+           SET IDX TO 5.
+           SET IDX UP BY 2.
+           DISPLAY "IDX=" IDX.
+           SET SW-1 SW-2 TO ON.
+           IF S1-ON AND S2-ON DISPLAY "BOTH ON" END-IF.
+           READ F1 AT END DISPLAY "AT END FIRED"
+               NOT AT END DISPLAY "NOT AT END FIRED"
+           END-READ.
+           DISPLAY "STATUS=" FS1.
+           REWRITE R1.
+           DISPLAY "REWRITE STATUS=" FS1.
+           EVALUATE N
+               WHEN > 10 DISPLAY "BIG"
+               WHEN >= 5 DISPLAY "MEDIUM"
+               WHEN OTHER DISPLAY "SMALL"
+           END-EVALUATE.
+           ACCEPT D8 FROM DATE YYYYMMDD.
+           ACCEPT TM FROM TIME.
+           DISPLAY "D=" D8 " T=" TM.
+           STOP RUN.

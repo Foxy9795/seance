@@ -300,7 +300,11 @@ def stop_kind(message: str) -> str | None:
     if "offset" in m or "reference modification" in m or "ref-mod" in m or "length of" in m and "out of bounds" in m:
         return "reference modification"
     st = re.search(r"status\s*=\s*(\d\d)", m)
-    return f"file status {st.group(1)}" if st else None
+    if st:
+        return f"file status {st.group(1)}"
+    if "module" in m and "not found" in m:
+        return "missing module"
+    return None
 
 
 def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 50) -> tuple[list[Diff], int]:
@@ -321,7 +325,7 @@ def compare(model: ProgramModel, expected: Result, actual: Result, limit: int = 
             e_kind, a_kind = stop_kind(expected.error), stop_kind(actual.error)
             if e_code and a_code and e_code.group(1) != a_code.group(1):
                 diffs.append(Diff("run", -1, expected.error, actual.error))
-            elif (e_kind == "hang") != (a_kind == "hang") or (e_kind and a_kind and e_kind != a_kind):
+            elif e_kind != a_kind and (e_kind or a_kind):  # a stop one side can name and the other cannot is not the same stop
                 diffs.append(Diff("run", -1, f"stopped: {e_kind or expected.error}", f"stopped: {a_kind or actual.error}"))  # not the same stop
     elif expected.return_code != actual.return_code:
         diffs.append(Diff("run", -1, f"return code {expected.return_code}", f"return code {actual.return_code}"))

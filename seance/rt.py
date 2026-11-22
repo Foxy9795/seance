@@ -17,6 +17,10 @@ from .cobol_num import NEG_DIGITS, deedit, size_error
 D = Decimal
 
 
+class IdxValue(Decimal):
+    """An index name used as a value: DISPLAY shows it as libcob does, with its sign and nine digits."""
+
+
 class Expr(Decimal):
     """The value of an arithmetic expression given as a function argument (cobc keeps it in a temporary field)."""
 
@@ -284,6 +288,9 @@ class Program:
     def idx_value(self, name: str) -> int:
         return self.idx[name]
 
+    def idxv(self, name: str) -> Decimal:
+        return IdxValue(self.idx[name])
+
     # ---------------------------------------------------------- MOVE
     def _encode_value(self, spec, value: Decimal) -> bytes:
         cs = self._cspec(spec)
@@ -503,6 +510,10 @@ class Program:
         return not error
 
     # ---------------------------------------------------------- conditions
+    def c3(self, a, b) -> int:
+        """cob_cmp as SEARCH ALL uses it: negative, zero or positive."""
+        return -1 if self.cmp(a, "<", b) else (1 if self.cmp(a, ">", b) else 0)
+
     def cmp(self, a, op: str, b) -> bool:
         a, b = self._comparable(a, b)
         return {"==": a == b, "!=": a != b, ">": a > b, "<": a < b, ">=": a >= b, "<=": a <= b}[op]
@@ -1658,6 +1669,8 @@ class Program:
             return text.replace(".", ",") if self.comma and spec[3] == "num" else text
         if isinstance(p, Figurative):
             return p.text[:1] if p.text else ""
+        if isinstance(p, IdxValue):
+            return f"{int(p):+010d}"
         if isinstance(p, Decimal):
             return _lit_text(p).replace(".", ",") if self.comma else _lit_text(p)
         return str(p)

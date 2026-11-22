@@ -186,9 +186,23 @@ def _bigcheck(argv: list[str]) -> int:
         Path(a.keep).mkdir(parents=True, exist_ok=True)
         for k, v in cobol.outputs.items():
             (Path(a.keep) / k).write_bytes(v)
+    from .cases import compare
+
+    if cobol.error or py.error:  # a run that stopped is compared as a stop, not as the bytes it wrote before it did
+        diffs, _ = compare(model, cobol, py)
+        for d in diffs[:3]:
+            print(f"  {d.stream}: COBOL {d.expected}  |  Python {d.actual}")
+        if diffs:
+            print("Spirit restless: the two stopped differently, or only one stopped.")
+            return 1
+        print("Both stopped the same way. Séance cannot say more than that for a run that did not finish.")
+        return 0
+    lines = {o.assign for o in model.all_files if o.organization == "line"}
     same = True
     for k in sorted(set(cobol.outputs) | set(py.outputs)):
         x, y = cobol.outputs.get(k, b""), py.outputs.get(k, b"")
+        if k in lines:  # GnuCOBOL ends a line with CR LF on Windows, the runtime with LF
+            x, y = x.replace(b"\r\n", b"\n"), y.replace(b"\r\n", b"\n")
         ok = x == y
         same &= ok
         print(f"  {k}: {len(x):,} bytes (COBOL) {len(y):,} bytes (Python) sha256 {hashlib.sha256(x).hexdigest()[:16]} / {hashlib.sha256(y).hexdigest()[:16]}  {'same' if ok else 'DIFFERENT'}")

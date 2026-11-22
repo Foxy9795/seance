@@ -76,9 +76,10 @@ def _derived_purpose(model) -> str:
     """No header comment to quote: say what the code does, from the code. Files read and written, then what the paragraphs hold."""
     from .cobol_src import normalize
 
-    in_proc, paragraphs, counts = False, 0, {"decision": 0, "calculation": 0, "loop": 0, "call": 0, "sort": 0, "sql": 0}
-    patterns = {"decision": r"\b(IF|EVALUATE)\b", "calculation": r"\b(COMPUTE|ADD|SUBTRACT|MULTIPLY|DIVIDE)\b", "loop": r"\bPERFORM\b.*\b(UNTIL|VARYING|TIMES)\b",
-                "call": r"\bCALL\b", "sort": r"\b(SORT|MERGE)\b", "sql": r"\bEXEC\s+(SQL|CICS)\b"}
+    in_proc, paragraphs, texts = False, 0, []
+    counts = {"decision": 0, "calculation": 0, "loop": 0, "call": 0, "sort": 0, "sql": 0}
+    patterns = {"decision": r"\b(IF|EVALUATE)\b", "calculation": r"\b(COMPUTE|ADD|SUBTRACT|MULTIPLY|DIVIDE)\b",
+                "loop": r"\bPERFORM\b[^.]{0,120}?\b(UNTIL|VARYING|TIMES)\b", "call": r"\bCALL\b", "sort": r"\b(SORT|MERGE)\b", "sql": r"\bEXEC\s+(SQL|CICS)\b"}
     for line in normalize(model.path.read_text(encoding="utf-8", errors="replace"), model.fixed):
         if line.comment:
             continue
@@ -90,8 +91,10 @@ def _derived_purpose(model) -> str:
             continue
         if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]*\.", text) and not re.match(r"(STOP|GOBACK|EXIT|CONTINUE)\b", text, re.I):
             paragraphs += 1
-        for kind, rx in patterns.items():
-            counts[kind] += len(re.findall(rx, text, re.I))
+        texts.append(text)
+    whole = " ".join(texts)  # a PERFORM and its UNTIL are often on two lines
+    for kind, rx in patterns.items():
+        counts[kind] = len(re.findall(rx, whole, re.I))
     io = model.describe_io()
     head = (io[:1].upper() + io[1:] + ".") if io else "Runs without reading or writing a file."
     names = {"decision": "decision", "calculation": "calculation", "loop": "loop", "call": "CALL", "sort": "sort or merge", "sql": "SQL or CICS statement"}

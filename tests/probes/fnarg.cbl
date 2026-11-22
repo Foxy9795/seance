@@ -1,0 +1,17 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. FNARG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 A PIC 9(3)V99 VALUE 12.34.
+       01 B PIC S9(3) VALUE -5.
+       01 C PIC 9(12) VALUE 5.
+       PROCEDURE DIVISION.
+           DISPLAY "1=" FUNCTION MAX(A + 1, 2).
+           DISPLAY "2=" FUNCTION MAX(B * 2, -30).
+           DISPLAY "3=" FUNCTION MIN(A * 2, 99).
+           DISPLAY "4=" FUNCTION MAX(C + 1, 2).
+           DISPLAY "5=" FUNCTION MAX(A / 3, 1).
+           DISPLAY "6=" FUNCTION ABS(B - 5).
+           DISPLAY "7=" FUNCTION MAX(C * 1000000, 2).
+           DISPLAY "8=" FUNCTION MAX(A + 1.005, 2).
+           STOP RUN.

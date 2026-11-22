@@ -452,7 +452,7 @@ class Parser:
         if self.word() == "FUNCTION":
             return self.function()
         if self.word() in self.names.indexes:
-            return f'D(S.idx_value("{self.take().value}"))'
+            return f'S.idxv("{self.take().value}")'
         if self.word() in ("RETURN-CODE", "TALLY"):
             return f'S.r("{self.take().value}")'
         if self.word() == "LENGTH" and self.word(1) == "OF":
@@ -709,6 +709,9 @@ class Parser:
             self.i += 1
             n, on = self.names.switch_conds[tok.value]
             return f"S.switch({n})" if on else f"not S.switch({n})"
+        if tok.kind == "word" and tok.value in self.names.switch_names and not (self.peek(1).kind == "op" or self.word(1) in ("EQUAL", "GREATER", "LESS", "IS", "NOT")):
+            self.i += 1  # measured on cobc 3.1.2: the bare mnemonic of a switch is true, whatever the switch holds
+            return "True"
         if self._last and not (tok.kind == "word" and (tok.value in self.names.cond_items or tok.value in self.names.switch_conds)):
             # A = 1 OR 2, A > B AND C, A = B OR -11 + D: an object alone takes the subject and operator before it
             save = self.i
@@ -1178,9 +1181,17 @@ class Parser:
         if self.accept("ANY"):
             return "True"
         if subject is None:
+            if self.accept("TRUE"):
+                return "True"
+            if self.accept("FALSE"):
+                return "False"
             self._last = None
             return self.cond_or()
         if subject == "FALSE":
+            if self.accept("TRUE"):
+                return "False"
+            if self.accept("FALSE"):
+                return "True"
             self._last = None
             return f"not ({self.cond_or()})"
         if isinstance(subject, tuple):  # the subject is a condition: WHEN TRUE, WHEN FALSE or WHEN another condition
@@ -1868,6 +1879,39 @@ class Parser:
         return self.code(line, "; ".join(calls))
 
     # SEARCH ------------------------------------------------------------------
+    def _occurs_count(self, item) -> str:
+        """How many entries a SEARCH looks at: the current value of the OCCURS DEPENDING ON item, else the OCCURS number."""
+        if item.depending and item.depending in self.names.by_name:
+            return f'int(S.n("{self.names.key[id(self.names.resolve(item.depending, []))]}"))'
+        return str(item.occurs)
+
+    def _search_all_tests(self, item):
+        """WHEN key = value [AND key = value ...] as {key name: (key code, value code)}; None when the condition has another shape."""
+        keys = {nm for _, nm in item.keys}
+        found = {}
+        try:
+            while True:
+                if self.word() in keys:
+                    name = self.word()
+                    kc = self.comparand()
+                    op = self.relop()
+                    vc = self.comparand()
+                else:
+                    vc = self.comparand()
+                    op = self.relop()
+                    name = self.word()
+                    if name not in keys:
+                        return None
+                    kc = self.comparand()
+                if op != "==" or name in found:
+                    return None
+                found[name] = (kc, vc)
+                if not self.accept("AND"):
+                    break
+        except Unsupported:
+            return None
+        return found
+
     def s_SEARCH(self, line, stop):
         binary = self.accept("ALL")
         table = self.ref()
@@ -1890,12 +1934,24 @@ class Parser:
             self.accept("AT")
             self.expect("END")
             at_end = self.block(stop | {"WHEN", "END-SEARCH"})
+        count = self._occurs_count(table.item)
+        if binary and table.item.keys and self.word() == "WHEN":
+            save = self.i
+            self.i += 1
+            tests = self._search_all_tests(table.item)
+            terms = [f"S.c3({tests[nm][0]}, {tests[nm][1]})" if d == "ASCENDING" else f"S.c3({tests[nm][1]}, {tests[nm][0]})"
+                     for d, nm in table.item.keys if tests and nm in tests]
+            if tests and terms and len(terms) == len(tests):
+                body = self.block(stop | {"WHEN", "END-SEARCH"})
+                self.accept("END-SEARCH")
+                return Node("search_all", line, {"index": index, "count": count, "at_end": at_end or [], "body": body, "expr": " or ".join(terms)})
+            self.i = save
         whens = []
         while self.accept("WHEN"):
             cond = self.condition()
             whens.append((cond, self.block(stop | {"WHEN", "END-SEARCH"})))
         self.accept("END-SEARCH")
-        return Node("search", line, {"index": index, "count": table.item.occurs, "at_end": at_end or [], "whens": whens, "binary": binary,
+        return Node("search", line, {"index": index, "count": count, "at_end": at_end or [], "whens": whens, "binary": binary,
                                      "varying": varying})
 
 
@@ -2070,6 +2126,24 @@ class Emitter:
                 if d.get("varying"):
                     name, current = d["varying"]
                     out.append(f'{pad}    S.set_index("{name}", {current} + 1)')
+            elif k == "search_all":
+                ix, h, t = d["index"], f"_h{self.count}", f"_t{self.count}"
+                out.append(f'{pad}{h}, {t} = 0, {d["count"]} + 1  # SEARCH ALL: libcob halves the table, it does not walk it{tag}')
+                out.append(f'{pad}if {d["count"]} == 0:')
+                out.append(f"{pad}    {h} = {t}")
+                out.append(f"{pad}while True:")
+                out.append(f"{pad}    if {h} >= {t} - 1:")
+                out += self.lines(d["at_end"], ind + 2) or [pad + "        pass"]
+                out.append(f"{pad}        break")
+                out.append(f'{pad}    S.set_index("{ix}", ({h} + {t}) // 2)')
+                out.append(f'{pad}    _r = {d["expr"]}')
+                out.append(f"{pad}    if _r == 0:")
+                out += self.lines(d["body"], ind + 2) or [pad + "        pass"]
+                out.append(f"{pad}        break")
+                out.append(f'{pad}    if _r < 0:')
+                out.append(f'{pad}        {h} = S.idx_value("{ix}")')
+                out.append(f"{pad}    else:")
+                out.append(f'{pad}        {t} = S.idx_value("{ix}")')
             elif k == "goto":
                 if "depending" in d:
                     targets = ", ".join(f'"{t}"' for t in d["targets"])
