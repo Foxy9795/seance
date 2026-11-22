@@ -70,7 +70,7 @@ Séance is an extraordinarily well-crafted, rigorous migration and verification 
 ### Note
 - **F6.2 MCP server configuration holds absolute machine path**
   - *Where*: `.kiro/settings/mcp.json:4`
-  - *What happens*: Holds hardcoded author path `C:\Users\siddh\...`; known author decision.
+  - *What happens*: Holds hardcoded author path `C:\Users\user\...`; known author decision.
 
 ---
 
@@ -98,7 +98,7 @@ print("rep.matched:", rep.matched)
 ```
 **Command & Output**:
 ```powershell
-PS C:\Users\siddh\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_verify_errors.py
+PS C:\Users\user\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_verify_errors.py
 diffs: []
 units: 0
 rep.matched: True
@@ -112,7 +112,7 @@ rep.matched: True
 Compiles and runs `TUNSTR.cbl` with `PTR = 0`, then executes translated Python runtime `S.unstring(...)`.
 **Command & Output**:
 ```powershell
-PS C:\Users\siddh\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_unstring_ptr.py
+PS C:\Users\user\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_unstring_ptr.py
 COBOL output : 'TGT1=11111 TGT2=22222\n PTR=00 OVER=Y\n'
 Python output: 'TGT1=H     TGT2=22222\n PTR=11 OVER=N\n'
 ```
@@ -125,7 +125,7 @@ Python output: 'TGT1=H     TGT2=22222\n PTR=11 OVER=N\n'
 Moves `"-123 "` from `PIC X(5)` to `PIC S9(5)` and `PIC 9(5)`.
 **Command & Output**:
 ```powershell
-PS C:\Users\siddh\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_translate_alpha.py
+PS C:\Users\user\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_translate_alpha.py
 COBOL stdout : 'B=-00123 C=00123\n'
 Python stdout: 'B=+00000 C=00000\n'
 ```
@@ -138,7 +138,7 @@ Python stdout: 'B=+00000 C=00000\n'
 Initializes `PIC S9(5) SIGN LEADING SEPARATE` to `-12045` and runs `INSPECT N REPLACING ALL "0" BY "9"`.
 **Command & Output**:
 ```powershell
-PS C:\Users\siddh\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_inspect_num.py
+PS C:\Users\user\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_inspect_num.py
 COBOL output : 'N=-12945\n'
 Python output: 'N=+12945\n'
 ```
@@ -151,7 +151,7 @@ Python output: 'N=+12945\n'
 Passes a 20-byte file containing two 10-byte fixed binary records where record 1 contains `\n` (`0x0A`) at byte 4 to `_units(file_desc, data)`.
 **Command & Output**:
 ```powershell
-PS C:\Users\siddh\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_binary_record_split.py
+PS C:\Users\user\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_binary_record_split.py
 len data: 20
 units count: 3
 unit 0: len=4 b'1234'
@@ -167,7 +167,7 @@ unit 2: len=5 b'FGHIJ'
 Simulates exported test suite handling an error fixture when the Python migration raises an unexpected crash (`ZeroDivisionError`).
 **Command & Output**:
 ```powershell
-PS C:\Users\siddh\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_export_exception.py
+PS C:\Users\user\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; $env:PYTHONPATH='.'; .\.venv\Scripts\python.exe build\review\probe_export_exception.py
 TEST PASSED: pytest.raises(Exception) caught completely unrelated Python crash!
 ```
 *Result*: `with pytest.raises(Exception):` catches the unrelated crash and passes the test.
@@ -177,7 +177,7 @@ TEST PASSED: pytest.raises(Exception) caught completely unrelated Python crash!
 ### Reproduction: F6.1 (Devpost write-up placeholder questions)
 **Command & Output**:
 ```powershell
-PS C:\Users\siddh\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; .\.venv\Scripts\python.exe scripts\check_rules.py
+PS C:\Users\user\Desktop\Sid Project\Python\Kiro> . .\scripts\env.ps1; .\.venv\Scripts\python.exe scripts\check_rules.py
 ...
 WARN  write-up on how Kiro was used
       4 bracketed question(s) only you can answer

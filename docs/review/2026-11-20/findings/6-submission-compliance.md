@@ -27,10 +27,10 @@ Suggested fix: Author must answer the four personal experience questions and rem
 Severity: Note
 Confidence: verified
 Where: .kiro/settings/mcp.json:4
-What happens: `.kiro/settings/mcp.json` contains `C:\Users\siddh\Desktop\Sid Project\Python\Kiro\...`, which will fail on any other machine cloning the repo.
+What happens: `.kiro/settings/mcp.json` contains `C:\Users\user\Desktop\Sid Project\Python\Kiro\...`, which will fail on any other machine cloning the repo.
 Evidence: Read `.kiro/settings/mcp.json` lines 4 and 10:
 ```json
-"command": "C:\\Users\\siddh\\Desktop\\Sid Project\\Python\\Kiro\\.venv\\Scripts\\python.exe"
+"command": "C:\\Users\\user\\Desktop\\Sid Project\\Python\\Kiro\\.venv\\Scripts\\python.exe"
 ```
 Flagged as `WARN` by `scripts/check_rules.py`.
 Why it matters: External judges running Kiro against the repository will encounter an MCP server that fails to start unless updated to a relative or environment python invocation.
