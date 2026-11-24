@@ -26,6 +26,7 @@ OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.home() / "Downloads" / "s
 PORT = 8101
 VOICE = "en-US-AvaMultilingualNeural"
 MAX_SECONDS = 172
+TRIM = 1.5  # seconds cut from the start: Playwright's first frames are a small, unsized window
 T = Path(tempfile.mkdtemp(prefix="seance_demo_"))
 AUDIO = T / "audio"
 AUDIO.mkdir()
@@ -101,12 +102,12 @@ class Clock:
     """Tracks when each narration starts, relative to the start of the video, so the audio can be placed later."""
 
     def __init__(self):
-        self.t0 = time.time()
+        self.t0 = time.monotonic()
         self.marks: list[tuple[float, Path]] = []
         self.busy_until = 0.0
 
     def now(self):
-        return time.time() - self.t0
+        return time.monotonic() - self.t0
 
     def speak(self, page, key, caption=True):
         self.until_done()
@@ -196,6 +197,7 @@ try:
 
         # 1. Title
         card(page, "Séance", ["Move COBOL to Python.", "Prove, byte for byte, that nothing changed."])
+        time.sleep(TRIM + 0.3)
         clock.speak(page, "title", caption=False)
         clock.until_done()
         hide_card(page)
@@ -299,10 +301,10 @@ try:
         print(f"WARNING: the video is {total:.0f} s; the contest limit is 180 s. Shorten it before you upload.")
     webm = sorted(vid_dir.glob("*.webm"))[-1]
     ff = imageio_ffmpeg.get_ffmpeg_exe()
-    cmd = [ff, "-y", "-loglevel", "error", "-i", str(webm)]
+    cmd = [ff, "-y", "-loglevel", "error", "-ss", str(TRIM), "-i", str(webm)]
     for _, wav in clock.marks:
         cmd += ["-i", str(wav)]
-    delays = ";".join(f"[{i + 1}:a]adelay={int((t + 0.25) * 1000)}|{int((t + 0.25) * 1000)}[a{i}]" for i, (t, _) in enumerate(clock.marks))
+    delays = ";".join(f"[{i + 1}:a]adelay={max(0, int((t + 0.25 - TRIM) * 1000))}|{max(0, int((t + 0.25 - TRIM) * 1000))}[a{i}]" for i, (t, _) in enumerate(clock.marks))
     mix = "".join(f"[a{i}]" for i in range(len(clock.marks))) + f"amix=inputs={len(clock.marks)}:normalize=0:dropout_transition=0[aout]"
     cmd += ["-filter_complex", delays + ";" + mix, "-map", "0:v", "-map", "[aout]", "-c:v", "libx264", "-crf", "17", "-preset", "medium",
             "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "160k", "-shortest", str(OUT)]
